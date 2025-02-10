@@ -75,10 +75,10 @@ jobs:
       - name: run database schema migration
         working-directory: services/payment
         run: |
-            liquibase  --changeLogFile=./migrations/changelog_payment_primary.xml \
+            liquibase  --changeLogFile=./migrations/changelog_primary-root.xml \
                 --url=jdbc:mariadb://localhost:3307/test_ecommerce_payment \
                 --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
-            liquibase  --changeLogFile=./migrations/changelog_payment_replica.xml \
+            liquibase  --changeLogFile=./migrations/changelog_replica.xml \
                 --url=jdbc:mariadb://localhost:3307/test_ecommerce_payment_replica_1  \
                 --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
 

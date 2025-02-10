@@ -1,14 +1,12 @@
 {
   "lines": [
     {
-      "product_type": 1,
       "product_id": 204,
       "time_issued": "2024-09-05T14:48:01.499+03:35",
       "reject": {"Fraudulent": 2, "Damaged": 3},
       "approval": {"quantity": 3, "amount_total": "54.3"}
     },
     {
-      "product_type": 2,
       "product_id": 206,
       "time_issued": "2024-09-05T14:01:53.499+03:35",
       "reject": {},

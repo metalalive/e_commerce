@@ -25,14 +25,12 @@ pub struct AppRouteTable {
 impl AppRouteTable {
     pub fn get(ver_req: &str) -> Self {
         let (version, entries) = match ver_req {
-            "0.0.2" | "0.0.4" | "0.0.5" | "0.0.6" | "0.0.7" | "0.0.8" => {
-                (format!("v{ver_req}"), Self::v0_0_8_entries())
-            }
+            "0.1.0" => (format!("v{ver_req}"), Self::v0_1_0_entries()),
             _others => (String::new(), HashMap::new()),
         };
         Self { version, entries }
     }
-    fn v0_0_8_entries() -> HashMap<String, Route> {
+    fn v0_1_0_entries() -> HashMap<String, Route> {
         let data = [
             (
                 "create_new_charge".to_string(),

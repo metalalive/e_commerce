@@ -8,9 +8,8 @@ use payment::adapter::processor::{AppProcessorErrorReason, BaseClientErrorReason
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use ecommerce_common::api::dto::{jsn_validate_product_type, CurrencyDto, PayAmountDto};
+use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
 use ecommerce_common::config::AppConfig;
-use ecommerce_common::constant::ProductType;
 use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerModel, OrderCurrencySnapshot,
     RefundReqResolutionModel, StripeCheckoutPaymentStatusModel,
@@ -29,16 +28,12 @@ struct UTestDataStripeBuyerCurrency {
 }
 #[derive(Deserialize)]
 struct UTestDataStripeChargeLine {
-    #[serde(deserialize_with = "jsn_validate_product_type")]
-    prod_typ: ProductType,
     prod_id: u64,
     qty_orig: u32,
     amt_orig: PayAmountDto,
 }
 #[derive(Deserialize)]
 struct UTestDataStripeRefundLine {
-    #[serde(deserialize_with = "jsn_validate_product_type")]
-    prod_typ: ProductType,
     prod_id: u64,
     qty: u32,
     amount_total: String,
@@ -65,7 +60,7 @@ impl UTestDataStripeChargeLine {
         let d_unit = Decimal::from_str(self.amt_orig.unit.as_str()).unwrap();
         let d_total = Decimal::from_str(self.amt_orig.total.as_str()).unwrap();
         (
-            merchant_id, self.prod_typ.clone(), self.prod_id,
+            merchant_id, self.prod_id,
             (d_unit.mantissa() as i64, d_unit.scale()),
             (d_total.mantissa() as i64, d_total.scale()),
             self.qty_orig, (0,0), (0,0), 0, 0,
@@ -78,7 +73,7 @@ impl UTestDataStripeRefundLine {
         let d_total = Decimal::from_str(self.amount_total.as_str()).unwrap();
         assert_eq!(d_total.scale(), 1);
         (
-            self.prod_id, self.prod_typ.clone(), time_bias_req,
+            self.prod_id, time_bias_req,
             d_total.mantissa() as i64, self.qty, 0, 0,
         )
     }

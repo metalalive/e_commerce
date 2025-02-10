@@ -6,7 +6,6 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 use rust_decimal::Decimal;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
@@ -37,12 +36,12 @@ fn _ut_setup_buyer_charge(
         s.session_state = StripeSessionStatusModel::open;
     }
     let data_lines = vec![
-        (3034, ProductType::Package, 602, (9028,2), (36112,2), 4, (0,0), (0,0), 0, 0),
-        (8299, ProductType::Item, 351, (551,1), (1102,1), 2, (0,0), (0,0), 0, 0),
-        (2615, ProductType::Item, 90040, (82,0), (246,0), 3, (0,0), (0,0), 0, 0),
-        (8299, ProductType::Item, 479, (839,1), (5873,1), 7, (0,0), (0,0), 0, 0),
-        (2615, ProductType::Package, 961, (1946,2), (21406,2), 11, (0,0), (0,0), 0, 0),
-        (8299, ProductType::Package, 961, (118,0), (236,0), 2, (0,0), (0,0), 0, 0),
+        (3034, 602, (9028,2), (36112,2), 4, (0,0), (0,0), 0, 0),
+        (8299, 351, (551,1), (1102,1), 2, (0,0), (0,0), 0, 0),
+        (2615, 90040, (82,0), (246,0), 3, (0,0), (0,0), 0, 0),
+        (8299, 479, (839,1), (5873,1), 7, (0,0), (0,0), 0, 0),
+        (2615, 961, (1946,2), (21406,2), 11, (0,0), (0,0), 0, 0),
+        (8299, 961, (118,0), (236,0), 2, (0,0), (0,0), 0, 0),
     ]; // TODO, verify read / write refund fields
     let currency_map = ut_setup_currency_snapshot(vec![owner, 8299, 3034, 2615]);
     ut_setup_buyer_charge(
@@ -76,16 +75,15 @@ fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
             let (pid, amt_orig, amt_rfd, num_rej) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             } = pid;
-            let expect = match (store_id, product_type, product_id) {
-                (3034, ProductType::Package, 602) => ((9028i128, 2u32), (36112i128, 2u32), 4u32),
-                (8299, ProductType::Item, 351) => ((5510, 2), (11020, 2), 2),
-                (2615, ProductType::Item, 90040) => ((8200, 2), (24600, 2), 3),
-                (8299, ProductType::Item, 479) => ((8390, 2), (58730, 2), 7),
-                (2615, ProductType::Package, 961) => ((1946, 2), (21406, 2), 11),
-                (8299, ProductType::Package, 961) => ((11800, 2), (23600, 2), 2),
+            let expect = match (store_id, product_id) {
+                (3034, 602) => ((9028i128, 2u32), (36112i128, 2u32), 4u32),
+                (8299, 351) => ((5510, 2), (11020, 2), 2),
+                (2615, 90040) => ((8200, 2), (24600, 2), 3),
+                (8299, 479) => ((8390, 2), (58730, 2), 7),
+                (2615, 961) => ((1946, 2), (21406, 2), 11),
+                (8299, 961) => ((11800, 2), (23600, 2), 2),
                 _others => ((0, 0), (0, 0), 0),
             };
             assert_eq!(amt_orig.unit.mantissa(), expect.0 .0);
@@ -179,14 +177,13 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
             let (pid, amt_orig, amt_rfd, num_rej) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             } = pid;
             assert_eq!(store_id, 8299u32);
-            let expect = match (product_type, product_id) {
-                (ProductType::Item, 351) => ((551i64, 1u32), (1102i64, 1u32), 2u32),
-                (ProductType::Item, 479) => ((839, 1), (5873, 1), 7),
-                (ProductType::Package, 961) => ((118, 0), (236, 0), 2),
+            let expect = match product_id {
+                351 => ((551i64, 1u32), (1102i64, 1u32), 2u32),
+                479 => ((839, 1), (5873, 1), 7),
+                961 => ((118, 0), (236, 0), 2),
                 _others => ((0, 0), (0, 0), 0),
             };
             assert_eq!(amt_orig.unit, Decimal::new(expect.0 .0, expect.0 .1));
@@ -214,8 +211,8 @@ async fn fetch_charge_by_merchant_ok() {
         let mock_olines_data = new_charge_m.lines
             .iter().map(|cl| {
                 let amt_orig = cl.amount_orig();
-                (cl.pid.store_id, cl.pid.product_type.clone(), cl.pid.product_id,
-                amt_orig.unit, amt_orig.total, amt_orig.qty, Duration::minutes(219))
+                (cl.pid.store_id, cl.pid.product_id, amt_orig.unit,
+                amt_orig.total, amt_orig.qty, Duration::minutes(219))
             }).collect::<Vec<_>>();
         let expect_ol_set = ut_setup_orderline_set(
             mock_buyer_id, new_charge_m.meta.oid().as_str(), 0,
@@ -342,10 +339,10 @@ async fn update_refund_in_chargeline_ok() {
     let repo_ch  = ut_setup_db_charge_repo(shr_state).await;
     
     let mock_orig_olines = vec![
-        (mock_merchant_id, ProductType::Item, 1294u64, Decimal::new(191, 1), Decimal::new(1910, 1), 10u32, Duration::days(1)),
-        (mock_merchant_id, ProductType::Package, 1295, Decimal::new(214, 1), Decimal::new(1498, 1), 7, Duration::days(2)),
-        (mock_merchant_id, ProductType::Item, 1299, Decimal::new(798, 1), Decimal::new(7980, 1), 10, Duration::days(3)),
-        (mock_merchant_id, ProductType::Package, 2945, Decimal::new(505, 1), Decimal::new(5050, 1), 10, Duration::days(4)),
+        (mock_merchant_id, 1294u64, Decimal::new(191, 1), Decimal::new(1910, 1), 10u32, Duration::days(1)),
+        (mock_merchant_id, 1295, Decimal::new(214, 1), Decimal::new(1498, 1), 7, Duration::days(2)),
+        (mock_merchant_id, 1299, Decimal::new(798, 1), Decimal::new(7980, 1), 10, Duration::days(3)),
+        (mock_merchant_id, 2945, Decimal::new(505, 1), Decimal::new(5050, 1), 10, Duration::days(4)),
     ];
     let mock_currency_map = ut_setup_currency_snapshot(
         vec![mock_merchant_id, mock_buyer_id]
@@ -364,14 +361,14 @@ async fn update_refund_in_chargeline_ok() {
     ];
     let mock_clines = vec![
         (charge_ctime[0], true, vec![
-             (mock_merchant_id, ProductType::Item, 1294u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
-             (mock_merchant_id, ProductType::Package, 1295, (214, 1), (1070, 1), 5),
-             (mock_merchant_id, ProductType::Item, 1299, (798, 1), (1596, 1), 2),
+             (mock_merchant_id, 1294u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
+             (mock_merchant_id, 1295, (214, 1), (1070, 1), 5),
+             (mock_merchant_id, 1299, (798, 1), (1596, 1), 2),
         ]),
         (charge_ctime[1], true, vec![
-             (mock_merchant_id, ProductType::Package, 1295, (214, 1), (428, 1), 2),
-             (mock_merchant_id, ProductType::Item, 1299, (798, 1), (6384, 1), 8),
-             (mock_merchant_id, ProductType::Package, 2945, (505, 1), (5050, 1), 10),
+             (mock_merchant_id, 1295, (214, 1), (428, 1), 2),
+             (mock_merchant_id, 1299, (798, 1), (6384, 1), 8),
+             (mock_merchant_id, 2945, (505, 1), (5050, 1), 10),
         ]),
     ];
     ut_setup_bulk_add_charges(repo_ch.clone(), mock_buyer_id, mock_oid, mock_clines).await;
@@ -388,15 +385,15 @@ async fn update_refund_in_chargeline_ok() {
     }
     let rslv_m0 = setup_resolve_model!(
         charge_ctime[0], vec![
-            (1294, ProductType::Item,    10, 573, 3, 2, 1),
-            (1295, ProductType::Package, 12, 214, 1, 0, 1),
-            (1299, ProductType::Item,    14, 0,   0, 1, 0),
+            (1294, 10, 573, 3, 2, 1),
+            (1295, 12, 214, 1, 0, 1),
+            (1299, 14, 0,   0, 1, 0),
         ]);
     let rslv_m1 = setup_resolve_model!(
         charge_ctime[1], vec![
-            (1295, ProductType::Package, 16, 428, 2, 0, 0),
-            (1299, ProductType::Item,    18, 2394, 3, 2, 0),
-            (2945, ProductType::Package, 20, 3030, 6, 1, 2),
+            (1295, 16, 428, 2, 0, 0),
+            (1299, 18, 2394, 3, 2, 0),
+            (2945, 20, 3030, 6, 1, 2),
         ]);
 
     let rslv_ms = vec![rslv_m0, rslv_m1];
@@ -413,27 +410,26 @@ async fn update_refund_in_chargeline_ok() {
                 .map(|line| {
                     let amt_rfd = line.amount_refunded();
                     let actual = (amt_rfd.total, amt_rfd.qty, line.num_rejected());
-                    let BaseProductIdentity { store_id, product_type, product_id } = line.pid;
+                    let BaseProductIdentity { store_id, product_id } = line.pid;
                     assert_eq!(store_id, mock_merchant_id);
-                    let expect = $data_selector(product_id, product_type);
+                    let expect = $data_selector(product_id);
                     assert_eq!(actual, expect);
                 }).count();
-            
         };
     }
 
-    let fn1 = |product_id, product_type|
-        match (product_id, product_type) {
-            (1294u64, ProductType::Item ) => (Decimal::new(573,1), 3u32, 3u32),
-            (1295, ProductType::Package,) => (Decimal::new(214,1), 1, 1),
-            (1299, ProductType::Item,   ) => (Decimal::ZERO, 0, 1),
+    let fn1 = |product_id|
+        match (product_id,) {
+            (1294u64,) => (Decimal::new(573,1), 3u32, 3u32),
+            (1295,) => (Decimal::new(214,1), 1, 1),
+            (1299,) => (Decimal::ZERO, 0, 1),
             _others => (Decimal::MAX, 9999, 9999),
         };
-    let fn2 = |product_id, product_type|
-        match (product_id, product_type) {
-            (1295u64, ProductType::Package) => (Decimal::new(428,1), 2u32, 0u32),
-            (1299, ProductType::Item) => (Decimal::new(2394,1), 3, 2),
-            (2945, ProductType::Package) => (Decimal::new(3030,1), 6, 3),
+    let fn2 = |product_id|
+        match (product_id,) {
+            (1295u64,) => (Decimal::new(428,1), 2u32, 0u32),
+            (1299,) => (Decimal::new(2394,1), 3, 2),
+            (2945,) => (Decimal::new(3030,1), 6, 3),
             _others => (Decimal::MAX, 9999, 9999),
         };
     verify_updated_line!(charge_ctime[0], 3, fn1);
@@ -450,7 +446,7 @@ async fn fetch_all_charge_ids_ok() {
     let repo_ch  = ut_setup_db_charge_repo(shr_state).await;
     
     let mock_orig_olines = vec![
-        (mock_merchant_id, ProductType::Package, 117u64, Decimal::new(191, 1),
+        (mock_merchant_id, 117u64, Decimal::new(191, 1),
          Decimal::new(19100, 1), 100u32, Duration::days(29)),
     ];
     let mock_currency_map = ut_setup_currency_snapshot(
@@ -471,7 +467,7 @@ async fn fetch_all_charge_ids_ok() {
     let mock_clines = orig_charge_ctime.iter()
         .map(|ctime| {
             (*ctime, true, vec![
-                 (mock_merchant_id, ProductType::Package, 117u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
+                 (mock_merchant_id, 117u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
             ])
         })
         .collect::<Vec<_>>() ;

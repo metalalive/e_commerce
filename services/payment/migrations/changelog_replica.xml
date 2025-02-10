@@ -48,8 +48,27 @@
             DROP INDEX `by_merchant` ON `charge_line` ;
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.0.2" author="T.H." labels="payment">
         <tagDatabase tag="0.0.2" />
+    </changeSet>
+    <changeSet id="tag_version_0.1.0" author="T.H." labels="payment">
+        <tagDatabase tag="0.1.0" />
+    </changeSet>
+    <changeSet id="discard_prodtype__charge_line" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` DROP COLUMN `product_type`;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`);
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.1" author="T.H." labels="payment">
+        <tagDatabase tag="0.1.1" />
     </changeSet>
 </databaseChangeLog>

@@ -5,7 +5,6 @@ use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
 use payment::hard_limit::CURRENCY_RATE_PRECISION;
@@ -66,8 +65,7 @@ async fn ut_setup_order_replica(
 ) { // to ensure currency snapshot data is ready
     let (amt_buyer, [currency_buyer, currency_seller]) = ut_setup_currency_snapshot(); 
     let mock_olines_data = vec![
-        (merchant_id, ProductType::Package, 89u64, amt_buyer,
-         amt_buyer, 1, Duration::minutes(219))
+        (merchant_id, 89u64, amt_buyer, amt_buyer, 1, Duration::minutes(219))
     ];
     let mock_currency_snapshot = {
         let list = [

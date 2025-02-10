@@ -27,7 +27,7 @@ use payment::{
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
 const CASES_PATH: &str = "./tests/integration/examples/";
-const API_VERSION: &str = "v0.0.8";
+const API_VERSION: &str = "v0.1.0";
 
 async fn itest_onboard_merchant(
     app: &ItestService!(),

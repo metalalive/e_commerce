@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::AbstractChargeRepo;
 use payment::model::{
@@ -24,7 +23,7 @@ use crate::ut_setup_sharestate;
 fn ut_verify_fetched_order(
     actual: OrderLineModelSet,
     expect_order_toplvl: (u32, &str, u32, DateTime<Utc>),
-    expect_olines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32, Decimal, u32, Duration)>,
+    expect_olines: Vec<(u32, u64, Decimal, Decimal, u32, Decimal, u32, Duration)>,
 ) {
     assert!(!expect_olines.is_empty());
     let (expect_usr_id, expect_order_id, expect_num_charges, expect_ctime) = expect_order_toplvl;
@@ -37,10 +36,9 @@ fn ut_verify_fetched_order(
         expect_olines.into_iter()
             .map(|c| {
                 let ctime = expect_ctime.trunc_subsecs(0);
-                let (store_id, prod_typ, prod_id, rsv_unit,
-                     rsv_total, rsv_qty, paid_total, paid_qty,
-                     rsv_until) = c;
-                let key = (store_id, prod_typ, prod_id);
+                let (store_id, prod_id, rsv_unit, rsv_total,
+                     rsv_qty, paid_total, paid_qty, rsv_until) = c;
+                let key = (store_id, prod_id);
                 let value = (rsv_unit, rsv_total, rsv_qty, paid_total,
                              paid_qty, ctime + rsv_until);
                 let _empty = hm.insert(key, value);
@@ -51,8 +49,8 @@ fn ut_verify_fetched_order(
     actual.lines.into_iter()
         .map(|line| {
             let OrderLineModel {pid, rsv_total, paid_total, reserved_until} = line;
-            let BaseProductIdentity {store_id, product_type, product_id} = pid;
-            let key = (store_id, product_type, product_id);
+            let BaseProductIdentity {store_id, product_id} = pid;
+            let key = (store_id, product_id);
             let actual_val = (
                 rsv_total.unit, rsv_total.total, rsv_total.qty,
                 paid_total.total, paid_total.qty, reserved_until,
@@ -69,9 +67,9 @@ fn ut_verify_fetched_order(
 async fn create_order_replica_ok() {
     let mock_order_toplvl_data = (123, "9d73ba76d5", 0, Local::now().to_utc());
     let mock_olines_data = vec![
-        (2603, ProductType::Item, 180, Decimal::new(34,0), Decimal::new(340,0), 10, Duration::minutes(2)),
-        (2603, ProductType::Package, 211, Decimal::new(29,0), Decimal::new(261,0), 9, Duration::minutes(5)),
-        (2379, ProductType::Item, 449, Decimal::new(35,0), Decimal::new(420,0), 12, Duration::minutes(11)),
+        (2603, 180, Decimal::new(34,0), Decimal::new(340,0), 10, Duration::minutes(2)),
+        (2603, 211, Decimal::new(29,0), Decimal::new(261,0), 9, Duration::minutes(5)),
+        (2379, 449, Decimal::new(35,0), Decimal::new(420,0), 12, Duration::minutes(11)),
     ];
     let mock_currency_map = ut_setup_currency_snapshot(vec![123, 2603, 2379]);
     let shr_state = ut_setup_sharestate();
@@ -93,7 +91,7 @@ async fn create_order_replica_ok() {
     if let Ok(Some(v)) = result {
         let olines4verify = mock_olines_data
              .into_iter()
-             .map(|c| (c.0, c.1, c.2, c.3, c.4, c.5, Decimal::new(0,0), 0u32, c.6))
+             .map(|c| (c.0, c.1, c.2, c.3, c.4, Decimal::new(0,0), 0u32, c.5))
              .collect();
         ut_verify_fetched_order(v, mock_order_toplvl_data, olines4verify);
     } else {
@@ -105,7 +103,7 @@ async fn create_order_replica_ok() {
 async fn ut_setup_new_orderlines(
     repo: Arc<Box<dyn AbstractChargeRepo>>,
     mock_o_toplvl: (u32, &str, u32, DateTime<Utc>),
-    mock_o_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32, Duration)>,
+    mock_o_lines: Vec<(u32, u64, Decimal, Decimal, u32, Duration)>,
 ) {
     let currency_usr_ids = {
         let iter = mock_o_lines.iter().map(|dl| dl.0);
@@ -140,7 +138,7 @@ async fn ut_setup_new_orderlines(
         assert_ne!(actual_buyer_currency.rate, Decimal::ZERO);
         let olines4verify = mock_o_lines
              .clone().into_iter()
-             .map(|c| (c.0, c.1, c.2, c.3, c.4, c.5, Decimal::new(0,0), 0u32, c.6))
+             .map(|c| (c.0, c.1, c.2, c.3, c.4, Decimal::new(0,0), 0u32, c.5))
              .collect();
         ut_verify_fetched_order(v, mock_o_toplvl, olines4verify);
     } else {
@@ -155,14 +153,14 @@ pub(super) async fn ut_setup_bulk_add_charges(
     order_id: &str,
     d_charges: Vec<(
         DateTime<Utc>, bool,
-        Vec<(u32, ProductType, u64, (i64, u32), (i64, u32), u32)>
+        Vec<(u32, u64, (i64, u32), (i64, u32), u32)>
     )>,
 ) { // ---- add charge lines ----
     for dl in d_charges {
         let (ctime, is_3pty_done, d_chargelines) = dl;
         let d_chargelines = d_chargelines.into_iter()
             .map(|d| {
-                (d.0, d.1, d.2, d.3, d.4, d.5, (0i64, 0u32), (0i64, 0u32), 0u32, 0u32)
+                (d.0, d.1, d.2, d.3, d.4, (0i64, 0u32), (0i64, 0u32), 0u32, 0u32)
             }).collect::<Vec<_>>(); // TODO, verify refund fields
         let mut mthd_3pty = ut_default_charge_method_stripe(&ctime);
         let state = if is_3pty_done {
@@ -198,7 +196,7 @@ pub(super) async fn ut_setup_bulk_add_charges(
 async fn ut_verify_unpaid_orderlines(
     repo: Arc<Box<dyn AbstractChargeRepo>>,
     mock_o_toplvl: (u32, &str, u32, DateTime<Utc>),
-    mock_o_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32, Duration)>,
+    mock_o_lines: Vec<(u32, u64, Decimal, Decimal, u32, Duration)>,
     expect_paid_lines: Vec<(Decimal, u32)>,
 ) {
     let result = repo
@@ -209,7 +207,7 @@ async fn ut_verify_unpaid_orderlines(
         let combined = mock_o_lines.into_iter().zip(iter);
         let olines4verify = combined
              .map(|(a, b)|
-                  (a.0, a.1, a.2, a.3, a.4, a.5, b.0, b.1, a.6))
+                  (a.0, a.1, a.2, a.3, a.4, b.0, b.1, a.5))
              .collect();
         ut_verify_fetched_order(v, mock_o_toplvl, olines4verify);
     } else {
@@ -232,19 +230,19 @@ async fn read_unpaid_orderline_ok() {
     ];
     let mock_olines = [
         vec![
-            (8299, ProductType::Package, 37, Decimal::new(31,0), Decimal::new(310,0), 10, Duration::minutes(15)),
-            (8299, ProductType::Item, 219, Decimal::new(45,0), Decimal::new(180,0), 4, Duration::minutes(14)),
-            (3034, ProductType::Package, 602, Decimal::new(90,0), Decimal::new(450,0), 5, Duration::minutes(13)),
-            (3034, ProductType::Item, 595, Decimal::new(112,0), Decimal::new(336,0), 3, Duration::minutes(12)),
-            (8299, ProductType::Item, 253, Decimal::new(48,0), Decimal::new(480,0), 10, Duration::minutes(10)),
-            (2642, ProductType::Package, 595, Decimal::new(35,0), Decimal::new(175,0), 5, Duration::minutes(6)),
+            (8299, 37, Decimal::new(31,0), Decimal::new(310,0), 10, Duration::minutes(15)),
+            (8299, 219, Decimal::new(45,0), Decimal::new(180,0), 4, Duration::minutes(14)),
+            (3034, 602, Decimal::new(90,0), Decimal::new(450,0), 5, Duration::minutes(13)),
+            (3034, 595, Decimal::new(112,0), Decimal::new(336,0), 3, Duration::minutes(12)),
+            (8299, 253, Decimal::new(48,0), Decimal::new(480,0), 10, Duration::minutes(10)),
+            (2642, 1595, Decimal::new(35,0), Decimal::new(175,0), 5, Duration::minutes(6)),
         ],
         vec![
-            (2753, ProductType::Package, 152, Decimal::new(33,0), Decimal::new(330,0), 10, Duration::minutes(15)),
-            (8299, ProductType::Item, 219, Decimal::new(44,0),   Decimal::new(616,0), 14, Duration::minutes(14)),
-            (8299, ProductType::Package, 511, Decimal::new(67,0), Decimal::new(1072,0), 16, Duration::minutes(13)),
-            (2642, ProductType::Item,  253,  Decimal::new(68,0), Decimal::new(680,0), 10, Duration::minutes(10)),
-            (2642, ProductType::Package, 595, Decimal::new(70,0), Decimal::new(1260,0), 18, Duration::minutes(6)),
+            (2753, 152, Decimal::new(33,0), Decimal::new(330,0), 10, Duration::minutes(15)),
+            (8299, 219, Decimal::new(44,0),   Decimal::new(616,0), 14, Duration::minutes(14)),
+            (8299, 511, Decimal::new(67,0), Decimal::new(1072,0), 16, Duration::minutes(13)),
+            (2642, 253,  Decimal::new(68,0), Decimal::new(680,0), 10, Duration::minutes(10)),
+            (2642, 1595, Decimal::new(70,0), Decimal::new(1260,0), 18, Duration::minutes(6)),
         ],
     ];
     let combined = mock_o_toplvl.iter().zip(mock_olines.iter());
@@ -258,20 +256,20 @@ async fn read_unpaid_orderline_ok() {
     // verification of the database repository
     let mock_clines_data = vec![
         (t_now - Duration::minutes(13), true, vec![
-            (8299, ProductType::Package, 37, (31i64,0u32), (62i64, 0u32), 2u32),
-            (8299, ProductType::Item, 219, (45,0), (45,0), 1),
-            (3034, ProductType::Package, 602, (90,0), (90,0), 1),
-            (2642, ProductType::Package, 595, (35,0), (70,0), 2),
+            (8299, 37, (31i64,0u32), (62i64, 0u32), 2u32),
+            (8299, 219, (45,0), (45,0), 1),
+            (3034, 602, (90,0), (90,0), 1),
+            (2642, 1595, (35,0), (70,0), 2),
         ]),
         (t_now - Duration::minutes(12), true, vec![
-            (3034, ProductType::Package, 602, (90,0), (90,0), 1),
-            (8299, ProductType::Item, 253, (48,0),  (144,0), 3),
+            (3034, 602, (90,0), (90,0), 1),
+            (8299, 253, (48,0),  (144,0), 3),
         ]),
         (t_now - Duration::minutes(11), true, vec![
-            (8299, ProductType::Package, 37, (31,0), (93,0), 3),
-            (3034, ProductType::Package, 602, (90,0), (180,0), 2),
-            (8299, ProductType::Item, 253, (48,0), (192,0), 4),
-            (2642, ProductType::Package, 595, (35,0), (35,0), 1),
+            (8299, 37, (31,0), (93,0), 3),
+            (3034, 602, (90,0), (180,0), 2),
+            (8299, 253, (48,0), (192,0), 4),
+            (2642, 1595, (35,0), (35,0), 1),
         ]),
     ];
     ut_setup_bulk_add_charges(
@@ -280,17 +278,17 @@ async fn read_unpaid_orderline_ok() {
     ).await;
     let mock_clines_data = vec![
         (t_now - Duration::minutes(10), false, vec![
-            (2642, ProductType::Item,  253, (68,0), (272,0), 4),
-            (2642, ProductType::Package, 595, (70,0), (420,0), 6),
+            (2642,  253, (68,0), (272,0), 4),
+            (2642, 1595, (70,0), (420,0), 6),
         ]),
         (t_now - Duration::minutes(9), true, vec![
-            (2642, ProductType::Item,  253, (68,0), (204,0), 3),
-            (2642, ProductType::Package, 595, (70,0), (280,0), 4),
-            (2753, ProductType::Package, 152, (33,0), (198,0), 6),
+            (2642,  253, (68,0), (204,0), 3),
+            (2642, 1595, (70,0), (280,0), 4),
+            (2753,  152, (33,0), (198,0), 6),
         ]),
         (t_now - Duration::minutes(8), true, vec![
-            (2642, ProductType::Item,  253, (68,0), (136,0), 2),
-            (2642, ProductType::Package, 595, (70,0), (210,0), 3),
+            (2642,  253, (68,0), (136,0), 2),
+            (2642, 1595, (70,0), (210,0), 3),
         ]),
     ];
     ut_setup_bulk_add_charges(
@@ -299,12 +297,12 @@ async fn read_unpaid_orderline_ok() {
     ).await;
 
     let expect_paid_lines = vec![
-        (Decimal::new(155,0), 5),  // 8299, ProductType::Package, 37,   
-        (Decimal::new(45,0), 1),   // 8299, ProductType::Item, 219,
-        (Decimal::new(360,0), 4),  // 3034, ProductType::Package, 602,
-        (Decimal::new(0,0), 0),    // 3034, ProductType::Item, 595,
-        (Decimal::new(336,0), 7),  // 8299, ProductType::Item, 253,
-        (Decimal::new(105,0), 3),  // 2642, ProductType::Package, 595,
+        (Decimal::new(155,0), 5),  // 8299, 37,   
+        (Decimal::new(45,0), 1),   // 8299, 219,
+        (Decimal::new(360,0), 4),  // 3034, 602,
+        (Decimal::new(0,0), 0),    // 3034, 595,
+        (Decimal::new(336,0), 7),  // 8299, 253,
+        (Decimal::new(105,0), 3),  // 2642, 1595,
     ];
     ut_verify_unpaid_orderlines(
         repo.clone(), mock_o_toplvl[0].clone(),
@@ -312,11 +310,11 @@ async fn read_unpaid_orderline_ok() {
     ).await;
     
     let expect_paid_lines = vec![
-        (Decimal::new(198,0), 6),  // 2753, ProductType::Package, 152,
-        (Decimal::new(0,0), 0),    // 8299, ProductType::Item, 219,,
+        (Decimal::new(198,0), 6),  // 2753, 152,
+        (Decimal::new(0,0), 0),    // 8299, 219,
         (Decimal::new(0,0), 0),
-        (Decimal::new(340,0), 5),  // 2642, ProductType::Item,  253,
-        (Decimal::new(490,0), 7),  // 2642, ProductType::Package, 595,
+        (Decimal::new(340,0), 5),  // 2642, 253,
+        (Decimal::new(490,0), 7),  // 2642, 1595,
     ];
     ut_verify_unpaid_orderlines(
         repo.clone(), mock_o_toplvl[1].clone(),

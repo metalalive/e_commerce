@@ -5,14 +5,12 @@
 	    {
 	        "seller_id": 127,
 	        "product_id": 3805,
-	        "product_type": 1,
 	        "quantity": 4,
 	        "amount": {"unit": "20.4", "total": "81.6"}
 	    },
 	    {
 	        "seller_id": 983,
 	        "product_id": 204,
-	        "product_type": 1,
 	        "quantity": 20,
 	        "amount": {"unit": "18.1", "total": "362.0"}
 	    }

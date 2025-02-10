@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use chrono::Local;
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use rust_decimal::Decimal;
 use serde_json::Value as JsnVal;
 
@@ -109,8 +108,7 @@ async fn err_invalid_account() {
         let currency_snapshot = ut_default_currency_snapshot(usr_ids);
         let time_now = Local::now().to_utc();
         let charge_lines = vec![
-            (mock_merchant_id, ProductType::Item, 91038u64,
-             (300i64, 0u32), (900i64, 0u32), 3u32,
+            (mock_merchant_id, 91038u64, (300i64, 0u32), (900i64, 0u32), 3u32,
              (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
         ];
         let paymethod = ut_default_charge_method_stripe(&time_now);
