@@ -1,7 +1,4 @@
-use serde::de::{Error as DeserializeError, Expected, Unexpected};
 use serde::{Deserialize, Serialize};
-
-use crate::constant::ProductType;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct PayAmountDto {
@@ -12,51 +9,9 @@ pub struct PayAmountDto {
 
 #[derive(Deserialize, Serialize)]
 pub struct GenericRangeErrorDto {
-    pub max_: u16,
+    pub max_: u16, // TODO, same type
     pub min_: u16,
     pub given: u32,
-}
-
-struct ExpectProdTyp {
-    numbers: Vec<u8>,
-}
-impl Expected for ExpectProdTyp {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let s: Vec<String> = self.numbers.iter().map(|n| n.to_string()).collect();
-        let s = s.join(",");
-        let msg = format!("accepted type number : {s}");
-        formatter.write_str(msg.as_str())
-    }
-}
-
-pub fn jsn_validate_product_type<'de, D>(raw: D) -> Result<ProductType, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    match u8::deserialize(raw) {
-        Ok(d) => {
-            let typ = ProductType::from(d);
-            if let ProductType::Unknown(uv) = typ {
-                let unexp = Unexpected::Unsigned(uv as u64);
-                let exp = ExpectProdTyp {
-                    numbers: vec![ProductType::Item.into(), ProductType::Package.into()],
-                };
-                let e = DeserializeError::invalid_value(unexp, &exp);
-                Err(e)
-            } else {
-                Ok(typ)
-            }
-        }
-        Err(e) => Err(e),
-    }
-}
-
-pub fn jsn_serialize_product_type<S>(orig: &ProductType, ser: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    let v = orig.clone().into();
-    ser.serialize_u8(v)
 }
 
 #[derive(Deserialize, Serialize)]
@@ -90,6 +45,7 @@ impl From<CountryCode> for String {
     }
 } // implement `Into` trait, not replying on serde
 impl From<String> for CountryCode {
+    // TODO, from literal string
     fn from(value: String) -> Self {
         match value.as_str() {
             "TW" => Self::TW,
@@ -123,6 +79,7 @@ impl ToString for CurrencyDto {
 }
 
 impl From<&String> for CurrencyDto {
+    // TODO, from literal string
     fn from(value: &String) -> Self {
         match value.as_str() {
             "INR" => Self::INR,
@@ -168,11 +125,6 @@ pub struct BillingDto {
 pub struct OrderLinePayDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
     pub reserved_until: String, // date-time formatted in RFC3339 spec
     // TODO, add warranty time
     pub quantity: u32,

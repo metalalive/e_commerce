@@ -10,7 +10,6 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -25,7 +24,7 @@ use super::{run_query_once, DATETIME_FORMAT};
 struct InsertProductArg(u32, Vec<ProductPriceModel>);
 struct UpdateProductArg(u32, Vec<ProductPriceModel>);
 struct InsertUpdateMetaArg(u32, CurrencyDto);
-struct FetchProductOneSellerArg(u32, Vec<(ProductType, u64)>);
+struct FetchProductOneSellerArg(u32, Vec<u64>);
 struct FetchProductManySellersArg(Vec<BaseProductIdentity>);
 struct FetchMetaOneSellerArg(u32);
 struct FetchMetaManySellersArg(Vec<u32>);
@@ -35,10 +34,10 @@ struct DeleteStoreMetaArg(u32);
 
 impl InsertProductArg {
     fn sql_pattern(num_batch: usize) -> String {
-        const ITEM: &str = "(?,?,?,?,?,?,?,?)";
+        const ITEM: &str = "(?,?,?,?,?,?,?)";
         const DELIMITER: &str = ",";
         let items = (0..num_batch).map(|_| ITEM).collect::<Vec<_>>();
-        format!("INSERT INTO `product_price`(`store_id`,`product_type`,`product_id`,`price`,`start_after`,`end_before`, `start_tz_utc`, `end_tz_utc`) VALUES {}"
+        format!("INSERT INTO `product_price`(`store_id`,`product_id`,`price`,`start_after`,`end_before`, `start_tz_utc`, `end_tz_utc`) VALUES {}"
                 , items.join(DELIMITER) )
     }
 }
@@ -49,20 +48,17 @@ impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
         items
             .into_iter()
             .map(|item| {
-                let (p_id, p_typ, price, start_after, end_before) = (
+                let (p_id, price, start_after, end_before) = (
                     item.product_id,
-                    item.product_type,
                     item.price,
                     item.start_after,
                     item.end_before,
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 let tz = start_after.fixed_offset().timezone();
                 let start_tz_utc = tz.local_minus_utc() / 60;
                 let tz = end_before.fixed_offset().timezone();
                 let end_tz_utc = tz.local_minus_utc() / 60;
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(p_id).unwrap();
                 out.add(price).unwrap();
                 let t0 = format!("{}", start_after.format(DATETIME_FORMAT));
@@ -88,11 +84,11 @@ impl From<InsertProductArg> for (String, MySqlArguments) {
 impl UpdateProductArg {
     fn sql_pattern(num_batch: usize) -> String {
         let case_ops = (0..num_batch)
-            .map(|_| "WHEN (`product_type`=? AND `product_id`=?) THEN ? ")
+            .map(|_| "WHEN (`product_id`=?) THEN ? ")
             .collect::<Vec<_>>()
             .join("");
         let pid_cmps = (0..num_batch)
-            .map(|_| "(`product_type`=? AND `product_id`=?)")
+            .map(|_| "(`product_id`=?)")
             .collect::<Vec<_>>()
             .join(" OR ");
         format!("UPDATE `product_price` SET `price` = CASE {} ELSE `price` END, `start_after` = CASE {} ELSE `start_after` END, `end_before` = CASE {} ELSE `end_before` END, `start_tz_utc` = CASE {} ELSE `start_tz_utc` END, `end_tz_utc` = CASE {} ELSE `end_tz_utc` END  WHERE store_id = ? AND ({})" 
@@ -106,9 +102,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, p_typ, price) = (item.product_id, item.product_type.clone(), item.price);
-                let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string()).unwrap();
+                let (p_id, price) = (item.product_id, item.price);
                 out.add(p_id).unwrap();
                 out.add(price).unwrap();
             })
@@ -116,10 +110,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, p_typ, start_after) =
-                    (item.product_id, item.product_type.clone(), item.start_after);
-                let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string()).unwrap();
+                let (p_id, start_after) = (item.product_id, item.start_after);
                 out.add(p_id).unwrap();
                 let t = start_after.format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
@@ -128,10 +119,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, p_typ, end_before) =
-                    (item.product_id, item.product_type.clone(), item.end_before);
-                let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string()).unwrap();
+                let (p_id, end_before) = (item.product_id, item.end_before);
                 out.add(p_id).unwrap();
                 let t = end_before.format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
@@ -140,11 +128,8 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, p_typ, start_after) =
-                    (item.product_id, item.product_type.clone(), item.start_after);
-                let prod_typ_num: u8 = p_typ.into();
+                let (p_id, start_after) = (item.product_id, item.start_after);
                 let start_tz_utc = start_after.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(p_id).unwrap();
                 out.add(start_tz_utc as i16).unwrap();
             })
@@ -152,11 +137,8 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, p_typ, end_before) =
-                    (item.product_id, item.product_type.clone(), item.end_before);
-                let prod_typ_num: u8 = p_typ.into();
+                let (p_id, end_before) = (item.product_id, item.end_before);
                 let end_tz_utc = end_before.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(p_id).unwrap();
                 out.add(end_tz_utc as i16).unwrap();
             })
@@ -165,10 +147,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .into_iter()
             .map(|item| {
-                let (p_id, p_typ) = (item.product_id, item.product_type);
-                let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string()).unwrap();
-                out.add(p_id).unwrap();
+                out.add(item.product_id).unwrap();
             })
             .count();
         out
@@ -199,10 +178,9 @@ impl From<InsertUpdateMetaArg> for (String, MySqlArguments) {
 
 impl FetchProductOneSellerArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`product_type`,`product_id`,`price`,`start_after`,\
-                       `end_before`,`start_tz_utc`,`end_tz_utc`";
+        let col_seq = "`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch)
-            .map(|_| "(`product_type`=? AND `product_id`=?)")
+            .map(|_| "(`product_id`=?)")
             .collect::<Vec<_>>()
             .join("OR");
         format!(
@@ -218,9 +196,7 @@ impl<'q> IntoArguments<'q, MySql> for FetchProductOneSellerArg {
         out.add(store_id).unwrap();
         items
             .into_iter()
-            .map(|(product_type, product_id)| {
-                let prod_typ_num: u8 = product_type.into();
-                out.add(prod_typ_num.to_string()).unwrap();
+            .map(|product_id| {
                 out.add(product_id).unwrap();
             })
             .count();
@@ -250,16 +226,15 @@ impl From<FetchMetaOneSellerArg> for (String, MySqlArguments) {
 
 impl FetchProductManySellersArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`product_type`,`product_id`,`price`,`start_after`,`end_before`,\
-                       `start_tz_utc`,`end_tz_utc`,`store_id`";
+        let col_seq = "`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc`,`store_id`";
         let pid_cmps = (0..num_batch)
-            .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
+            .map(|_| "(`store_id`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join(" OR ");
         format!("SELECT {col_seq} FROM `product_price` WHERE {}", pid_cmps)
     }
     fn seller_id_column_idx() -> usize {
-        7usize
+        6usize
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchProductManySellersArg {
@@ -268,11 +243,8 @@ impl<'q> IntoArguments<'q, MySql> for FetchProductManySellersArg {
         let pids = self.0;
         pids.into_iter()
             .map(|id_| {
-                let (store_id, prod_type, prod_id) =
-                    (id_.store_id, id_.product_type, id_.product_id);
-                let prod_typ_num: u8 = prod_type.into();
+                let (store_id, prod_id) = (id_.store_id, id_.product_id);
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
             })
             .count();
@@ -324,10 +296,12 @@ impl From<FetchMetaManySellersArg> for (String, MySqlArguments) {
 }
 
 impl DeleteSomeArg {
-    fn sql_pattern(num_items: usize, num_pkgs: usize) -> String {
+    fn sql_pattern(num_items: usize) -> String {
         let items_ph = (0..num_items).map(|_| "?").collect::<Vec<_>>().join(",");
-        let pkgs_ph = (0..num_pkgs).map(|_| "?").collect::<Vec<_>>().join(",");
-        format!("DELETE FROM `product_price` WHERE `store_id`=? AND ((`product_type`=? AND `product_id` IN ({})) OR (`product_type`=? AND `product_id` IN ({}))  )", items_ph, pkgs_ph)
+        format!(
+            "DELETE FROM `product_price` WHERE `store_id`=? AND (`product_id` IN ({}))",
+            items_ph
+        )
     }
 }
 impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
@@ -335,18 +309,7 @@ impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
         let mut out = MySqlArguments::default();
         let (store_id, data) = (self.0, self.1);
         out.add(store_id).unwrap();
-        let item_typ: u8 = data.item_type.into();
-        out.add(item_typ.to_string()).unwrap();
         data.items
-            .unwrap()
-            .iter()
-            .map(|product_id| {
-                out.add(*product_id).unwrap();
-            })
-            .count();
-        let pkg_typ: u8 = data.pkg_type.into();
-        out.add(pkg_typ.to_string()).unwrap();
-        data.pkgs
             .unwrap()
             .iter()
             .map(|product_id| {
@@ -362,17 +325,13 @@ impl TryInto<(String, MySqlArguments)> for DeleteSomeArg {
     fn try_into(self) -> DefaultResult<(String, MySqlArguments), Self::Error> {
         let empty = vec![];
         let items_r = self.1.items.as_ref().unwrap_or(&empty);
-        let pkgs_r = self.1.pkgs.as_ref().unwrap_or(&empty);
-        if items_r.is_empty() && pkgs_r.is_empty() {
+        if items_r.is_empty() {
             Err(AppError {
                 code: AppErrorCode::EmptyInputData,
                 detail: Some("delete-product-price".to_string()),
             })
         } else {
-            Ok((
-                Self::sql_pattern(items_r.len(), pkgs_r.len()),
-                self.into_arguments(),
-            ))
+            Ok((Self::sql_pattern(items_r.len()), self.into_arguments()))
         }
     }
 }
@@ -402,15 +361,12 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
     fn try_from(value: MySqlRow) -> DefaultResult<Self, Self::Error> {
         // TODO, discard fetching `store-id` column, the index of subsequent
         // columns should be decremented by one
-        let prodtyp_raw = value.try_get::<&[u8], usize>(0)?;
-        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
-        let product_type = prodtyp_raw.parse::<ProductType>()?;
-        let product_id = value.try_get::<u64, usize>(1)?;
-        let price = value.try_get::<u32, usize>(2)?;
-        let start_after = value.try_get::<NaiveDateTime, usize>(3)?;
-        let end_before = value.try_get::<NaiveDateTime, usize>(4)?;
-        let start_tz_utc = value.try_get::<i16, usize>(5)?;
-        let end_tz_utc = value.try_get::<i16, usize>(6)?;
+        let product_id = value.try_get::<u64, usize>(0)?;
+        let price = value.try_get::<u32, usize>(1)?;
+        let start_after = value.try_get::<NaiveDateTime, usize>(2)?;
+        let end_before = value.try_get::<NaiveDateTime, usize>(3)?;
+        let start_tz_utc = value.try_get::<i16, usize>(4)?;
+        let end_tz_utc = value.try_get::<i16, usize>(5)?;
         let start_after = {
             let num_secs = (start_tz_utc as i32) * 60;
             let tz = FixedOffset::east_opt(num_secs).unwrap();
@@ -425,7 +381,6 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
         //println!("[DEBUG] product-id : {}, start_after naive: {:?}, final:{:?}",
         //        product_id, start_after_naive, start_after);
         Ok(Self {
-            product_type,
             product_id,
             price,
             start_after,
@@ -575,7 +530,7 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
     async fn fetch(
         &self,
         store_id: u32,
-        ids: Vec<(ProductType, u64)>,
+        ids: Vec<u64>,
     ) -> DefaultResult<ProductPriceModelSet, AppError> {
         if ids.is_empty() {
             return Err(AppError {
@@ -615,7 +570,7 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
 
     async fn fetch_many(
         &self,
-        ids: Vec<(u32, ProductType, u64)>,
+        ids: Vec<(u32, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> {
         if ids.is_empty() {
             return Err(AppError {
@@ -627,7 +582,7 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
         let mut map: HashMap<u32, ProductPriceModelSet> = {
             let sids = ids
                 .iter()
-                .map(|(store_id, _, _)| *store_id)
+                .map(|(store_id, _)| *store_id)
                 .collect::<Vec<_>>();
             let (sql_patt, args) = FetchMetaManySellersArg(sids).into();
             let rows = self._fetch_common(sql_patt, args).await?;
@@ -649,9 +604,8 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
         }
         let pids = ids
             .into_iter()
-            .map(|(store_id, product_type, product_id)| BaseProductIdentity {
+            .map(|(store_id, product_id)| BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             })
             .collect::<Vec<_>>();

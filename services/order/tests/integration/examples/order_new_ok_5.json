@@ -2,19 +2,16 @@
   "order_lines": [
     {
       "seller_id": 543,
-      "product_type": 1,
       "product_id": 20097,
       "quantity": 13
     },
     {
       "seller_id": 543,
-      "product_type": 1,
       "product_id": 20095,
       "quantity": 16
     },
     {
       "seller_id": 543,
-      "product_type": 2,
       "product_id": 20096,
       "quantity": 14
     }

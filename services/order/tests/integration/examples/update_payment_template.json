@@ -2,7 +2,7 @@
     "oid":"12345678",
     "charge_time": "1991-12-07T16:02:45.008+01:00", 
     "lines":[
-	{"seller_id": 0, "product_id": 0, "product_type": 0, "qty": 0},
-	{"seller_id": 0, "product_id": 0, "product_type": 0, "qty": 0}
+	{"seller_id": 0, "product_id": 0, "qty": 0},
+	{"seller_id": 0, "product_id": 0, "qty": 0}
     ]
 } 

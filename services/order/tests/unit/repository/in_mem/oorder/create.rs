@@ -5,7 +5,6 @@ use chrono::{DateTime, Duration, FixedOffset};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::BillingModel;
 
 use order::api::dto::ShippingMethod;
@@ -41,7 +40,6 @@ fn ut_setup_olines_gen_stock(
             }
             let store = stores.get_mut(&store_id).unwrap();
             let value = ProductStockModel {
-                type_: ol.id_.product_type.clone(),
                 id_: ol.id_.product_id,
                 is_create: true,
                 expiry: mock_expiry.into(),
@@ -149,14 +147,12 @@ async fn ut_verify_fetch_all_olines(
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
         assert_eq!(lines[0].qty.reserved, 4);
         assert_eq!(lines[0].id_.store_id, mock_seller_ids[0]);
-        assert_eq!(lines[0].id_.product_type, ProductType::Item);
         assert_eq!(lines[0].id_.product_id, 190);
         assert_eq!(lines[0].price.unit, 10);
         assert_eq!(lines[0].price.total, 39);
         assert_eq!(lines[2].qty.reserved, 6);
         assert_eq!(lines[2].id_.store_id, mock_seller_ids[1]);
-        assert_eq!(lines[2].id_.product_type, ProductType::Package);
-        assert_eq!(lines[2].id_.product_id, 190);
+        assert_eq!(lines[2].id_.product_id, 1190);
         assert_eq!(lines[2].price.unit, 40);
         assert_eq!(lines[2].price.total, 225);
     }
@@ -167,7 +163,6 @@ async fn ut_verify_fetch_all_olines(
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
         assert_eq!(lines[0].qty.reserved, 16);
         assert_eq!(lines[0].id_.store_id, mock_seller_ids[1]);
-        assert_eq!(lines[0].id_.product_type, ProductType::Package);
         assert_eq!(lines[0].id_.product_id, 194);
         assert_eq!(lines[0].price.unit, 15);
         assert_eq!(lines[0].price.total, 240);
@@ -182,18 +177,15 @@ async fn ut_verify_fetch_specific_olines(
     let mut pids = vec![
         OrderLineIdentity {
             store_id: mock_seller_ids[0],
-            product_id: 190,
-            product_type: ProductType::Package,
+            product_id: 1190,
         },
         OrderLineIdentity {
             store_id: mock_seller_ids[0],
             product_id: 199,
-            product_type: ProductType::Item,
         }, // should not exist in the order[0]
         OrderLineIdentity {
             store_id: mock_seller_ids[0],
             product_id: 190,
-            product_type: ProductType::Item,
         },
     ];
     let result = o_repo
@@ -213,7 +205,6 @@ async fn ut_verify_fetch_specific_olines(
         OrderLineIdentity {
             store_id: mock_seller_ids[1],
             product_id: 198,
-            product_type: ProductType::Item,
         },
     );
     let result = o_repo

@@ -1,6 +1,5 @@
 use chrono::{DateTime, FixedOffset, Local};
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use order::api::dto::ShippingMethod;
@@ -236,223 +235,38 @@ pub(crate) fn ut_setup_shipping(mock_seller_ids: &[u32; 2]) -> Vec<ShippingModel
 fn ut_setup_orderlines(mock_seller_ids: &[u32; 2]) -> Vec<OrderLineModel> {
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
-    vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 190,
-                product_type: ProductType::Item,
+    let rawdata = [
+        (mock_seller_ids[0], 190u64, 10u32, 39u32, 4u32),
+        (mock_seller_ids[1], 190, 12, 60, 5),
+        (mock_seller_ids[0], 1190, 9, 67, 10),
+        (mock_seller_ids[1], 1190, 40, 225, 6),
+        (mock_seller_ids[1], 192, 10, 80, 18),
+        (mock_seller_ids[0], 193, 12, 320, 32),
+        (mock_seller_ids[1], 194, 15, 240, 16),
+        (mock_seller_ids[1], 198, 12, 240, 20),
+        (mock_seller_ids[0], 199, 8, 264, 33),
+        (mock_seller_ids[0], 201, 5, 165, 33),
+        (mock_seller_ids[0], 202, 23, 69, 3),
+    ];
+    rawdata
+        .into_iter()
+        .map(
+            |(store_id, product_id, unit, total, reserved)| OrderLineModel {
+                id_: OrderLineIdentity {
+                    store_id,
+                    product_id,
+                },
+                price: OrderLinePriceModel { unit, total },
+                qty: OrderLineQuantityModel {
+                    reserved,
+                    paid: 0,
+                    paid_last_update: None,
+                },
+                policy: OrderLineAppliedPolicyModel {
+                    reserved_until,
+                    warranty_until,
+                },
             },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 39,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 4,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[1],
-                product_id: 190,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 12,
-                total: 60,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 5,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 190,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 9, total: 67 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[1],
-                product_id: 190,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel {
-                unit: 40,
-                total: 225,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 6,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[1],
-                product_id: 192,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 80,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 18,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 193,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 12,
-                total: 320,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 32,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[1],
-                product_id: 194,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel {
-                unit: 15,
-                total: 240,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 16,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[1],
-                product_id: 198,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 12,
-                total: 240,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 20,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 199,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 8,
-                total: 264,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 33,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 201,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel {
-                unit: 5,
-                total: 165,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 33,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: mock_seller_ids[0],
-                product_id: 202,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 23,
-                total: 69,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 3,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-    ]
+        )
+        .collect()
 } // end of ut_setup_orderlines

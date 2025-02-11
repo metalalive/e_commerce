@@ -4,7 +4,6 @@ use std::vec::Vec;
 
 use chrono::{DateTime, SubsecRound, Utc};
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::rpc::dto::{
@@ -20,7 +19,6 @@ use super::{BaseProductIdentity, OrderLineModel, OrderLineModelSet};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
-    pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<Utc>,
 }
@@ -41,7 +39,6 @@ pub struct StockQuantityModel {
 }
 #[derive(Debug)]
 pub struct ProductStockModel {
-    pub type_: ProductType,
     pub id_: u64, // TODO, declare type alias
     pub expiry: DateTime<Utc>,
     pub quantity: StockQuantityModel,
@@ -69,7 +66,6 @@ impl Clone for ProductStockIdentity {
     fn clone(&self) -> Self {
         Self {
             store_id: self.store_id,
-            product_type: self.product_type.clone(),
             product_id: self.product_id,
             expiry: self.expiry,
         }
@@ -96,7 +92,6 @@ impl Clone for StockQuantityModel {
 impl Clone for ProductStockModel {
     fn clone(&self) -> Self {
         Self {
-            type_: self.type_.clone(),
             id_: self.id_,
             expiry: self.expiry,
             quantity: self.quantity.clone(),
@@ -135,8 +130,7 @@ impl PartialEq for StockQuantityModel {
 }
 impl PartialEq for ProductStockModel {
     fn eq(&self, other: &Self) -> bool {
-        self.type_ == other.type_
-            && self.id_ == other.id_
+        self.id_ == other.id_
             && self.quantity == other.quantity
             && self.expiry_without_millis() == other.expiry_without_millis()
     }
@@ -221,7 +215,7 @@ impl StoreStockModel {
         let _satisfied = self
             .products
             .iter()
-            .filter(|p| req.id_.product_type == p.type_ && req.id_.product_id == p.id_)
+            .filter(|p| req.id_.product_id == p.id_)
             .any(|p| {
                 let num_taking = min(p.quantity.num_avail(), num_required);
                 num_required -= num_taking;
@@ -233,7 +227,7 @@ impl StoreStockModel {
             let _ = self
                 .products
                 .iter_mut()
-                .filter(|p| req.id_.product_type == p.type_ && req.id_.product_id == p.id_)
+                .filter(|p| req.id_.product_id == p.id_)
                 .any(|p| {
                     let num_taking = p.quantity.reserve(oid, num_required);
                     num_required -= num_taking;
@@ -256,7 +250,7 @@ impl StoreStockModel {
         let _ = self
             .products
             .iter()
-            .filter(|p| p.type_ == req.product_type && p.id_ == req.product_id)
+            .filter(|p| p.id_ == req.product_id)
             .any(|p| {
                 if let Some(rsv) = p.quantity.rsv_detail.as_ref() {
                     let num_return = min(rsv.reserved, num_returning);
@@ -269,7 +263,7 @@ impl StoreStockModel {
             let _ = self
                 .products
                 .iter_mut()
-                .filter(|p| p.type_ == req.product_type && p.id_ == req.product_id)
+                .filter(|p| p.id_ == req.product_id)
                 .any(|p| {
                     let num_returned = p.quantity.try_return(num_returning);
                     num_returning -= num_returned;
@@ -290,9 +284,7 @@ impl StoreStockModel {
     ) -> Option<StockReturnErrorReason> {
         assert!(req.qty_add > 0);
         let result = self.products.iter_mut().find(|p| {
-            p.type_ == req.product_type
-                && p.id_ == req.product_id
-                && p.expiry.trunc_subsecs(0) == req.expiry.trunc_subsecs(0)
+            p.id_ == req.product_id && p.expiry.trunc_subsecs(0) == req.expiry.trunc_subsecs(0)
         });
         if let Some(p) = result {
             if let Some(rsv) = &p.quantity.rsv_detail {
@@ -323,7 +315,6 @@ impl From<StockLevelModelSet> for Vec<StockLevelPresentDto> {
                 m.products.into_iter().map(move |p| StockLevelPresentDto {
                     quantity: p.quantity.clone().into(),
                     store_id,
-                    product_type: p.type_,
                     product_id: p.id_,
                     expiry: p.expiry.fixed_offset(),
                 })
@@ -355,7 +346,7 @@ impl StockLevelModelSet {
             }; // TODO,refactor
             let result = store_found.products.iter_mut().find(|m| {
                 let duration = m.expiry.fixed_offset() - d.expiry;
-                m.type_ == d.product_type && m.id_ == d.product_id && duration.num_seconds() == 0
+                m.id_ == d.product_id && duration.num_seconds() == 0
             });
             if let Some(_product_found) = result {
                 if d.qty_add >= 0 {
@@ -373,7 +364,6 @@ impl StockLevelModelSet {
                 // insert new instance
                 if d.qty_add >= 0 {
                     let new_prod = ProductStockModel {
-                        type_: d.product_type.clone(),
                         id_: d.product_id,
                         expiry: d.expiry.into(),
                         is_create: true,
@@ -389,11 +379,9 @@ impl StockLevelModelSet {
         }); // end of input-data iteration
         if let Some(d) = err_caught {
             let msg = errmsg.unwrap_or("");
-            let prod_typ_num: u8 = d.product_type.into();
             let final_detail = format!(
-                "store:{}, product:({},{}), exp:{}, qty_add:{}, reason:{}",
+                "store:{}, product:{}, exp:{}, qty_add:{}, reason:{}",
                 d.store_id,
-                prod_typ_num,
                 d.product_id,
                 d.expiry.to_rfc3339(),
                 d.qty_add,
@@ -420,7 +408,6 @@ impl StockLevelModelSet {
                 let mut error = OrderLineCreateErrorDto {
                     seller_id: req.id_.store_id,
                     product_id: req.id_.product_id,
-                    product_type: req.id_.product_type.clone(),
                     rsv_limit: None,
                     shortage: None,
                     reason: OrderLineCreateErrorReason::NotExist,
@@ -467,7 +454,6 @@ impl StockLevelModelSet {
                     reason: StockReturnErrorReason::NotExist,
                     product_id: req.product_id,
                     seller_id: req.store_id,
-                    product_type: req.product_type.clone(),
                 };
                 let found = self.stores.iter_mut().find(|m| m.store_id == req.store_id);
                 let opt_detail = if let Some(store) = found {

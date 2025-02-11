@@ -1,13 +1,11 @@
 [
   {
-    "product_type": 2,
-    "product_id": 10093183,
+    "product_id": 110093183,
     "async_stock_chk": true,
     "auto_cancel_secs": 560,
     "warranty_hours": 24000
   },
   {
-    "product_type": 1,
     "product_id": 10093183,
     "async_stock_chk": true,
     "auto_cancel_secs": 560,

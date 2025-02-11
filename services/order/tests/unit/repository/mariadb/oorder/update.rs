@@ -4,7 +4,6 @@ use tokio::time::{sleep, Duration as TokioDuration};
 use ecommerce_common::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto,
 };
-use ecommerce_common::constant::ProductType;
 use order::model::{OrderLineIdentity, OrderLineModel, OrderLineModelSet, StockLevelModelSet};
 use order::repository::{app_repo_order, AppStockRepoReserveReturn};
 
@@ -40,15 +39,15 @@ async fn update_payment_ok() {
     let o_repo = app_repo_order(ds).await.unwrap();
     let mock_oid = "0e927003716b";
     let create_time = Local::now().fixed_offset();
-    ut_setup_stock_product(o_repo.stock(), 1031, ProductType::Item, 9003, 25).await;
-    ut_setup_stock_product(o_repo.stock(), 1032, ProductType::Package, 9010, 27).await;
-    ut_setup_stock_product(o_repo.stock(), 1032, ProductType::Item, 9011, 44).await;
-    ut_setup_stock_product(o_repo.stock(), 1033, ProductType::Item, 9012, 32).await;
+    ut_setup_stock_product(o_repo.stock(), 1031, 9003, 25).await;
+    ut_setup_stock_product(o_repo.stock(), 1032, 9010, 27).await;
+    ut_setup_stock_product(o_repo.stock(), 1032, 9011, 44).await;
+    ut_setup_stock_product(o_repo.stock(), 1033, 9022, 15).await;
     {
         let lines = vec![
-            (1032, ProductType::Package, 9010, 13, 99, create_time),
-            (1031, ProductType::Item, 9003, 10, 100, create_time),
-            (1032, ProductType::Item, 9011, 15, 110, create_time),
+            (1032, 9010, 13, 99, create_time),
+            (1031, 9003, 10, 100, create_time),
+            (1032, 9011, 15, 110, create_time),
         ];
         let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
         let result = o_repo
@@ -58,19 +57,14 @@ async fn update_payment_ok() {
         assert!(result.is_ok());
     }
     let data = {
-        let lines = vec![
-            (1031u32, 9003u64, 3u32, ProductType::Item),
-            (1032, 9010, 1, ProductType::Package),
-            (1032, 9011, 6, ProductType::Item),
-        ]
-        .into_iter()
-        .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0,
-            product_id: d.1,
-            qty: d.2,
-            product_type: d.3,
-        })
-        .collect::<Vec<_>>();
+        let lines = vec![(1031u32, 9003u64, 3u32), (1032, 9010, 1), (1032, 9011, 6)]
+            .into_iter()
+            .map(|d| OrderLinePaidUpdateDto {
+                seller_id: d.0,
+                product_id: d.1,
+                qty: d.2,
+            })
+            .collect::<Vec<_>>();
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
             charge_time: (create_time + Duration::seconds(6)).to_rfc3339(),
@@ -85,18 +79,14 @@ async fn update_payment_ok() {
         assert!(usr_err.lines.is_empty());
     }
     let data = {
-        let lines = vec![
-            (1032u32, 9010u64, 3u32, ProductType::Package),
-            (1032, 9011, 5, ProductType::Item),
-        ]
-        .into_iter()
-        .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0,
-            product_id: d.1,
-            qty: d.2,
-            product_type: d.3,
-        })
-        .collect::<Vec<_>>();
+        let lines = vec![(1032u32, 9010u64, 3u32), (1032, 9011, 5)]
+            .into_iter()
+            .map(|d| OrderLinePaidUpdateDto {
+                seller_id: d.0,
+                product_id: d.1,
+                qty: d.2,
+            })
+            .collect::<Vec<_>>();
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
             charge_time: (create_time + Duration::seconds(10)).to_rfc3339(),
@@ -111,18 +101,13 @@ async fn update_payment_ok() {
         assert!(usr_err.lines.is_empty());
     }
 
-    let pids = vec![
-        (1031u32, 9003u64, ProductType::Item),
-        (1032, 9011, ProductType::Item),
-        (1032, 9010, ProductType::Package),
-    ]
-    .into_iter()
-    .map(|d| OrderLineIdentity {
-        store_id: d.0,
-        product_id: d.1,
-        product_type: d.2,
-    })
-    .collect::<Vec<_>>();
+    let pids = vec![(1031u32, 9003u64), (1032, 9011), (1032, 9010)]
+        .into_iter()
+        .map(|d| OrderLineIdentity {
+            store_id: d.0,
+            product_id: d.1,
+        })
+        .collect::<Vec<_>>();
     let result = o_repo.fetch_lines_by_pid(mock_oid, pids).await;
     assert!(result.is_ok());
     if let Ok(mut lines) = result {

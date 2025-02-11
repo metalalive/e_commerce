@@ -2,7 +2,6 @@ use chrono::{Duration, Local};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CurrencyDto, OrderCurrencySnapshotDto};
-use ecommerce_common::constant::ProductType;
 use order::api::web::dto::OrderCreateRespOkDto;
 use order::model::{CurrencyModel, CurrencyModelSet, OrderCurrencyModel, OrderLineModelSet};
 
@@ -135,17 +134,17 @@ fn order_to_web_resp_dto_ok() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let mock_olines_data = vec![
         // seller uses INR
-        (mock_seller_ids[2], 66049, ProductType::Item, 35, 140, 4, 0,
-         None, mock_ctime + Duration::hours(2), mock_ctime + Duration::days(14)),
+        (mock_seller_ids[2], 66049, 35, 140, 4, 0, None,
+         mock_ctime + Duration::hours(2), mock_ctime + Duration::days(14)),
         // seller uses IDR
-        (mock_seller_ids[1], 1082, ProductType::Package, 57000, 114000, 2, 0,
-         None, mock_ctime + Duration::hours(1), mock_ctime + Duration::days(1)),
+        (mock_seller_ids[1], 1082, 57000, 114000, 2, 0, None,
+         mock_ctime + Duration::hours(1), mock_ctime + Duration::days(1)),
         // seller uses TWD
-        (mock_seller_ids[0], 1617, ProductType::Item, 215, 1075, 5, 0,
-         None, mock_ctime + Duration::hours(4), mock_ctime + Duration::days(180)),
+        (mock_seller_ids[0], 1617, 215, 1075, 5, 0, None,
+         mock_ctime + Duration::hours(4), mock_ctime + Duration::days(180)),
         // seller uses INR
-        (mock_seller_ids[2], 50129, ProductType::Package, 426, 2656, 6, 0,
-         None, mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16)),
+        (mock_seller_ids[2], 50129, 426, 2656, 6, 0, None,
+         mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16)),
     ];
     let model = OrderLineModelSet {
         order_id: "extremelyInDepth".to_string(),
@@ -167,18 +166,18 @@ fn order_to_web_resp_dto_ok() {
         reserved_lines
             .into_iter()
             .map(|item| {
-                let key = (item.seller_id, &item.product_type, item.product_id);
+                let key = (item.seller_id, item.product_id);
                 #[cfg_attr(rustfmt, rustfmt_skip)]
                 let expect = match key {
                     // expected amount with more decimal places,
                     // "13.44744870", "53.78979480"
-                    (9982, ProductType::Item, 66049) => (CurrencyDto::INR, "13.44", "53.78"),
+                    (9982, 66049) => (CurrencyDto::INR, "13.44", "53.78"),
                     // "112.05231000", "224.10462000"
-                    (8964, ProductType::Package, 1082) => (CurrencyDto::IDR, "112.05", "224.10"),
+                    (8964, 1082) => (CurrencyDto::IDR, "112.05", "224.10"),
                     // "215.00000000", "1075.00000000"
-                    (2379, ProductType::Item, 1617) => (CurrencyDto::TWD, "215.00", "1075.00"),
+                    (2379, 1617) => (CurrencyDto::TWD, "215.00", "1075.00"),
                     // "163.67466132", "1020.46924992"
-                    (9982, ProductType::Package, 50129) => (CurrencyDto::INR, "163.67", "1020.46"),
+                    (9982, 50129) => (CurrencyDto::INR, "163.67", "1020.46"),
                     _others => (CurrencyDto::Unknown, "-0.00", "-0.00"),
                 };
                 let actual_currency = exrate_applied

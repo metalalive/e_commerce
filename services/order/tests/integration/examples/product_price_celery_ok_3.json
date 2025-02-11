@@ -1,7 +1,8 @@
 [
     [],
-    {"s_id": 1178913994, "rm_all": false, "updating": [], "creating": [],
-     "deleting": {"items":[78,90,123], "pkgs":[12,34,20073,56], "item_type":1, "pkg_type":2}
+    {
+        "s_id": 1178913994, "rm_all": false, "updating": [], "creating": [],
+         "deleting": {"items":[78,90,123,12,34,20073,56]}
     },
     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
 ]

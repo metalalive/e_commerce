@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use chrono::DateTime;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use super::super::AbsProductPriceRepo;
@@ -27,7 +26,6 @@ enum InMemColIdx {
     StartAfter,
     EndBefore,
     ProductId,
-    ProductType,
     TotNumColumns,
 }
 
@@ -39,9 +37,8 @@ impl Into<usize> for InMemColIdx {
             Self::StartAfter => 1,
             Self::EndBefore => 2,
             Self::ProductId => 3,
-            Self::ProductType => 4,
-            Self::SellerId => 5,
-            Self::TotNumColumns => 6,
+            Self::SellerId => 4,
+            Self::TotNumColumns => 5,
         }
     }
 }
@@ -86,8 +83,7 @@ impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
         let (store_id, items) = value;
         let kv_pairs = items.iter().map(|m| {
             let (store_id, product_id) = (store_id, m.product_id);
-            let prod_typ_num: u8 = m.product_type.clone().into();
-            let pkey = format!("{store_id}-{prod_typ_num}-{product_id}");
+            let pkey = format!("{store_id}-{product_id}");
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into())
                 .map(|_n| String::new())
@@ -96,7 +92,6 @@ impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
                 // so the order of columns can be arbitrary
                 (InMemColIdx::SellerId, store_id.to_string()),
                 (InMemColIdx::Price, m.price.to_string()),
-                (InMemColIdx::ProductType, prod_typ_num.to_string()),
                 (InMemColIdx::ProductId, m.product_id.to_string()),
                 (InMemColIdx::StartAfter, m.start_after.to_rfc3339()),
                 (InMemColIdx::EndBefore, m.end_before.to_rfc3339()),
@@ -133,16 +128,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
     }
 
     async fn delete(&self, store_id: u32, ids: ProductPriceDeleteDto) -> Result<(), AppError> {
-        let _ids = {
-            let mut out = vec![];
-            if let Some(p) = &ids.pkgs {
-                out.extend(p.iter().map(|id| (ids.pkg_type.clone(), *id)));
-            } // implicitly copy integer `id` by de-referencing the pointer
-            if let Some(p) = &ids.items {
-                out.extend(p.iter().map(|id| (ids.item_type.clone(), *id)));
-            }
-            out
-        };
+        let _ids = ids.items.clone().unwrap_or_default();
         if _ids.is_empty() {
             Err(AppError {
                 code: AppErrorCode::EmptyInputData,
@@ -156,11 +142,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         }
     }
 
-    async fn fetch(
-        &self,
-        store_id: u32,
-        ids: Vec<(ProductType, u64)>,
-    ) -> Result<ProductPriceModelSet, AppError> {
+    async fn fetch(&self, store_id: u32, ids: Vec<u64>) -> Result<ProductPriceModelSet, AppError> {
         let allkeys = self.gen_id_keys(store_id, ids);
         let mut info = HashMap::new();
         info.insert(TABLE_LABELS[0].to_string(), vec![store_id.to_string()]);
@@ -181,14 +163,14 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
 
     async fn fetch_many(
         &self,
-        ids: Vec<(u32, ProductType, u64)>,
+        ids: Vec<(u32, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> {
         let info = {
             let allkeys4meta = ids.iter().map(|id| id.0.to_string()).collect();
             let allkeys4item = ids
                 .into_iter()
                 .map(|id| {
-                    let mut r = self.gen_id_keys(id.0, vec![(id.1, id.2)]);
+                    let mut r = self.gen_id_keys(id.0, vec![id.1]);
                     assert_eq!(r.len(), 1);
                     r.remove(0)
                 })
@@ -253,12 +235,9 @@ impl ProductPriceInMemRepo {
             datastore: m.clone(),
         })
     }
-    fn gen_id_keys(&self, store_id: u32, ids: Vec<(ProductType, u64)>) -> Vec<String> {
+    fn gen_id_keys(&self, store_id: u32, ids: Vec<u64>) -> Vec<String> {
         ids.into_iter()
-            .map(|(_typ, _id)| {
-                let typnum: u8 = _typ.into();
-                format!("{store_id}-{typnum}-{_id}")
-            })
+            .map(|prod_id| format!("{store_id}-{prod_id}"))
             .collect()
     }
 
@@ -288,12 +267,6 @@ impl ProductPriceInMemRepo {
             // TODO, reliability check
             t.values()
                 .map(|row| {
-                    let prod_typ_num: u8 = row
-                        .get::<usize>(InMemColIdx::ProductType.into())
-                        .unwrap()
-                        .parse()
-                        .unwrap();
-                    let product_type = ProductType::from(prod_typ_num);
                     let product_id = row
                         .get::<usize>(InMemColIdx::ProductId.into())
                         .unwrap()
@@ -314,7 +287,6 @@ impl ProductPriceInMemRepo {
                     let start_after = DateTime::parse_from_rfc3339(start_after).unwrap();
                     let end_before = DateTime::parse_from_rfc3339(end_before).unwrap();
                     let obj = ProductPriceModel {
-                        product_type,
                         product_id,
                         price,
                         start_after,

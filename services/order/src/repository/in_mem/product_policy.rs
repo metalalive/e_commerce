@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::convert::Into;
 use std::sync::Arc;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use super::super::AbstProductPolicyRepo;
@@ -47,16 +46,9 @@ impl ProductPolicyInMemRepo {
 
 #[async_trait]
 impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
-    async fn fetch(&self, ids: Vec<(ProductType, u64)>) -> Result<ProductPolicyModelSet, AppError> {
-        // TODO, remove `use_id`, it is no longer necessary
+    async fn fetch(&self, ids: Vec<u64>) -> Result<ProductPolicyModelSet, AppError> {
         let info = {
-            let v = ids
-                .iter()
-                .map(|(ptyp, pid)| {
-                    let ptyp: u8 = ptyp.clone().into();
-                    format!("{}-{}", ptyp, pid)
-                })
-                .collect();
+            let v = ids.iter().map(|prod_id| prod_id.to_string()).collect();
             let items = [(TABLE_LABEL.to_string(), v)];
             HashMap::from(items)
         };
@@ -66,9 +58,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
             d.iter()
                 .map(|(key, row)| {
                     let id_elms = key.split('-').collect::<Vec<&str>>();
-                    let prod_typ: u8 = id_elms[0].parse().unwrap();
-                    let product_id = id_elms[1].parse().unwrap();
-                    let product_type = ProductType::from(prod_typ);
+                    let product_id = id_elms[0].parse().unwrap();
                     let auto_cancel_secs = row
                         .get::<usize>(InMemColIdx::AutoCancel.into())
                         .unwrap()
@@ -91,7 +81,6 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
                         .unwrap();
                     ProductPolicyModel {
                         product_id,
-                        product_type,
                         auto_cancel_secs,
                         warranty_hours,
                         max_num_rsv,
@@ -117,8 +106,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
             let mut h = HashMap::new();
             let table_data = {
                 let kv_pairs = ppset.policies.iter().map(|m| {
-                    let prod_typ: u8 = m.product_type.clone().into();
-                    let pkey = format!("{}-{}", prod_typ, m.product_id);
+                    let pkey = format!("{}", m.product_id);
                     // manually allocate space in advance, instead of `Vec::with_capacity`
                     let mut row = (0..InMemColIdx::TotNumColumns.into())
                         .map(|_n| String::new())

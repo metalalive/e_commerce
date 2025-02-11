@@ -4,7 +4,6 @@ use std::boxed::Box;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::web::dto::ProductPolicyDto;
@@ -71,14 +70,10 @@ impl UTestDummyRpcContext {
 fn setup_data() -> Vec<ProductPolicyDto> {
     let raw = r#"
         [
-            {"product_id":22, "product_type":1, "auto_cancel_secs":600,
-                "warranty_hours":1800 },
-            {"product_id":168, "product_type":1, "auto_cancel_secs":610,
-                "warranty_hours":1700 },
-            {"product_id":79, "product_type":1, "auto_cancel_secs":630,
-                "warranty_hours":1600 },
-            {"product_id":19, "product_type":2, "auto_cancel_secs":660,
-                "warranty_hours":1500 }
+            {"product_id":22, "auto_cancel_secs":600, "warranty_hours":1800 },
+            {"product_id":168, "auto_cancel_secs":610, "warranty_hours":1700 },
+            {"product_id":79, "auto_cancel_secs":630, "warranty_hours":1600 },
+            {"product_id":19, "auto_cancel_secs":660, "warranty_hours":1500 }
         ]
     "#;
     deserialize_json(raw).unwrap()
@@ -103,10 +98,7 @@ async fn mock_run_rpc_ok(
     _prop: AppRpcClientReqProperty,
 ) -> AppUseKsRPCreply {
     let raw = br#"
-        {
-        "item":[{"id":79},{"id":168},{"id":22}],
-        "pkg":[{"id":19}]
-        }
+        {"result":[{"id_":19},{"id_":79},{"id_":168},{"id_":22}]}
     "#; // bytes of raw string
     let res = AppRpcReply { body: raw.to_vec() };
     Ok(res)
@@ -200,10 +192,7 @@ async fn mock_run_rpc_nonexist_found(
     _prop: AppRpcClientReqProperty,
 ) -> AppUseKsRPCreply {
     let raw = br#"
-        {
-        "item":[{"id":79},{"id":22}],
-        "pkg":[{"id":19}]
-        }
+        {"result":[{"id_":79},{"id_":22},{"id_":19}]}
     "#;
     let res = AppRpcReply { body: raw.to_vec() };
     Ok(res)
@@ -224,5 +213,5 @@ async fn check_product_existence_found_nonexist_item() {
     .await;
     assert_eq!(result.is_ok(), true);
     let missing_product_ids = result.unwrap();
-    assert_eq!(missing_product_ids, vec![(ProductType::Item, 168)]);
+    assert_eq!(missing_product_ids, vec![168]);
 }

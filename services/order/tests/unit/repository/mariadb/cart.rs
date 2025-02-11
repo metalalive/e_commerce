@@ -1,4 +1,3 @@
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 
 use order::model::{CartLineModel, CartModel};
@@ -6,21 +5,17 @@ use order::repository::app_repo_cart;
 
 use super::dstore_ctx_setup;
 
-fn ut_gen_line_model(value: (u32, ProductType, u64, u32)) -> CartLineModel {
+fn ut_gen_line_model(value: (u32, u64, u32)) -> CartLineModel {
     CartLineModel {
         id_: BaseProductIdentity {
             store_id: value.0,
-            product_type: value.1,
-            product_id: value.2,
+            product_id: value.1,
         },
-        qty_req: value.3,
+        qty_req: value.2,
     }
 }
 
-fn ut_verify_cart_model(
-    actual: CartModel,
-    expect: (u32, u8, &str, Vec<(u32, ProductType, u64, u32)>),
-) {
+fn ut_verify_cart_model(actual: CartModel, expect: (u32, u8, &str, Vec<(u32, u64, u32)>)) {
     assert_eq!(actual.owner, expect.0);
     assert_eq!(actual.seq_num, expect.1);
     assert_eq!(actual.title.as_str(), expect.2);
@@ -29,12 +24,10 @@ fn ut_verify_cart_model(
         .into_iter()
         .map(|expect_line| {
             let result = actual.saved_lines.iter().find(|obj| {
-                obj.id_.store_id == expect_line.0
-                    && obj.id_.product_type == expect_line.1
-                    && obj.id_.product_id == expect_line.2
+                obj.id_.store_id == expect_line.0 && obj.id_.product_id == expect_line.1
             });
             let line_found = result.unwrap();
-            assert_eq!(line_found.qty_req, expect_line.3);
+            assert_eq!(line_found.qty_req, expect_line.2);
         })
         .count();
     assert!(actual.new_lines.is_empty());
@@ -49,41 +42,25 @@ async fn save_different_user_carts() {
             124,
             7,
             "next-proj purchase",
-            vec![
-                (3, ProductType::Item, 108u64, 24u32),
-                (3, ProductType::Package, 91u64, 25u32),
-            ],
+            vec![(3, 108u64, 24u32), (3, 991u64, 25u32)],
         ),
         (
             124,
             9,
             "my xmax gift",
-            vec![
-                (3, ProductType::Item, 108, 26),
-                (5, ProductType::Item, 108, 27),
-                (3, ProductType::Package, 91, 28),
-            ],
+            vec![(3, 108, 26), (5, 108, 27), (3, 991, 28)],
         ),
         (
             127,
             8,
             "for massion",
-            vec![
-                (3, ProductType::Item, 108, 29),
-                (3, ProductType::Package, 450, 30),
-                (3, ProductType::Item, 453, 31),
-                (3, ProductType::Package, 91, 32),
-            ],
+            vec![(3, 108, 29), (3, 450, 30), (3, 453, 31), (3, 991, 32)],
         ),
         (
             127,
             9,
             "DIY kit",
-            vec![
-                (3, ProductType::Item, 108, 40),
-                (3, ProductType::Item, 110, 41),
-                (3, ProductType::Package, 91, 42),
-            ],
+            vec![(3, 108, 40), (3, 110, 41), (3, 991, 42)],
         ),
     ];
     for item in data_ins.clone() {
@@ -109,34 +86,22 @@ async fn save_different_user_carts() {
             127,
             8,
             "mission essential",
-            vec![(3, ProductType::Package, 9013, 52)],
-            vec![
-                (3, ProductType::Package, 91, 53),
-                (3, ProductType::Item, 108, 51),
-            ],
+            vec![(3, 9013, 52)],
+            vec![(3, 991, 53), (3, 108, 51)],
         ),
         (
             124,
             6,
             "boxing day shop",
-            vec![
-                (3, ProductType::Package, 121, 5),
-                (3, ProductType::Item, 91, 15),
-            ],
+            vec![(3, 121, 5), (3, 91, 15)],
             Vec::new(),
         ),
         (
             124,
             7,
             "next-proj purchase",
-            vec![
-                (3, ProductType::Package, 1430, 55),
-                (3, ProductType::Item, 169, 56),
-            ],
-            vec![
-                (3, ProductType::Item, 108, 54),
-                (3, ProductType::Package, 91, 57),
-            ],
+            vec![(3, 1430, 55), (3, 169, 56)],
+            vec![(3, 108, 54), (3, 991, 57)],
         ),
     ];
     for item in data_upd {
@@ -157,37 +122,24 @@ async fn save_different_user_carts() {
     let data_verify_after_update = [
         data_ins[3].clone(),
         data_ins[1].clone(),
-        (
-            124,
-            6,
-            "boxing day shop",
-            vec![
-                (3, ProductType::Package, 121, 5),
-                (3, ProductType::Item, 91, 15),
-            ],
-        ),
+        (124, 6, "boxing day shop", vec![(3, 121, 5), (3, 91, 15)]),
         (
             127,
             8,
             "mission essential",
             vec![
-                (3, ProductType::Item, 108, 51),
-                (3, ProductType::Package, 9013, 52),
-                (3, ProductType::Package, 450, 30),
-                (3, ProductType::Item, 453, 31),
-                (3, ProductType::Package, 91, 53),
+                (3, 108, 51),
+                (3, 9013, 52),
+                (3, 450, 30),
+                (3, 453, 31),
+                (3, 991, 53),
             ],
         ),
         (
             124,
             7,
             "next-proj purchase",
-            vec![
-                (3, ProductType::Item, 108, 54),
-                (3, ProductType::Package, 1430, 55),
-                (3, ProductType::Item, 169, 56),
-                (3, ProductType::Package, 91, 57),
-            ],
+            vec![(3, 108, 54), (3, 1430, 55), (3, 169, 56), (3, 991, 57)],
         ),
     ];
     for item in data_verify_after_update.clone() {
@@ -204,46 +156,26 @@ async fn discard_cart_ok() {
     let ds = dstore_ctx_setup();
     let repo = app_repo_cart(ds).await.unwrap();
     let data_ins = [
-        (
-            128,
-            7,
-            "aroma",
-            vec![
-                (3, ProductType::Item, 108u64, 24u32),
-                (3, ProductType::Package, 91u64, 25u32),
-            ],
-        ),
+        (128, 7, "aroma", vec![(3, 108u64, 24u32), (3, 91u64, 25u32)]),
         (
             128,
             9,
             "texture combo",
-            vec![
-                (3, ProductType::Item, 108, 26),
-                (5, ProductType::Item, 108, 27),
-                (3, ProductType::Package, 91, 28),
-            ],
+            vec![(3, 108, 26), (5, 108, 27), (3, 91, 28)],
         ),
         (
             129,
             8,
             "sound / unsound",
             vec![
-                (3, ProductType::Item, 108, 29),
-                (3, ProductType::Package, 450, 30),
-                (3, ProductType::Item, 127, 31),
-                (3, ProductType::Item, 110, 41),
-                (3, ProductType::Package, 91, 32),
+                (3, 108, 29),
+                (3, 450, 30),
+                (3, 127, 31),
+                (3, 110, 41),
+                (3, 91, 32),
             ],
         ),
-        (
-            129,
-            9,
-            "lifetime",
-            vec![
-                (3, ProductType::Item, 108, 40),
-                (3, ProductType::Package, 91, 42),
-            ],
-        ),
+        (129, 9, "lifetime", vec![(3, 108, 40), (3, 91, 42)]),
     ];
     for item in data_ins.clone() {
         let (owner, seq_num, title, lines) = (item.0, item.1, item.2.to_string(), item.3);

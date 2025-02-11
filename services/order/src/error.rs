@@ -1,6 +1,4 @@
-use ecommerce_common::error::{
-    AppCfgError, AppConfidentialityError, AppErrorCode, ProductTypeParseError,
-};
+use ecommerce_common::error::{AppCfgError, AppConfidentialityError, AppErrorCode};
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -21,15 +19,6 @@ impl Display for AppError {
     }
 }
 
-impl From<ProductTypeParseError> for AppError {
-    fn from(value: ProductTypeParseError) -> Self {
-        let detail = format!("product-type, error:{}", value.0);
-        AppError {
-            code: AppErrorCode::DataCorruption,
-            detail: Some(detail),
-        }
-    }
-}
 impl From<AppCfgError> for AppError {
     fn from(value: AppCfgError) -> Self {
         AppError {

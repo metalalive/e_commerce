@@ -1,28 +1,22 @@
 use super::ut_clone_productpolicy;
-use ecommerce_common::constant::ProductType;
 use order::api::web::dto::ProductPolicyDto;
 use order::model::{ProductPolicyModel, ProductPolicyModelSet};
 
 #[test]
 fn validate_newdata_ok() {
-    let newdata = vec![
-        ProductPolicyDto {
-            product_type: ProductType::Item,
-            product_id: 123,
-            min_num_rsv: None,
-            warranty_hours: 480,
-            auto_cancel_secs: 3600,
-            max_num_rsv: None,
-        },
-        ProductPolicyDto {
-            product_type: ProductType::Package,
-            product_id: 124,
-            min_num_rsv: None,
-            warranty_hours: 478,
-            auto_cancel_secs: 3597,
-            max_num_rsv: None,
-        },
-    ];
+    let newdata = [
+        (123u64, None, 480u32, 3600u32, None),
+        (124, None, 478, 3597, None),
+    ]
+    .into_iter()
+    .map(|d| ProductPolicyDto {
+        product_id: d.0,
+        min_num_rsv: d.1,
+        warranty_hours: d.2,
+        auto_cancel_secs: d.3,
+        max_num_rsv: d.4,
+    })
+    .collect::<Vec<_>>();
     let result = ProductPolicyModelSet::validate(&newdata);
     assert_eq!(result.is_ok(), true)
 }
@@ -30,39 +24,21 @@ fn validate_newdata_ok() {
 #[test]
 fn validate_newdata_error_limit() {
     let newdata = vec![
-        ProductPolicyDto {
-            product_type: ProductType::Item,
-            product_id: 170,
-            min_num_rsv: Some(5),
-            warranty_hours: 500,
-            auto_cancel_secs: 360,
-            max_num_rsv: None,
-        },
-        ProductPolicyDto {
-            product_type: ProductType::Package,
-            product_id: 127,
-            min_num_rsv: None,
-            warranty_hours: 500,
-            auto_cancel_secs: 360,
-            max_num_rsv: None,
-        },
-        ProductPolicyDto {
-            product_type: ProductType::Package,
-            product_id: 123,
-            min_num_rsv: None,
-            warranty_hours: 0x7fff_ffffu32,
-            auto_cancel_secs: 3600,
-            max_num_rsv: None,
-        },
-        ProductPolicyDto {
-            product_type: ProductType::Item,
-            product_id: 124,
-            min_num_rsv: Some(12),
-            warranty_hours: 478,
-            auto_cancel_secs: 0x7fff_ffffu32,
-            max_num_rsv: Some(2),
-        },
-    ];
+        (170u64, Some(5u16), 500u32, 360u32, None),
+        (127, None, 500, 360, None),
+        (123, None, 0x7fff_ffffu32, 3600, None),
+        (124, Some(12), 478, 0x7fff_ffffu32, Some(2u16)),
+    ]
+    .into_iter()
+    .map(|d| ProductPolicyDto {
+        product_id: d.0,
+        min_num_rsv: d.1,
+        warranty_hours: d.2,
+        auto_cancel_secs: d.3,
+        max_num_rsv: d.4,
+    })
+    .collect::<Vec<_>>();
+
     let result = ProductPolicyModelSet::validate(&newdata);
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();
@@ -89,47 +65,23 @@ fn validate_newdata_error_limit() {
 #[test]
 fn update_instance_ok() {
     let init_data = [
-        ProductPolicyModel {
-            product_type: ProductType::Item,
-            product_id: 20903,
-            auto_cancel_secs: 731,
-            warranty_hours: 271,
-            is_create: false,
-            max_num_rsv: 0,
-            min_num_rsv: 0,
-        },
-        ProductPolicyModel {
-            product_type: ProductType::Package,
-            product_id: 144,
-            auto_cancel_secs: 380,
-            warranty_hours: 30098,
-            is_create: false,
-            max_num_rsv: 8,
-            min_num_rsv: 0,
-        },
-        // following 2 items only for testing
-        ProductPolicyModel {
-            product_type: ProductType::Package,
-            product_id: 144,
-            auto_cancel_secs: 3597,
-            warranty_hours: 478,
-            is_create: false,
-            max_num_rsv: 0,
-            min_num_rsv: 0,
-        },
-        ProductPolicyModel {
-            product_type: ProductType::Item,
-            product_id: 123,
-            auto_cancel_secs: 3600,
-            warranty_hours: 480,
-            is_create: true,
-            max_num_rsv: 26,
-            min_num_rsv: 15,
-        },
-    ];
+        (20903u64, 731u32, 271u32, false, 0u16, 0u16),
+        (144, 380, 30098, false, 8, 0),
+        (144, 3597, 478, false, 0, 0),
+        (123, 3600, 480, true, 26, 15),
+    ]
+    .into_iter()
+    .map(|d| ProductPolicyModel {
+        product_id: d.0,
+        auto_cancel_secs: d.1,
+        warranty_hours: d.2,
+        is_create: d.3,
+        max_num_rsv: d.4,
+        min_num_rsv: d.5,
+    })
+    .collect::<Vec<_>>();
     let newdata = vec![
         ProductPolicyDto {
-            product_type: ProductType::Item,
             product_id: 123,
             warranty_hours: 480,
             auto_cancel_secs: 3600,
@@ -137,7 +89,6 @@ fn update_instance_ok() {
             min_num_rsv: Some(15),
         },
         ProductPolicyDto {
-            product_type: ProductType::Package,
             product_id: 144,
             warranty_hours: 478,
             auto_cancel_secs: 3597,

@@ -23,7 +23,6 @@ impl StockLevelUseCase {
             .iter()
             .map(|d| ProductStockIdentity {
                 store_id: d.store_id,
-                product_type: d.product_type.clone(),
                 product_id: d.product_id,
                 expiry: d.expiry.into(),
             })

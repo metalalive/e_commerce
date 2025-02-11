@@ -3,121 +3,63 @@ use std::vec;
 use std::vec::Vec;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::rpc::dto::ProductPriceEditDto;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 
+#[rustfmt::skip]
 fn setup_mocked_saved_items() -> Vec<ProductPriceModel> {
-    vec![
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Item,
-            product_id: 2003,
-            price: 28379,
-            start_after: DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-10T09:01:31+02:00")
-                .unwrap()
-                .into(),
-        },
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Package,
-            product_id: 2004,
-            price: 3008,
-            start_after: DateTime::parse_from_rfc3339("2022-07-30T11:16:55-01:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-10T09:01:31+03:00")
-                .unwrap()
-                .into(),
-        },
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Item,
-            product_id: 2005,
-            price: 1389,
-            start_after: DateTime::parse_from_rfc3339("2023-07-29T10:17:54+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-06T09:01:32+07:00")
-                .unwrap()
-                .into(),
-        },
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Package,
-            product_id: 2006,
-            price: 183,
-            start_after: DateTime::parse_from_rfc3339("2023-06-29T11:18:54+04:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00")
-                .unwrap()
-                .into(),
-        },
+    [
+        (2003u64, 28379u32, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00"),
+        (2004, 3008, "2022-07-30T11:16:55-01:00", "2023-10-10T09:01:31+03:00"),
+        (2005, 1389, "2023-07-29T10:17:54+05:00", "2023-10-06T09:01:32+07:00"),
+        (2006, 183, "2023-06-29T11:18:54+04:00", "2023-10-05T08:14:05+09:00"),
     ]
+    .into_iter()
+    .map(|d| ProductPriceModel {
+        is_create: false,
+        product_id: d.0,
+        price: d.1,
+        start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
+        end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
+    })
+    .collect::<Vec<_>>()
 }
 
+#[rustfmt::skip]
 fn setup_expect_updated_items() -> Vec<ProductPriceModel> {
     let mut out = setup_mocked_saved_items();
     out[1] = ProductPriceModel {
-        is_create: false,
-        price: 389,
-        product_type: ProductType::Item,
-        product_id: 2005,
+        is_create: false, price: 389, product_id: 2005,
         start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+06:00")
-            .unwrap()
-            .into(),
+            .unwrap().into(),
         end_before: DateTime::parse_from_rfc3339("2023-09-12T21:23:00+05:00")
-            .unwrap()
-            .into(),
+            .unwrap().into(),
     };
     out[2] = ProductPriceModel {
-        is_create: false,
-        price: 51,
-        product_type: ProductType::Package,
-        product_id: 2004,
+        is_create: false, price: 51, product_id: 2004,
         start_after: DateTime::parse_from_rfc3339("2022-11-24T09:25:39+05:00")
-            .unwrap()
-            .into(),
+            .unwrap().into(),
         end_before: DateTime::parse_from_rfc3339("2023-09-12T21:13:01+11:00")
-            .unwrap()
-            .into(),
+            .unwrap().into(),
     };
-    out.insert(
-        0,
-        ProductPriceModel {
+    [
+        (2388u32, 2018u64, "2022-11-21T23:09:05+09:00", "2023-10-13T02:54:00-09:00"),
+        (20550, 2019, "2022-11-29T09:13:39+06:00", "2023-08-30T21:19:00+10:00"),
+    ]
+    .into_iter()
+    .map(|d| {
+        let m = ProductPriceModel {
             is_create: true,
-            price: 2388,
-            product_type: ProductType::Package,
-            product_id: 2018,
-            start_after: DateTime::parse_from_rfc3339("2022-11-21T23:09:05+09:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-13T02:54:00-09:00")
-                .unwrap()
-                .into(),
-        },
-    );
-    out.insert(
-        0,
-        ProductPriceModel {
-            is_create: true,
-            price: 20550,
-            product_type: ProductType::Item,
-            product_id: 2019,
-            start_after: DateTime::parse_from_rfc3339("2022-11-29T09:13:39+06:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-08-30T21:19:00+10:00")
-                .unwrap()
-                .into(),
-        },
-    );
+            price: d.0,
+            product_id: d.1,
+            start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
+            end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
+        };
+        out.insert(0, m);
+    })
+    .count();
     out
 }
 
@@ -132,7 +74,6 @@ fn update_instance_ok() {
     let data_update = vec![
         ProductPriceEditDto {
             price: 389,
-            product_type: ProductType::Item,
             product_id: 2005,
             start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+06:00")
                 .unwrap()
@@ -143,7 +84,6 @@ fn update_instance_ok() {
         },
         ProductPriceEditDto {
             price: 51,
-            product_type: ProductType::Package,
             product_id: 2004,
             start_after: DateTime::parse_from_rfc3339("2022-11-24T09:25:39+05:00")
                 .unwrap()
@@ -156,7 +96,6 @@ fn update_instance_ok() {
     let data_create = vec![
         ProductPriceEditDto {
             price: 2388,
-            product_type: ProductType::Package,
             product_id: 2018,
             start_after: DateTime::parse_from_rfc3339("2022-11-21T23:09:05+09:00")
                 .unwrap()
@@ -167,7 +106,6 @@ fn update_instance_ok() {
         },
         ProductPriceEditDto {
             price: 20550,
-            product_type: ProductType::Item,
             product_id: 2019,
             start_after: DateTime::parse_from_rfc3339("2022-11-29T09:13:39+06:00")
                 .unwrap()
@@ -211,7 +149,6 @@ fn update_instance_error() {
     let data_update = vec![
         ProductPriceEditDto {
             price: 51,
-            product_type: ProductType::Package,
             product_id: 2004,
             start_after: DateTime::parse_from_rfc3339("2022-11-24T09:25:39+05:00")
                 .unwrap()
@@ -222,7 +159,6 @@ fn update_instance_error() {
         },
         ProductPriceEditDto {
             price: 2388,
-            product_type: ProductType::Package,
             product_id: 2018,
             start_after: DateTime::parse_from_rfc3339("2022-11-21T23:09:05+09:00")
                 .unwrap()
