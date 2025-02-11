@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="tag_version_0.1.0" author="Haam">
+        <tagDatabase tag="0.1.0" />
+    </changeSet>
+    <changeSet id="discard_prodtype__oline_detail" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` DROP PRIMARY KEY;
+            ALTER TABLE `order_line_detail` DROP COLUMN `product_type`;
+            ALTER TABLE `order_line_detail` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` DROP PRIMARY KEY;
+            ALTER TABLE `order_line_detail` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `order_line_detail` ADD PRIMARY KEY (`o_id`,`store_id`,`product_type`,`product_id`);
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__oline_refund_req" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_refund_req` DROP PRIMARY KEY;
+            ALTER TABLE `oline_refund_req` DROP COLUMN `product_type`;
+            ALTER TABLE `oline_refund_req` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`,`create_time`);
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_refund_req` DROP PRIMARY KEY;
+            ALTER TABLE `oline_refund_req` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `oline_refund_req` ADD PRIMARY KEY (`o_id`,`store_id`,`product_type`,`product_id`,`create_time`);
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__charge_line" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` DROP FOREIGN KEY `c_fk_charge_buyer_toplvl_id_0`;
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` DROP COLUMN `product_type`;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`);
+            ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` DROP FOREIGN KEY `c_fk_charge_buyer_toplvl_id_0`;
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`);
+            ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.1" author="Haam">
+        <tagDatabase tag="0.1.1" />
+    </changeSet>
+</databaseChangeLog>

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
 use payment::api::web::dto::ReportTimeRangeDto;
@@ -37,9 +36,9 @@ async fn ut_add_charges(
             map
         };
         let d_lines: [UTestChargeLineRawData; 3] = [
-            (merchant_id, ProductType::Package, 1801, (450, 1), (450, 1), 1, (0, 0), (0, 0), 0, 0),
-            (merchant_id, ProductType::Package, 885, (291, 1), (873, 1), 3, (0, 0), (0, 0), 0, 0),
-            (merchant_id, ProductType::Item, 1707, (350, 1), (700, 1), 2, (0, 0), (0, 0), 0, 0),
+            (merchant_id, 1801, (450, 1), (450, 1), 1, (0, 0), (0, 0), 0, 0),
+            (merchant_id, 885,  (291, 1), (873, 1), 3, (0, 0), (0, 0), 0, 0),
+            (merchant_id, 1707, (350, 1), (700, 1), 2, (0, 0), (0, 0), 0, 0),
         ];
         let mock_cline_set = ut_setup_buyer_charge(
             buyer_usr_id, ctime, d.0.to_string(), mock_state,
@@ -92,16 +91,16 @@ async fn merchant_fetch_charges_ok() {
             map
         };
         let d_lines = [
-            (ProductType::Package, 1801u64, "45.0", "340.0", 8u32),
-            (ProductType::Package, 885, "29.0", "261.0", 9),
-            (ProductType::Item, 1707, "35.0", "420.0", 12),
+            (1801u64, "45.0", "340.0", 8u32),
+            (885, "29.0", "261.0", 9),
+            (1707, "35.0", "420.0", 12),
         ]
         .into_iter()
         .map(|dl| {
-            let amt_unit = Decimal::from_str(dl.2).unwrap();
-            let amt_total = Decimal::from_str(dl.3).unwrap();
+            let amt_unit = Decimal::from_str(dl.1).unwrap();
+            let amt_total = Decimal::from_str(dl.2).unwrap();
             let t_rsv = Duration::hours(2);
-            (mock_store_id, dl.0, dl.1, amt_unit, amt_total, dl.4, t_rsv)
+            (mock_store_id, dl.0, amt_unit, amt_total, dl.3, t_rsv)
         })
         .collect::<Vec<_>>();
         let mock_olines = ut_setup_orderline_set(mock_buyer_usr_id, d.0, 0, ctime, sc, d_lines);
@@ -158,10 +157,10 @@ async fn merchant_fetch_charges_ok() {
                 .into_iter()
                 .map(|cl| {
                     assert_eq!(cl.pid.store_id, mock_store_id);
-                    let expect = match (&cl.pid.product_type, cl.pid.product_id) {
-                        (ProductType::Package, 1801) => ("45.0", "45.0", 1u32),
-                        (ProductType::Package, 885) => ("29.1", "87.3", 3),
-                        (ProductType::Item, 1707) => ("35.0", "70.0", 2),
+                    let expect = match cl.pid.product_id {
+                        1801 => ("45.0", "45.0", 1u32),
+                        885 => ("29.1", "87.3", 3),
+                        1707 => ("35.0", "70.0", 2),
                         _others => ("0", "0", 0),
                     };
                     let expect_amt_unit = Decimal::from_str(expect.0).unwrap();

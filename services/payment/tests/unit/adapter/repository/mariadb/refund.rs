@@ -7,7 +7,6 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 use rust_decimal::Decimal;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::processor::AbstractPaymentProcessor;
 use payment::adapter::repository::{AppRefundRslvReqCbReturn, AppRepoErrorDetail};
@@ -32,9 +31,9 @@ fn _ut_setup_buyer_charge(
     let state = BuyerPayInState::OrderAppSynced(create_time);
     let mthd_3pty = ut_default_charge_method_stripe(&create_time);
     let data_lines = vec![
-        (merchant_id, ProductType::Package, 25, (219,1), (21900,1), 100, (219,1), (0,0), 0, 0),
-        (merchant_id, ProductType::Item, 902, (3040,2), (304000,2), 100, (304,1), (0,0), 0, 0),
-        (merchant_id, ProductType::Item, 29, (200, 0), (20000, 0), 100, (200,0), (0,0), 0, 0),
+        (merchant_id, 25, (219,1), (21900,1), 100, (219,1), (0,0), 0, 0),
+        (merchant_id, 902, (3040,2), (304000,2), 100, (304,1), (0,0), 0, 0),
+        (merchant_id, 29, (200, 0), (20000, 0), 100, (200,0), (0,0), 0, 0),
     ];
     let currency_map = ut_setup_currency_snapshot(vec![buyer_usr_id, merchant_id]);
     ut_setup_buyer_charge(
@@ -48,16 +47,16 @@ fn _ut_setup_buyer_charge(
 fn ut_setup_refund_model(
     oid: &str,
     time_base: DateTime<Utc>,
-    d_lines: Vec<(u32, ProductType, u64, (i64,u32), (i64,u32), u32, i64)>,
+    d_lines: Vec<(u32, u64, (i64,u32), (i64,u32), u32, i64)>,
 ) -> OrderRefundModel {
     let lines = d_lines.into_iter().map(|d| {
-        let pid = BaseProductIdentity { store_id: d.0, product_type: d.1, product_id: d.2 };
+        let pid = BaseProductIdentity { store_id: d.0, product_id: d.1 };
         let amt_req = PayLineAmountModel {
-            unit: Decimal::new(d.3.0, d.3.1),
-            total: Decimal::new(d.4.0, d.4.1),
-            qty: d.5
+            unit: Decimal::new(d.2.0, d.2.1),
+            total: Decimal::new(d.3.0, d.3.1),
+            qty: d.4
         };
-        let ctime = time_base - Duration::minutes(d.6);
+        let ctime = time_base - Duration::minutes(d.5);
         let mut amt_refunded = PayLineAmountModel::default();
         amt_refunded.unit = amt_req.unit;
         let reject = RefundLineQtyRejectModel::default();
@@ -81,16 +80,16 @@ fn ut_rslv_rfnd_cb_modify_success<'a>(
     let arg = (merchant_id, &charge_m, &cmplt_req);
     let rslv_m = RefundReqResolutionModel::try_from(arg).unwrap();
     [
-        (25, ProductType::Package, 15, 219, 1, 0, 3),
-        (25, ProductType::Package, 85, 438, 2, 0, 0),
-        (902, ProductType::Item, 25, 608, 2, 1, 1),
-        (902, ProductType::Item, 11, 0, 0, 1, 0),
-        (29,  ProductType::Item, 22, 6000, 3, 0, 0),
+        (25, 15, 219, 1, 0, 3),
+        (25, 85, 438, 2, 0, 0),
+        (902, 25, 608, 2, 1, 1),
+        (902, 11, 0, 0, 1, 0),
+        (29,  22, 6000, 3, 0, 0),
     ].into_iter()
         .map(|d| {
-            let t_req = time_base  - Duration::minutes(d.2);
+            let t_req = time_base  - Duration::minutes(d.1);
             let rline_m = refund_m
-                .get_line(merchant_id, d.1.clone(), d.0, t_req).unwrap();
+                .get_line(merchant_id, d.0, t_req).unwrap();
             let amt_aprv = rline_m.approved();
             assert_eq!(amt_aprv.total, Decimal::ZERO);
             assert_eq!(amt_aprv.qty, 0);
@@ -101,18 +100,18 @@ fn ut_rslv_rfnd_cb_modify_success<'a>(
             assert_eq!(n_rej, &0u32);
 
             let (qty_rej, rslv_amt) = rslv_m
-                .get_status(merchant_id, d.1, d.0, t_req).unwrap();
+                .get_status(merchant_id, d.0, t_req).unwrap();
             let n_rej = qty_rej.inner_map().get(&RefundRejectReasonDto::Damaged).unwrap();
-            assert_eq!(n_rej, &d.5);
+            assert_eq!(n_rej, &d.4);
             let n_rej = qty_rej.inner_map().get(&RefundRejectReasonDto::Fraudulent).unwrap();
-            assert_eq!(n_rej, &d.6);
+            assert_eq!(n_rej, &d.5);
             let rslv_amt_accum = rslv_amt.accumulated();
             let rslv_amt_currround = rslv_amt.curr_round();
             assert_eq!(rslv_amt_accum.1, 0); // rejected so far
             assert_eq!(rslv_amt_accum.0.qty, 0); // approved qty so far
             assert_eq!(rslv_amt_accum.0.total, Decimal::ZERO);
-            assert_eq!(rslv_amt_currround.total, Decimal::new(d.3, 1));
-            assert_eq!(rslv_amt_currround.qty, d.4);
+            assert_eq!(rslv_amt_currround.total, Decimal::new(d.2, 1));
+            assert_eq!(rslv_amt_currround.qty, d.3);
         }).count();
     let num_updated = refund_m.update(&rslv_m);
     assert_eq!(num_updated, 5);
@@ -133,25 +132,25 @@ fn ut_rslv_rfnd_cb_verify_modified<'a>(
     let merchant_id = charge_ms.get(0).unwrap().lines[0].pid.store_id;
     let time_base = DateTime::parse_from_rfc3339("2022-08-31T15:59:38+08:00").unwrap().to_utc();
     [
-        (25, ProductType::Package, 15, 219, 1, 0, 3),
-        (25, ProductType::Package, 49,   0, 0, 0, 0),
-        (25, ProductType::Package, 85, 438, 2, 0, 0),
-        (902, ProductType::Item, 25, 608, 2, 1, 1),
-        (902, ProductType::Item, 11, 0, 0, 1, 0),
-        (29,  ProductType::Item, 22, 6000, 3, 0, 0),
+        (25, 15, 219, 1, 0, 3),
+        (25, 49,   0, 0, 0, 0),
+        (25, 85, 438, 2, 0, 0),
+        (902, 25, 608, 2, 1, 1),
+        (902, 11, 0, 0, 1, 0),
+        (29,  22, 6000, 3, 0, 0),
     ].into_iter()
         .map(|d| {
-            let t_req = time_base  - Duration::minutes(d.2);
+            let t_req = time_base  - Duration::minutes(d.1);
             let rline_m = refund_m
-                .get_line(merchant_id, d.1, d.0, t_req).unwrap();
+                .get_line(merchant_id, d.0, t_req).unwrap();
             let amt_aprv = rline_m.approved();
-            assert_eq!(amt_aprv.total, Decimal::new(d.3, 1));
-            assert_eq!(amt_aprv.qty, d.4);
+            assert_eq!(amt_aprv.total, Decimal::new(d.2, 1));
+            assert_eq!(amt_aprv.qty, d.3);
             let qty_rej = rline_m.rejected().inner_map();
             let n_rej = qty_rej.get(&RefundRejectReasonDto::Damaged).unwrap();
-            assert_eq!(n_rej, &d.5);
+            assert_eq!(n_rej, &d.4);
             let n_rej = qty_rej.get(&RefundRejectReasonDto::Fraudulent).unwrap();
-            assert_eq!(n_rej, &d.6);
+            assert_eq!(n_rej, &d.5);
         }).count();
     let fut = async move {
         Ok(vec![])
@@ -169,7 +168,6 @@ fn ut_rslv_rfnd_cb_user_error<'a>(
         let t = Local::now().to_utc();
         let pid = BaseProductIdentity {
             store_id: 1068,
-            product_type: ProductType::Item,
             product_id: 168,
         };
         let me = vec![RefundModelError::MissingReqLine(pid, t)];
@@ -217,16 +215,16 @@ async fn save_refund_req_ok() {
     let mock_rfd_ms = vec![
         ut_setup_refund_model(
             "0238b874", time_now, vec![
-                (1063, ProductType::Package, 25, (219, 1), (1971, 1), 9, 15),
-                (1063, ProductType::Package, 25, (219, 1), (438, 1), 2, 49),
-                (1063, ProductType::Item, 2753, (1005, 2), (7035, 2), 7, 15),
+                (1063, 25, (219, 1), (1971, 1), 9, 15),
+                (1063, 25, (219, 1), (438, 1), 2, 49),
+                (1063, 2753, (1005, 2), (7035, 2), 7, 15),
             ],
         ),
         ut_setup_refund_model(
             "7e80118273b7", time_now, vec![
-                (1027, ProductType::Package, 902, (3040, 2), (24320, 2), 8, 20),
-                (1063, ProductType::Item, 409, (2016, 2), (8064, 2), 4, 53),
-                (1064, ProductType::Package, 188, (2009, 1), (4018, 1), 2, 36),
+                (1027, 902, (3040, 2), (24320, 2), 8, 20),
+                (1063, 409, (2016, 2), (8064, 2), 4, 53),
+                (1064, 188, (2009, 1), (4018, 1), 2, 36),
             ],
         ),
     ];
@@ -245,16 +243,16 @@ async fn update_resolution_ok() {
     let mock_rfd_ms = vec![
         ut_setup_refund_model(
             mock_oid, time_base, vec![
-                (mock_merchant_id, ProductType::Package, 25, (219, 1), (1971, 1), 9, 15),
-                (mock_merchant_id, ProductType::Package, 25, (219, 1), (438, 1), 2, 49),
-                (mock_merchant_id, ProductType::Package, 25, (219, 1), (2190, 1), 10, 85),
-                (1067, ProductType::Item, 2753, (1005, 2), (7035, 2), 7, 11),
-                (1067, ProductType::Item, 2753, (1005, 2), (7035, 2), 7, 24),
-                (1067, ProductType::Item, 2753, (1005, 2), (5025, 2), 5, 34),
-                (mock_merchant_id, ProductType::Item, 902, (3040, 2), (24320, 2), 8, 25),
-                (mock_merchant_id, ProductType::Item, 902, (3040, 2), (6080, 2), 2, 11),
-                (1067, ProductType::Package, 2753, (2041, 1), (20410, 1), 10, 66),
-                (mock_merchant_id, ProductType::Item, 29, (200, 0), (1200, 0), 6, 22),
+                (mock_merchant_id, 25, (219, 1), (1971, 1), 9, 15),
+                (mock_merchant_id, 25, (219, 1), (438, 1), 2, 49),
+                (mock_merchant_id, 25, (219, 1), (2190, 1), 10, 85),
+                (1067, 2753, (1005, 2), (7035, 2), 7, 11),
+                (1067, 2753, (1005, 2), (7035, 2), 7, 24),
+                (1067, 2753, (1005, 2), (5025, 2), 5, 34),
+                (mock_merchant_id, 902, (3040, 2), (24320, 2), 8, 25),
+                (mock_merchant_id, 902, (3040, 2), (6080, 2), 2, 11),
+                (1067, 12753, (2041, 1), (20410, 1), 10, 66),
+                (mock_merchant_id, 29, (200, 0), (1200, 0), 6, 22),
             ],
         ),
     ];
@@ -267,11 +265,11 @@ async fn update_resolution_ok() {
 
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base, vec![
-            (25, ProductType::Package, 15, 219, 1, 0, 3),
-            (25, ProductType::Package, 85, 438, 2, 0, 0),
-            (902, ProductType::Item, 25, 608, 2, 1, 1),
-            (902, ProductType::Item, 11, 0, 0, 1, 0),
-            (29,  ProductType::Item, 22, 6000, 3, 0, 0),
+            (25, 15, 219, 1, 0, 3),
+            (25, 85, 438, 2, 0, 0),
+            (902, 25, 608, 2, 1, 1),
+            (902, 11, 0, 0, 1, 0),
+            (29,  22, 6000, 3, 0, 0),
         ]
     );
     let result = repo.resolve_request(
@@ -285,12 +283,12 @@ async fn update_resolution_ok() {
 
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base, vec![
-            (25, ProductType::Package, 15, 0, 0, 0, 0),
-            (25, ProductType::Package, 49, 0, 0, 0, 0),
-            (25, ProductType::Package, 85, 0, 0, 0, 0),
-            (902, ProductType::Item, 25, 0, 0, 0, 0),
-            (902, ProductType::Item, 11, 0, 0, 0, 0),
-            (29,  ProductType::Item, 22, 0, 0, 0, 0),
+            (25, 15, 0, 0, 0, 0),
+            (25, 49, 0, 0, 0, 0),
+            (25, 85, 0, 0, 0, 0),
+            (902, 25, 0, 0, 0, 0),
+            (902, 11, 0, 0, 0, 0),
+            (29,  22, 0, 0, 0, 0),
         ]
     );
     let result = repo.resolve_request(
@@ -312,7 +310,7 @@ async fn update_resolution_err_usr_cb() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_refund_repo(shr_state.clone()).await;
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
-        time_base, vec![(168, ProductType::Item, 5566, 219, 2, 4, 0)]
+        time_base, vec![(168, 5566, 219, 2, 4, 0)]
     );
     let result = repo.resolve_request(
         mock_merchant_id,
@@ -337,7 +335,7 @@ async fn update_resolution_err_corrupted_charge() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_refund_repo(shr_state.clone()).await;
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
-        time_base, vec![(168, ProductType::Item, 5566, 2190, 10, 0, 0)]
+        time_base, vec![(168, 5566, 2190, 10, 0, 0)]
     );
     let mock_charge_ms = vec![
         _ut_setup_buyer_charge(mock_oids[0], time_base, mock_merchant_id),

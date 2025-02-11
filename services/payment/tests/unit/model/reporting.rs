@@ -4,7 +4,6 @@ use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use payment::api::web::dto::{ReportChargeRespDto, ReportTimeRangeDto};
 use payment::model::{
     BuyerPayInState, ChargeBuyerModel, MerchantReportChargeModel, OrderCurrencySnapshot,
@@ -48,7 +47,7 @@ fn ut_setup_buyer_charge_inner(
     };
     let charge_dlines = d_lines
         .into_iter()
-        .map(|d| (merchant_id, ProductType::Item, d.0, d.1, d.2, d.3,
+        .map(|d| (merchant_id, d.0, d.1, d.2, d.3,
                   (0i64, 0u32), (0i64, 0u32), 0u32, 0u32))
         .collect::< Vec<_>>() ;
     ut_setup_buyer_charge(

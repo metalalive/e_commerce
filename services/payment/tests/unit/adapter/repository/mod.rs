@@ -6,7 +6,6 @@ use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 use ecommerce_common::model::BaseProductIdentity;
 use payment::model::{
@@ -20,14 +19,14 @@ fn ut_setup_orderline_set(
     num_charges: u32,
     create_time: DateTime<Utc>,
     currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
-    d_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32, Duration)>,
+    d_lines: Vec<(u32, u64, Decimal, Decimal, u32, Duration)>,
 ) -> OrderLineModelSet {
     let lines = d_lines
         .into_iter()
         .map(|d| {
-            let (store_id, product_type, product_id, charge_rsv_unit,
-                 charge_rsv_total, charge_rsv_qty, rsv_time_delta) = d;
-            let pid = BaseProductIdentity {store_id, product_type, product_id};
+            let (store_id, product_id, charge_rsv_unit, charge_rsv_total,
+                 charge_rsv_qty, rsv_time_delta) = d;
+            let pid = BaseProductIdentity {store_id, product_id};
             let reserved_until = create_time + rsv_time_delta;
             let rsv_total = PayLineAmountModel {
                 unit: charge_rsv_unit,

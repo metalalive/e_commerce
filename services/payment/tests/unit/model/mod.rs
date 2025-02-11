@@ -10,7 +10,6 @@ use rust_decimal::Decimal;
 use std::collections::HashMap;
 
 use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::api::web::dto::ChargeStatusDto;
 use payment::model::{
@@ -50,8 +49,7 @@ pub(crate) fn ut_default_charge_method_stripe(t0: &DateTime<Utc>) -> Charge3part
 
 #[rustfmt::skip]
 pub(crate) type UTestChargeLineRawData = (
-    u32, ProductType, u64, (i64, u32), (i64, u32), u32,
-    (i64, u32), (i64, u32), u32, u32
+    u32, u64, (i64, u32), (i64, u32), u32, (i64, u32), (i64, u32), u32, u32
 );
 
 #[rustfmt::skip]
@@ -79,19 +77,19 @@ pub(crate) fn ut_setup_buyer_charge_lines(
         .into_iter()
         .map(|dl| {
             let pid = BaseProductIdentity {
-                store_id: dl.0, product_type: dl.1, product_id: dl.2,
+                store_id: dl.0,  product_id: dl.1,
             };
             let amount_orig = PayLineAmountModel {
-                unit: Decimal::new(dl.3.0, dl.3.1),
-                total: Decimal::new(dl.4.0, dl.4.1),
-                qty: dl.5,
+                unit: Decimal::new(dl.2.0, dl.2.1),
+                total: Decimal::new(dl.3.0, dl.3.1),
+                qty: dl.4,
             };
             let amount_refunded = PayLineAmountModel {
-                unit: Decimal::new(dl.6.0, dl.6.1),
-                total: Decimal::new(dl.7.0, dl.7.1),
-                qty: dl.8,
+                unit: Decimal::new(dl.5.0, dl.5.1),
+                total: Decimal::new(dl.6.0, dl.6.1),
+                qty: dl.7,
             };
-            let num_rejected = dl.9;
+            let num_rejected = dl.8;
             let arg = (pid, amount_orig, amount_refunded, num_rejected);
             ChargeLineBuyerModel::from(arg)
         })

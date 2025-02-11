@@ -25,7 +25,7 @@ use crate::model::{
 
 #[rustfmt::skip]
 type ChargeLineRowType = (
-    u32, MySqlVal, String, u64, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
+    u32, MySqlVal, u64, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
 );
 type ChargeMetaRowType = (
     u32,              // buyer-usr-id
@@ -53,7 +53,7 @@ struct FetchCurrencySnapshotArgs(String, Params);
 impl<'a> From<(u32, &'a ReportTimeRangeDto)> for FetchChargeLineArgs {
     fn from(value: (u32, &'a ReportTimeRangeDto)) -> Self {
         let (store_id, t_range) = value;
-        let stmt = "SELECT `buyer_id`,`create_time`,`product_type`,`product_id`,`amt_orig_unit`,\
+        let stmt = "SELECT `buyer_id`,`create_time`,`product_id`,`amt_orig_unit`,\
                     `amt_orig_total`,`qty_orig`,`amt_rfnd_unit`,`amt_rfnd_total`,`qty_rfnd`,\
                     `qty_rej` FROM `charge_line` WHERE `store_id`=?  AND `create_time` >= ? \
                     AND `create_time` <= ?"
@@ -163,12 +163,12 @@ impl MariadbReportingRepo {
         let kv_pairs = rows.into_iter()
             .filter_map(|row| {
                 let (
-                    buyer_usr_id, ctime_raw, product_type_serial, product_id,
+                    buyer_usr_id, ctime_raw, product_id,
                     amt_orig_unit, amt_orig_total, qty_orig,
                     amt_rfnd_unit, amt_rfnd_total, qty_rfnd, num_rejected,
                 ) = row;
                 let d = (
-                    store_id, product_type_serial, product_id,
+                    store_id, product_id,
                     amt_orig_unit, amt_orig_total, qty_orig,
                     amt_rfnd_unit, amt_rfnd_total, qty_rfnd, num_rejected,
                 );

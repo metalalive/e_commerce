@@ -6,11 +6,7 @@ use serde::de::{Error as DeserializeError, Expected, Unexpected};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsnVal;
 
-use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto, GenericRangeErrorDto,
-    PayAmountDto,
-};
-use ecommerce_common::constant::ProductType;
+use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto, PayAmountDto};
 
 #[derive(Deserialize)]
 pub enum StripeCheckoutUImodeDto {
@@ -35,8 +31,6 @@ pub enum PaymentMethodReqDto {
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with = "jsn_validate_product_type")]
-    pub product_type: ProductType,
     pub quantity: u32,
     pub amount: PayAmountDto,
     // TODO, tax and discount
@@ -97,8 +91,6 @@ pub enum PaymentMethodErrorReason {
 pub struct ChargeOlineErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(serialize_with = "jsn_serialize_product_type")]
-    pub product_type: ProductType,
     pub quantity: Option<GenericRangeErrorDto>,
     // to indicate mismatch,  this backend app returns the estimated amount
     pub amount: Option<PayAmountDto>,
@@ -217,8 +209,6 @@ pub struct RefundCompletionReqDto {
 
 #[derive(Deserialize)]
 pub struct RefundCompletionOlineReqDto {
-    #[serde(deserialize_with = "jsn_validate_product_type")]
-    pub product_type: ProductType,
     pub product_id: u64,
     // the time when customer issued the refund request,
     // not when this completion DTO is sent to server
@@ -273,8 +263,6 @@ pub struct RefundCompletionRespDto {
 
 #[derive(Serialize)]
 pub struct RefundCompletionOlineRespDto {
-    #[serde(serialize_with = "jsn_serialize_product_type")]
-    pub product_type: ProductType,
     pub product_id: u64,
     pub time_issued: DateTime<Utc>,
     pub reject: RefundLineRejectDto,
@@ -330,8 +318,6 @@ impl ReportTimeRangeDto {
 
 #[derive(Serialize)]
 pub struct ReportChargeLineRespDto {
-    #[serde(serialize_with = "jsn_serialize_product_type")]
-    pub product_type: ProductType,
     pub product_id: u64,
     pub currency: CurrencyDto,
     pub amount: String,

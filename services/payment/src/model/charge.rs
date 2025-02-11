@@ -236,8 +236,8 @@ impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
         let ChargeLineBuyerModel {
             pid, amount_orig, amount_refunded: _, num_rejected: _
         } = value;
-        let BaseProductIdentity { store_id, product_type, product_id } = pid;
-        Self { seller_id: store_id, product_id, product_type, qty: amount_orig.qty }
+        let BaseProductIdentity { store_id, product_id } = pid;
+        Self { seller_id: store_id, product_id, qty: amount_orig.qty }
     }
 }
 
@@ -549,13 +549,11 @@ impl
     ) -> Result<Self, Self::Error> {
         let (valid_olines, rl, currency_label, now) = value;
         let ChargeAmountOlineDto {
-            seller_id, product_id, product_type,
-            quantity: qty_req, amount: amount_dto,
+            seller_id, product_id, quantity: qty_req, amount: amount_dto,
         } = rl;
         let mut e = ChargeOlineErrorDto {
             seller_id,
             product_id,
-            product_type: product_type.clone(),
             quantity: None,
             amount: None,
             expired: None,
@@ -575,9 +573,7 @@ impl
                 return Err(e);
             }, // TODO, improve error detail
         };
-        let pid_req = BaseProductIdentity {
-            store_id: seller_id,  product_id, product_type
-        };
+        let pid_req = BaseProductIdentity { store_id: seller_id,  product_id };
         let result = valid_olines.iter().find(|v| v.pid == pid_req);
         if let Some(v) = result {
             let qty_avail = v.rsv_total.qty - v.paid_total.qty;
