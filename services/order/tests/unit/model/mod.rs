@@ -3,7 +3,7 @@ mod product_policy;
 mod product_price;
 mod stock_level;
 
-use order::model::{ProductPolicyModel, ProductPriceModel, ProductStockModel, StockLevelModelSet};
+use order::model::{ProductPolicyModel, ProductStockModel, StockLevelModelSet};
 
 pub(crate) fn ut_clone_productpolicy(src: &ProductPolicyModel) -> ProductPolicyModel {
     ProductPolicyModel {
@@ -13,16 +13,6 @@ pub(crate) fn ut_clone_productpolicy(src: &ProductPolicyModel) -> ProductPolicyM
         is_create: src.is_create,
         max_num_rsv: src.max_num_rsv,
         min_num_rsv: src.min_num_rsv,
-    }
-}
-
-pub(crate) fn ut_clone_productprice(src: &ProductPriceModel) -> ProductPriceModel {
-    ProductPriceModel {
-        price: src.price,
-        product_id: src.product_id,
-        is_create: src.is_create,
-        start_after: src.start_after.clone(),
-        end_before: src.end_before.clone(),
     }
 }
 

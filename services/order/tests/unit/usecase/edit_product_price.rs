@@ -54,7 +54,7 @@ impl AbsProductPriceRepo for MockRepository {
             Ok(m) => Ok(ProductPriceModelSet {
                 store_id: m.store_id,
                 currency: m.currency.clone(),
-                items: self._clone_fetched_items(&m.items),
+                items: m.items.clone(),
             }),
             Err(e) => Err(e.clone()),
         }
@@ -102,17 +102,6 @@ impl MockRepository {
             _callargs_fetch_expect: None,
             _callargs_fetch_actual,
         }
-    }
-    fn _clone_fetched_items(&self, src: &Vec<ProductPriceModel>) -> Vec<ProductPriceModel> {
-        src.iter()
-            .map(|g| ProductPriceModel {
-                price: g.price,
-                start_after: g.start_after,
-                end_before: g.end_before,
-                product_id: g.product_id,
-                is_create: g.is_create,
-            })
-            .collect()
     }
     fn expect_callargs_fetch(&mut self, val: RepoFetchCallArgType) {
         self._callargs_fetch_expect = Some(val);
@@ -173,30 +162,27 @@ async fn update_ok() {
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
         currency: mocked_currency.clone(),
-        items: vec![
-            ProductPriceModel {
-                price: 1009,
-                product_id: 2613,
-                is_create: false,
-                start_after: DateTime::parse_from_rfc3339("2022-04-26T08:15:47+01:00")
-                    .unwrap()
-                    .into(),
-                end_before: DateTime::parse_from_rfc3339("2024-08-28T21:35:26-08:00")
-                    .unwrap()
-                    .into(),
-            },
-            ProductPriceModel {
-                price: 1010,
-                product_id: 3072,
-                is_create: false,
-                start_after: DateTime::parse_from_rfc3339("2021-03-20T10:58:39-06:00")
-                    .unwrap()
-                    .into(),
-                end_before: DateTime::parse_from_rfc3339("2023-05-16T04:19:07+08:00")
-                    .unwrap()
-                    .into(),
-            },
-        ],
+        items: [
+            (
+                2613,
+                1009,
+                "2022-04-26T08:15:47+01:00",
+                "2024-08-28T21:35:26-08:00",
+            ),
+            (
+                3072,
+                1010,
+                "2021-03-20T10:58:39-06:00",
+                "2023-05-16T04:19:07+08:00",
+            ),
+        ]
+        .into_iter()
+        .map(|d| {
+            let t0 = DateTime::parse_from_rfc3339(d.2).unwrap();
+            let t1 = DateTime::parse_from_rfc3339(d.3).unwrap();
+            ProductPriceModel::from((d.0, d.1, [t0, t1]))
+        })
+        .collect(),
     };
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
     let updating_products = vec![
@@ -307,17 +293,19 @@ async fn save_error() {
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
         currency: mocked_currency.clone(),
-        items: vec![ProductPriceModel {
-            is_create: false,
-            price: 4810,
-            product_id: 9914,
-            start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-12T21:23:00+08:00")
-                .unwrap()
-                .into(),
-        }],
+        items: [(
+            9914,
+            4810,
+            "2022-11-23T09:13:41+07:00",
+            "2023-10-12T21:23:00+08:00",
+        )]
+        .into_iter()
+        .map(|d| {
+            let t0 = DateTime::parse_from_rfc3339(d.2).unwrap();
+            let t1 = DateTime::parse_from_rfc3339(d.3).unwrap();
+            ProductPriceModel::from((d.0, d.1, [t0, t1]))
+        })
+        .collect(),
     };
     let mut repo = MockRepository::_new(
         Ok(()),

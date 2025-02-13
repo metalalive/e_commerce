@@ -311,13 +311,7 @@ impl CreateOrderUseCase {
                     .policies
                     .iter()
                     .find(|m| m.product_id == d.product_id);
-                let result2 = ms_price.iter().find_map(|ms| {
-                    if ms.store_id == d.seller_id {
-                        ms.items.iter().find(|m| m.product_id == d.product_id) // TODO, validate expiry of the pricing rule
-                    } else {
-                        None
-                    }
-                });
+                let result2 = ms_price.iter().find_map(|ms| ms.find_product(&d));
                 let (plc_nonexist, price_nonexist) = (result1.is_none(), result2.is_none());
                 if let (Some(plc), Some(price)) = (result1, result2) {
                     let (seller_id, product_id, req_qty) = (d.seller_id, d.product_id, d.quantity);

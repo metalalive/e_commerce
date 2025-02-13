@@ -226,7 +226,7 @@ impl OrderLineModel {
     ) -> DefaultResult<(), AppError> {
         let id_mismatch = if data.product_id != policym.product_id {
             Some("product-policy, id")
-        } else if data.product_id != pricem.product_id {
+        } else if data.product_id != pricem.product_id() {
             Some("product-price, id")
         } else {
             None
@@ -274,7 +274,8 @@ impl OrderLineModel {
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
-        let price_total = pricem.price * data.quantity;
+        let baseprice = pricem.base_price();
+        let price_total = baseprice * data.quantity;
         Ok(Self {
             id_: OrderLineIdentity {
                 store_id: data.seller_id,
@@ -286,7 +287,7 @@ impl OrderLineModel {
                 paid_last_update: None,
             },
             price: OrderLinePriceModel {
-                unit: pricem.price,
+                unit: baseprice,
                 total: price_total,
             },
             policy: OrderLineAppliedPolicyModel {

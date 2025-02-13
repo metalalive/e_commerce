@@ -57,38 +57,32 @@ fn ut_setup_prod_policies() -> ProductPolicyModelSet {
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
+    let raw2obj = |d: (u64, &str, &str, u32)| -> ProductPriceModel {
+        let start_after = DateTime::parse_from_rfc3339(d.1).unwrap();
+        let end_before =  DateTime::parse_from_rfc3339(d.2).unwrap();
+        let args = (d.0, d.3, [start_after , end_before]);
+        ProductPriceModel::from(args)
+    };
     vec![
         ProductPriceModelSet {
             store_id: 51,
             currency: CurrencyDto::THB,
             items: [
-                (168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 510u32),
-                (1168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 1130),
-                (169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", false, 190),
+                (168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", 510u32),
+                (1168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", 1130),
+                (169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", 190),
             ]
-            .into_iter()
-            .map(|d| ProductPriceModel {
-                product_id: d.0, is_create: d.3,  price: d.4,
-                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-            })
-            .collect::<Vec<_>>(),
+            .into_iter().map(raw2obj).collect::<Vec<_>>(),
         },
         ProductPriceModelSet {
             store_id: 52,
             currency: CurrencyDto::TWD,
             items: [
-                (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", false, 480u32),
-                (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 490),
-                (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 399),
+                (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", 480u32),
+                (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 490),
+                (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 399),
             ]
-            .into_iter()
-            .map(|d| ProductPriceModel {
-                product_id: d.0, is_create: d.3,  price: d.4,
-                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-            })
-            .collect::<Vec<_>>(),
+            .into_iter().map(raw2obj).collect::<Vec<_>>(),
         },
     ]
 } // end of fn ut_setup_prod_prices

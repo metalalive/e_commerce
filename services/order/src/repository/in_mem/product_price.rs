@@ -81,8 +81,8 @@ impl From<(u32, CurrencyDto)> for UpdateMetaArgs {
 impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
     fn from(value: (u32, Vec<ProductPriceModel>)) -> Self {
         let (store_id, items) = value;
-        let kv_pairs = items.iter().map(|m| {
-            let (store_id, product_id) = (store_id, m.product_id);
+        let kv_pairs = items.into_iter().map(|m| {
+            let (product_id, price, t_range) = m.into_parts();
             let pkey = format!("{store_id}-{product_id}");
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into())
@@ -91,10 +91,10 @@ impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
             let _ = [
                 // so the order of columns can be arbitrary
                 (InMemColIdx::SellerId, store_id.to_string()),
-                (InMemColIdx::Price, m.price.to_string()),
-                (InMemColIdx::ProductId, m.product_id.to_string()),
-                (InMemColIdx::StartAfter, m.start_after.to_rfc3339()),
-                (InMemColIdx::EndBefore, m.end_before.to_rfc3339()),
+                (InMemColIdx::Price, price.to_string()),
+                (InMemColIdx::ProductId, product_id.to_string()),
+                (InMemColIdx::StartAfter, t_range[0].to_rfc3339()),
+                (InMemColIdx::EndBefore, t_range[1].to_rfc3339()),
             ]
             .into_iter()
             .map(|(idx, val)| {
@@ -277,7 +277,7 @@ impl ProductPriceInMemRepo {
                         .unwrap()
                         .parse()
                         .unwrap();
-                    let price = row
+                    let baseprice = row
                         .get::<usize>(InMemColIdx::Price.into())
                         .unwrap()
                         .parse()
@@ -286,13 +286,8 @@ impl ProductPriceInMemRepo {
                     let end_before = row.get::<usize>(InMemColIdx::EndBefore.into()).unwrap();
                     let start_after = DateTime::parse_from_rfc3339(start_after).unwrap();
                     let end_before = DateTime::parse_from_rfc3339(end_before).unwrap();
-                    let obj = ProductPriceModel {
-                        product_id,
-                        price,
-                        start_after,
-                        end_before,
-                        is_create: false,
-                    };
+                    let args = (product_id, baseprice, [start_after, end_before]);
+                    let obj = ProductPriceModel::from(args);
                     (seller_id, obj)
                 })
                 .collect()

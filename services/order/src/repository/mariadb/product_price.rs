@@ -44,16 +44,11 @@ impl InsertProductArg {
 impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
     fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
-        let (store_id, items) = (self.0, self.1);
+        let Self(store_id, items) = self;
         items
             .into_iter()
             .map(|item| {
-                let (p_id, price, start_after, end_before) = (
-                    item.product_id,
-                    item.price,
-                    item.start_after,
-                    item.end_before,
-                );
+                let (p_id, price, [start_after, end_before]) = item.into_parts();
                 let tz = start_after.fixed_offset().timezone();
                 let start_tz_utc = tz.local_minus_utc() / 60;
                 let tz = end_before.fixed_offset().timezone();
@@ -102,44 +97,44 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, price) = (item.product_id, item.price);
-                out.add(p_id).unwrap();
-                out.add(price).unwrap();
+                out.add(item.product_id()).unwrap();
+                out.add(item.base_price()).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, start_after) = (item.product_id, item.start_after);
-                out.add(p_id).unwrap();
-                let t = start_after.format(DATETIME_FORMAT).to_string();
+                out.add(item.product_id()).unwrap();
+                let t = item.start_after().format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, end_before) = (item.product_id, item.end_before);
-                out.add(p_id).unwrap();
-                let t = end_before.format(DATETIME_FORMAT).to_string();
+                out.add(item.product_id()).unwrap();
+                let t = item.end_before().format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, start_after) = (item.product_id, item.start_after);
-                let start_tz_utc = start_after.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(p_id).unwrap();
+                out.add(item.product_id()).unwrap();
+                let start_tz_utc = item.start_after().timezone().local_minus_utc() / 60;
                 out.add(start_tz_utc as i16).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, end_before) = (item.product_id, item.end_before);
-                let end_tz_utc = end_before.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(p_id).unwrap();
+                out.add(item.product_id()).unwrap();
+                let end_tz_utc = item
+                    .end_before()
+                    .fixed_offset()
+                    .timezone()
+                    .local_minus_utc()
+                    / 60;
                 out.add(end_tz_utc as i16).unwrap();
             })
             .count();
@@ -147,7 +142,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .into_iter()
             .map(|item| {
-                out.add(item.product_id).unwrap();
+                out.add(item.product_id()).unwrap();
             })
             .count();
         out
@@ -380,13 +375,8 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
         };
         //println!("[DEBUG] product-id : {}, start_after naive: {:?}, final:{:?}",
         //        product_id, start_after_naive, start_after);
-        Ok(Self {
-            product_id,
-            price,
-            start_after,
-            end_before,
-            is_create: false,
-        })
+        let arg = (product_id, price, [start_after, end_before]);
+        Ok(Self::from(arg))
     } // end of fn try-from
 } // end of impl try-from for ProductPriceModel
 
@@ -658,17 +648,7 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
             items,
             currency,
         } = mset;
-        let (mut prices_add, mut prices_modify) = (vec![], vec![]);
-        items
-            .into_iter()
-            .map(|p| {
-                if p.is_create {
-                    prices_add.push(p);
-                } else {
-                    prices_modify.push(p)
-                }
-            })
-            .count(); // TODO, swtich to feature `drain-filter` when it becomes stable
+        let (ms_add, ms_modify) = ProductPriceModel::split_by_update_state(items);
         let mut conn = self.db.acquire().await?;
         let mut tx = conn.begin().await?;
         {
@@ -677,8 +657,8 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
             let num_affected = resultset.rows_affected() as usize;
             assert!(num_affected == 1 || num_affected == 2);
         }
-        Self::_save(store_id, "update", 16, &mut tx, prices_modify).await?;
-        Self::_save(store_id, "insert", 8, &mut tx, prices_add).await?;
+        Self::_save(store_id, "update", 16, &mut tx, ms_modify).await?;
+        Self::_save(store_id, "insert", 8, &mut tx, ms_add).await?;
         tx.commit().await?;
         Ok(())
     }

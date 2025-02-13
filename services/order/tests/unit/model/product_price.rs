@@ -17,12 +17,13 @@ fn setup_mocked_saved_items() -> Vec<ProductPriceModel> {
         (2006, 183, "2023-06-29T11:18:54+04:00", "2023-10-05T08:14:05+09:00"),
     ]
     .into_iter()
-    .map(|d| ProductPriceModel {
-        is_create: false,
-        product_id: d.0,
-        price: d.1,
-        start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-        end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
+    .map(|d| {
+        let product_id = d.0;
+        let price = d.1;
+        let t0 = DateTime::parse_from_rfc3339(d.2).unwrap();
+        let t1 = DateTime::parse_from_rfc3339(d.3).unwrap();
+        let args = (product_id, price, [t0, t1]);
+        ProductPriceModel::from(args)
     })
     .collect::<Vec<_>>()
 }
@@ -30,33 +31,29 @@ fn setup_mocked_saved_items() -> Vec<ProductPriceModel> {
 #[rustfmt::skip]
 fn setup_expect_updated_items() -> Vec<ProductPriceModel> {
     let mut out = setup_mocked_saved_items();
-    out[1] = ProductPriceModel {
-        is_create: false, price: 389, product_id: 2005,
-        start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+06:00")
-            .unwrap().into(),
-        end_before: DateTime::parse_from_rfc3339("2023-09-12T21:23:00+05:00")
-            .unwrap().into(),
+    out[1] = {
+        let t0 = DateTime::parse_from_rfc3339("2022-11-25T09:13:39+06:00").unwrap();
+        let t1 = DateTime::parse_from_rfc3339("2023-09-12T21:23:00+05:00").unwrap();
+        ProductPriceModel::from((2005, 389, [t0, t1]))
     };
-    out[2] = ProductPriceModel {
-        is_create: false, price: 51, product_id: 2004,
-        start_after: DateTime::parse_from_rfc3339("2022-11-24T09:25:39+05:00")
-            .unwrap().into(),
-        end_before: DateTime::parse_from_rfc3339("2023-09-12T21:13:01+11:00")
-            .unwrap().into(),
+    out[2] = {
+        let t0 = DateTime::parse_from_rfc3339("2022-11-24T09:25:39+05:00").unwrap();
+        let t1 = DateTime::parse_from_rfc3339("2023-09-12T21:13:01+11:00").unwrap();
+        ProductPriceModel::from((2004, 51, [t0, t1]))
     };
     [
         (2388u32, 2018u64, "2022-11-21T23:09:05+09:00", "2023-10-13T02:54:00-09:00"),
         (20550, 2019, "2022-11-29T09:13:39+06:00", "2023-08-30T21:19:00+10:00"),
     ]
     .into_iter()
-    .map(|d| {
-        let m = ProductPriceModel {
-            is_create: true,
-            price: d.0,
-            product_id: d.1,
-            start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-            end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
+    .map(|raw| {
+        let d = ProductPriceEditDto {
+            price: raw.0,
+            product_id: raw.1,
+            start_after: DateTime::parse_from_rfc3339(raw.2).unwrap(),
+            end_before: DateTime::parse_from_rfc3339(raw.3).unwrap(),
         };
+        let m = ProductPriceModel::from(&d);
         out.insert(0, m);
     })
     .count();

@@ -51,16 +51,11 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
         max_num_rsv: 0,
         min_num_rsv: 0,
     };
-    let pricem = ProductPriceModel {
-        product_id,
-        price: 1015,
-        is_create: false,
-        start_after: DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2023-09-10T09:01:31+02:00")
-            .unwrap()
-            .into(),
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2023-09-10T09:01:31+02:00").unwrap();
+        let args = (product_id, 1015, [start_after, end_before]);
+        ProductPriceModel::from(args)
     };
     let data = OrderLineReqDto {
         seller_id,
@@ -88,16 +83,11 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
         max_num_rsv: 10,
         min_num_rsv: 2,
     };
-    let pricem = ProductPriceModel {
-        product_id,
-        price: 987,
-        is_create: false,
-        start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00")
-            .unwrap()
-            .into(),
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap();
+        let args = (product_id, 987, [start_after, end_before]);
+        ProductPriceModel::from(args)
     };
     let data = OrderLineReqDto {
         seller_id,
@@ -122,16 +112,11 @@ fn convert_from_req_dto_violate_rsv_limit() {
         max_num_rsv: 10,
         min_num_rsv: 0,
     };
-    let pricem = ProductPriceModel {
-        product_id,
-        price: 987,
-        is_create: false,
-        start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00")
-            .unwrap()
-            .into(),
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap();
+        let args = (product_id, 987, [start_after, end_before]);
+        ProductPriceModel::from(args)
     };
     let data = OrderLineReqDto {
         seller_id,
@@ -156,16 +141,11 @@ fn convert_from_req_dto_product_id_mismatch() {
         max_num_rsv: 10,
         min_num_rsv: 0,
     };
-    let pricem = ProductPriceModel {
-        product_id: 1466,
-        price: 60,
-        is_create: false,
-        start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00")
-            .unwrap()
-            .into(),
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap();
+        let args = (1466, 60, [start_after, end_before]);
+        ProductPriceModel::from(args)
     };
     let data = OrderLineReqDto {
         seller_id,
