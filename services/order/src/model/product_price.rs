@@ -173,6 +173,12 @@ impl ProductPriceModel {
     pub(crate) fn end_before(&self) -> DateTime<FixedOffset> {
         self.end_before
     }
+    pub(crate) fn attr_lastupdate(&self) -> DateTime<FixedOffset> {
+        self.attributes.last_update
+    }
+    pub(crate) fn attr_price_map(&self) -> &ProdAttrPricingMap {
+        &self.attributes.pricing
+    }
     pub(crate) fn split_by_update_state(ms: Vec<Self>) -> (Vec<Self>, Vec<Self>) {
         let (mut l_add, mut l_modify) = (vec![], vec![]);
         ms.into_iter()
