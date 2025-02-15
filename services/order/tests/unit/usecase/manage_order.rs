@@ -60,7 +60,9 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
     let raw2obj = |d: (u64, &str, &str, u32)| -> ProductPriceModel {
         let start_after = DateTime::parse_from_rfc3339(d.1).unwrap();
         let end_before =  DateTime::parse_from_rfc3339(d.2).unwrap();
-        let args = (d.0, d.3, [start_after , end_before]);
+        let attr_lastupdate = start_after;
+        let ts = [start_after , end_before, attr_lastupdate];
+        let args = (d.0, d.3, ts, None);
         ProductPriceModel::from(args)
     };
     vec![

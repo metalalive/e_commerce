@@ -20,25 +20,24 @@ use crate::model::{ProductPriceModel, ProductPriceModelSet};
 
 const TABLE_LABELS: [&str; 2] = ["store_meta", "product_price"];
 
+#[rustfmt::skip]
 enum InMemColIdx {
-    Price,
-    SellerId,
-    StartAfter,
-    EndBefore,
-    ProductId,
-    TotNumColumns,
+    BasePrice, SellerId, StartAfter, EndBefore, ProductId,
+    AttrLastUpdate, AttrPrice, TotNumColumns,
 }
 
 #[allow(clippy::from_over_into)]
 impl Into<usize> for InMemColIdx {
     fn into(self) -> usize {
         match self {
-            Self::Price => 0,
+            Self::BasePrice => 0,
             Self::StartAfter => 1,
             Self::EndBefore => 2,
-            Self::ProductId => 3,
-            Self::SellerId => 4,
-            Self::TotNumColumns => 5,
+            Self::AttrLastUpdate => 3,
+            Self::AttrPrice => 4,
+            Self::ProductId => 5,
+            Self::SellerId => 6,
+            Self::TotNumColumns => 7,
         }
     }
 }
@@ -78,11 +77,22 @@ impl From<(u32, CurrencyDto)> for UpdateMetaArgs {
     }
 }
 
-impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
-    fn from(value: (u32, Vec<ProductPriceModel>)) -> Self {
+impl TryFrom<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
+    type Error = AppError;
+
+    fn try_from(value: (u32, Vec<ProductPriceModel>)) -> DefaultResult<Self, Self::Error> {
         let (store_id, items) = value;
-        let kv_pairs = items.into_iter().map(|m| {
-            let (product_id, price, t_range) = m.into_parts();
+        let mut errs = Vec::new();
+        let kv_pairs = items.into_iter().filter_map(|m| {
+            let (product_id, price, t_range, attrmap) = m.into_parts();
+            let result = ProductPriceModel::serialize_attrmap(&attrmap);
+            let attrmap_serial = match result {
+                Ok(v) => v,
+                Err(e) => {
+                    errs.push(e);
+                    return None;
+                }
+            };
             let pkey = format!("{store_id}-{product_id}");
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into())
@@ -91,10 +101,12 @@ impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
             let _ = [
                 // so the order of columns can be arbitrary
                 (InMemColIdx::SellerId, store_id.to_string()),
-                (InMemColIdx::Price, price.to_string()),
+                (InMemColIdx::BasePrice, price.to_string()),
                 (InMemColIdx::ProductId, product_id.to_string()),
                 (InMemColIdx::StartAfter, t_range[0].to_rfc3339()),
                 (InMemColIdx::EndBefore, t_range[1].to_rfc3339()),
+                (InMemColIdx::AttrLastUpdate, t_range[2].to_rfc3339()),
+                (InMemColIdx::AttrPrice, attrmap_serial),
             ]
             .into_iter()
             .map(|(idx, val)| {
@@ -102,10 +114,14 @@ impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
                 row[idx] = val;
             })
             .collect::<Vec<()>>();
-            (pkey, row)
+            Some((pkey, row))
         });
         let inner = HashMap::from_iter(kv_pairs);
-        Self(inner)
+        if errs.is_empty() {
+            Ok(Self(inner))
+        } else {
+            Err(errs.remove(0))
+        }
     }
 } // end of impl UpdateProductItemArgs
 
@@ -217,7 +233,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
             items,
         } = ppset;
         let mut data = HashMap::new();
-        let rows = UpdateProductItemArgs::from((store_id, items)).0;
+        let rows = UpdateProductItemArgs::try_from((store_id, items))?.0;
         data.insert(TABLE_LABELS[1].to_string(), rows);
         let rows = UpdateMetaArgs::from((store_id, currency)).0;
         data.insert(TABLE_LABELS[0].to_string(), rows);
@@ -278,15 +294,24 @@ impl ProductPriceInMemRepo {
                         .parse()
                         .unwrap();
                     let baseprice = row
-                        .get::<usize>(InMemColIdx::Price.into())
+                        .get::<usize>(InMemColIdx::BasePrice.into())
                         .unwrap()
                         .parse()
                         .unwrap();
                     let start_after = row.get::<usize>(InMemColIdx::StartAfter.into()).unwrap();
                     let end_before = row.get::<usize>(InMemColIdx::EndBefore.into()).unwrap();
-                    let start_after = DateTime::parse_from_rfc3339(start_after).unwrap();
-                    let end_before = DateTime::parse_from_rfc3339(end_before).unwrap();
-                    let args = (product_id, baseprice, [start_after, end_before]);
+                    let attr_lupdate = row
+                        .get::<usize>(InMemColIdx::AttrLastUpdate.into())
+                        .unwrap();
+                    let attrmap_serial = row.get::<usize>(InMemColIdx::AttrPrice.into()).unwrap();
+                    let ts = [
+                        DateTime::parse_from_rfc3339(start_after).unwrap(),
+                        DateTime::parse_from_rfc3339(end_before).unwrap(),
+                        DateTime::parse_from_rfc3339(attr_lupdate).unwrap(),
+                    ];
+                    let attrmap =
+                        ProductPriceModel::deserialize_attrmap(attrmap_serial.as_str()).unwrap();
+                    let args = (product_id, baseprice, ts, attrmap);
                     let obj = ProductPriceModel::from(args);
                     (seller_id, obj)
                 })

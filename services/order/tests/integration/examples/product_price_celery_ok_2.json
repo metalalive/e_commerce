@@ -4,15 +4,23 @@
      "currency": "USD",
      "updating": [
          {"price": 126, "start_after": "2021-09-04T09:11:13+08:00",
-          "end_before": "2022-12-24T07:11:13.730050+08:00", "product_id": 20076},
+          "end_before": "2022-12-24T07:11:13.730050+08:00", "product_id": 20076,
+          "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+         },
          {"price": 573, "start_after": "2022-09-05T04:30:58.070020+07:00",
-          "end_before": "2023-07-13T18:11:56.877000+07:00", "product_id": 20075}
+          "end_before": "2023-07-13T18:11:56.877000+07:00", "product_id": 20075,
+          "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+         }
      ],
      "creating": [
          {"price": 426, "start_after": "2021-09-10T09:11:13+09:00",
-          "end_before": "2021-12-24T07:11:13.730050+09:00", "product_id": 20079},
+          "end_before": "2021-12-24T07:11:13.730050+09:00", "product_id": 20079,
+          "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+         },
          {"price": 1039, "start_after": "2021-01-20T04:30:58.070020+10:00",
-          "end_before": "2022-02-28T18:11:56.877000+10:00", "product_id": 20080}
+          "end_before": "2022-02-28T18:11:56.877000+10:00", "product_id": 20080,
+          "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+         }
      ]
     },
     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}

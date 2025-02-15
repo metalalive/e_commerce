@@ -5,7 +5,7 @@ use std::vec;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::rpc::dto::{ProductPriceDeleteDto, ProductPriceEditDto};
+use order::api::rpc::dto::{ProdAttrPriceSetDto, ProductPriceDeleteDto, ProductPriceEditDto};
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore};
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::{AbsProductPriceRepo, ProductPriceInMemRepo};
@@ -30,8 +30,12 @@ fn pprice_init_data() -> [ProductPriceModel; 7] {
             price,
             start_after: DateTime::parse_from_rfc3339(t0).unwrap(),
             end_before: DateTime::parse_from_rfc3339(t1).unwrap(),
+            attributes: ProdAttrPriceSetDto {
+                extra_charge: Vec::new(),
+                last_update: DateTime::parse_from_rfc3339("2022-08-08T01:03:55+08:00").unwrap(),
+            },
         };
-        ProductPriceModel::from(&d)
+        ProductPriceModel::try_from(&d).unwrap()
     })
 } // end of pprice_init_data
 
@@ -146,7 +150,8 @@ async fn in_mem_save_fetch_ok_2() {
     let new_5th_elm = {
         let t0 = DateTime::parse_from_rfc3339("2023-09-11T15:33:54-07:00").unwrap();
         let t1 = DateTime::parse_from_rfc3339("2023-10-12T09:02:34+06:00").unwrap();
-        let args = (1006, 7811, [t0, t1]);
+        let t2 = DateTime::parse_from_rfc3339("2022-08-08T01:03:55+08:00").unwrap();
+        let args = (1006, 7811, [t0, t1, t2], None);
         ProductPriceModel::from(args)
     };
     let ppset = {

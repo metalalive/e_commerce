@@ -11,7 +11,9 @@ use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::{ut_setup_share_state, MockConfidential};
-use order::api::rpc::dto::{ProductPriceDeleteDto, ProductPriceDto, ProductPriceEditDto};
+use order::api::rpc::dto::{
+    ProdAttrPriceSetDto, ProductPriceDeleteDto, ProductPriceDto, ProductPriceEditDto,
+};
 use order::error::AppError;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::AbsProductPriceRepo;
@@ -108,6 +110,7 @@ impl MockRepository {
     }
 } // end of impl MockRepository
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn create_ok() {
     let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
@@ -119,28 +122,24 @@ async fn create_ok() {
         items: Vec::new(),
     };
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
-    let creating_products = vec![
-        ProductPriceEditDto {
-            price: 389,
-            product_id: 2379,
-            start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-09-12T21:23:00+06:00")
-                .unwrap()
-                .into(),
+    let creating_products: Vec<_> = [
+        (389, 2379, "2022-11-25T09:13:39+05:00", "2023-09-12T21:23:00+06:00"),
+        (51, 2642, "2022-11-24T09:13:39+05:00", "2023-09-12T21:25:01+11:00"),
+    ]
+    .iter()
+    .map(
+        |&(price, product_id, start_after, end_before)| ProductPriceEditDto {
+            price,
+            product_id,
+            start_after: DateTime::parse_from_rfc3339(start_after).unwrap(),
+            end_before: DateTime::parse_from_rfc3339(end_before).unwrap(),
+            attributes: ProdAttrPriceSetDto {
+                extra_charge: Vec::new(),
+                last_update: DateTime::parse_from_rfc3339("2022-10-09T01:03:55+08:00").unwrap(),
+            },
         },
-        ProductPriceEditDto {
-            price: 51,
-            product_id: 2642,
-            start_after: DateTime::parse_from_rfc3339("2022-11-24T09:13:39+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-09-12T21:25:01+11:00")
-                .unwrap()
-                .into(),
-        },
-    ];
+    )
+    .collect();
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
@@ -154,6 +153,7 @@ async fn create_ok() {
     assert!(result.is_ok());
 } // end of fn create_ok
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn update_ok() {
     let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
@@ -163,72 +163,41 @@ async fn update_ok() {
         store_id: mocked_store_id,
         currency: mocked_currency.clone(),
         items: [
-            (
-                2613,
-                1009,
-                "2022-04-26T08:15:47+01:00",
-                "2024-08-28T21:35:26-08:00",
-            ),
-            (
-                3072,
-                1010,
-                "2021-03-20T10:58:39-06:00",
-                "2023-05-16T04:19:07+08:00",
-            ),
+            (2613,1009,"2022-04-26T08:15:47+01:00","2024-08-28T21:35:26-08:00"),
+            (3072,1010,"2021-03-20T10:58:39-06:00","2023-05-16T04:19:07+08:00"),
         ]
         .into_iter()
         .map(|d| {
             let t0 = DateTime::parse_from_rfc3339(d.2).unwrap();
             let t1 = DateTime::parse_from_rfc3339(d.3).unwrap();
-            ProductPriceModel::from((d.0, d.1, [t0, t1]))
+            ProductPriceModel::from((d.0, d.1, [t0, t1, t0], None))
         })
         .collect(),
     };
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
-    let updating_products = vec![
-        ProductPriceEditDto {
-            price: 1322,
-            product_id: 3072,
-            start_after: DateTime::parse_from_rfc3339("2021-03-29T10:58:39-06:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-05-15T04:18:07+08:00")
-                .unwrap()
-                .into(),
+    let mut updating_products: Vec<_> = [
+        (1322, 3072, "2021-03-29T10:58:39-06:00", "2023-05-15T04:18:07+08:00"),
+        (1155, 2613, "2022-04-27T07:15:47+01:00", "2024-08-29T20:34:25-08:00"),
+        // below for creating new objects
+        (452, 8299, "2022-11-27T09:13:39+05:00", "2023-04-13T01:48:07+06:00"),
+        (6066, 1712, "2022-01-19T06:05:39+05:00", "2024-08-31T21:44:25+11:00"),
+    ]
+    .iter()
+    .map(
+        |&(price, product_id, start_after, end_before)| ProductPriceEditDto {
+            price,
+            product_id,
+            start_after: DateTime::parse_from_rfc3339(start_after).unwrap(),
+            end_before: DateTime::parse_from_rfc3339(end_before).unwrap(),
+            attributes: ProdAttrPriceSetDto {
+                extra_charge: Vec::new(),
+                last_update: DateTime::parse_from_rfc3339("2022-10-09T01:03:55+08:00").unwrap(),
+            },
         },
-        ProductPriceEditDto {
-            price: 1155,
-            product_id: 2613,
-            start_after: DateTime::parse_from_rfc3339("2022-04-27T07:15:47+01:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2024-08-29T20:34:25-08:00")
-                .unwrap()
-                .into(),
-        },
-    ];
-    let creating_products = vec![
-        ProductPriceEditDto {
-            price: 452,
-            product_id: 8299,
-            start_after: DateTime::parse_from_rfc3339("2022-11-27T09:13:39+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2023-04-13T01:48:07+06:00")
-                .unwrap()
-                .into(),
-        },
-        ProductPriceEditDto {
-            price: 6066,
-            product_id: 1712,
-            start_after: DateTime::parse_from_rfc3339("2022-01-19T06:05:39+05:00")
-                .unwrap()
-                .into(),
-            end_before: DateTime::parse_from_rfc3339("2024-08-31T21:44:25+11:00")
-                .unwrap()
-                .into(),
-        },
-    ]; // product IDs here have to be consistent with the mocked fetched model set above
+    )
+    .collect();
+    let creating_products = updating_products.split_off(2);
+    // product IDs here have to be consistent with the mocked fetched model set above
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
@@ -260,12 +229,12 @@ async fn fetch_error() {
     let creating_products = vec![ProductPriceEditDto {
         price: 389,
         product_id: 2379,
-        start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+05:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2023-09-12T21:23:00+06:00")
-            .unwrap()
-            .into(),
+        start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+05:00").unwrap(),
+        end_before: DateTime::parse_from_rfc3339("2023-09-12T21:23:00+06:00").unwrap(),
+        attributes: ProdAttrPriceSetDto {
+            extra_charge: Vec::new(),
+            last_update: DateTime::parse_from_rfc3339("2022-10-09T01:03:55+08:00").unwrap(),
+        },
     }];
     let data = ProductPriceDto {
         s_id: mocked_store_id,
@@ -293,19 +262,12 @@ async fn save_error() {
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
         currency: mocked_currency.clone(),
-        items: [(
-            9914,
-            4810,
-            "2022-11-23T09:13:41+07:00",
-            "2023-10-12T21:23:00+08:00",
-        )]
-        .into_iter()
-        .map(|d| {
-            let t0 = DateTime::parse_from_rfc3339(d.2).unwrap();
-            let t1 = DateTime::parse_from_rfc3339(d.3).unwrap();
-            ProductPriceModel::from((d.0, d.1, [t0, t1]))
-        })
-        .collect(),
+        items: vec![{
+            let t0 = DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00").unwrap();
+            let t1 = DateTime::parse_from_rfc3339("2023-10-12T21:23:00+08:00").unwrap();
+            let args = (9914, 4810, [t0, t1, t0], None);
+            ProductPriceModel::from(args)
+        }],
     };
     let mut repo = MockRepository::_new(
         Ok(()),
@@ -319,12 +281,12 @@ async fn save_error() {
     let updating_products = vec![ProductPriceEditDto {
         price: 183,
         product_id: 9914,
-        start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00")
-            .unwrap()
-            .into(),
-        end_before: DateTime::parse_from_rfc3339("2023-10-12T21:23:00+08:00")
-            .unwrap()
-            .into(),
+        start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00").unwrap(),
+        end_before: DateTime::parse_from_rfc3339("2023-10-12T21:23:00+08:00").unwrap(),
+        attributes: ProdAttrPriceSetDto {
+            extra_charge: Vec::new(),
+            last_update: DateTime::parse_from_rfc3339("2022-10-09T01:03:55+08:00").unwrap(),
+        },
     }];
     let data = ProductPriceDto {
         s_id: mocked_store_id,
