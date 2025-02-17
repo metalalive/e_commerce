@@ -51,9 +51,10 @@ pub struct OrderLinePriceModel {
     // the price values here are smallest unit in seller's currency.
     // In this order-processing service the price amount in this struct
     // is NOT converted with buyer's currency exchange rate
-    pub unit: u32,
-    pub total: u32,
-} // TODO, advanced pricing model
+    unit_base: u32,
+    total: u32,
+    // TODO, add product-attribute pricing map
+}
 
 pub struct OrderLineQuantityModel {
     pub reserved: u32,
@@ -62,10 +63,10 @@ pub struct OrderLineQuantityModel {
 } // TODO, record number of items delivered
 
 pub struct OrderLineModel {
-    pub id_: OrderLineIdentity,
-    pub price: OrderLinePriceModel,
-    pub qty: OrderLineQuantityModel,
+    id_: OrderLineIdentity,
+    price: OrderLinePriceModel,
     pub policy: OrderLineAppliedPolicyModel,
+    pub qty: OrderLineQuantityModel,
 }
 
 // TODO, new struct for hash-map value, including :
@@ -204,16 +205,43 @@ impl OrderLineQuantityModel {
     }
 }
 
+impl From<(u32, u32)> for OrderLinePriceModel {
+    fn from((unit_base, total): (u32, u32)) -> Self {
+        Self { unit_base, total }
+    }
+}
+
 impl OrderLinePriceModel {
     fn into_paym_dto(self, curr_ex: CurrencyModel) -> PayAmountDto {
         let fraction_limit = curr_ex.name.amount_fraction_scale();
-        let p_unit_seller = Decimal::new(self.unit as i64, 0u32);
-        let p_total_seller = Decimal::new(self.total as i64, 0u32);
+        let p_unit_seller = Decimal::new(self.unit() as i64, 0u32);
+        let p_total_seller = Decimal::new(self.total() as i64, 0u32);
         let p_unit_buyer = p_unit_seller * curr_ex.rate;
         let p_total_buyer = p_total_seller * curr_ex.rate;
         PayAmountDto {
             unit: p_unit_buyer.trunc_with_scale(fraction_limit).to_string(),
             total: p_total_buyer.trunc_with_scale(fraction_limit).to_string(),
+        }
+    }
+
+    pub fn unit(&self) -> u32 {
+        self.unit_base
+    }
+    pub fn total(&self) -> u32 {
+        self.total
+    }
+} // end of impl OrderLinePriceModel
+
+#[rustfmt::skip]
+type OLineModelCvtArgs = (OrderLineIdentity, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel);
+
+impl From<OLineModelCvtArgs> for OrderLineModel {
+    fn from(value: OLineModelCvtArgs) -> Self {
+        Self {
+            id_: value.0,
+            price: value.1,
+            policy: value.2,
+            qty: value.3,
         }
     }
 }
@@ -274,6 +302,7 @@ impl OrderLineModel {
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
+        // TODO, move the code below into order-line price model
         let baseprice = pricem.base_price();
         let price_total = baseprice * data.quantity;
         Ok(Self {
@@ -286,10 +315,7 @@ impl OrderLineModel {
                 paid: 0,
                 paid_last_update: None,
             },
-            price: OrderLinePriceModel {
-                unit: baseprice,
-                total: price_total,
-            },
+            price: OrderLinePriceModel::from((baseprice, price_total)),
             policy: OrderLineAppliedPolicyModel {
                 reserved_until,
                 warranty_until,
@@ -357,9 +383,15 @@ impl OrderLineModel {
             self.qty.paid
         }
     }
+    pub fn id(&self) -> &OrderLineIdentity {
+        &self.id_
+    }
+    pub fn price(&self) -> &OrderLinePriceModel {
+        &self.price
+    }
 
     pub fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
-        let OrderLineModel {
+        let Self {
             id_,
             price,
             policy,
@@ -569,11 +601,8 @@ impl OrderReturnModel {
                         d.seller_id == item.id_.store_id && d.product_id == item.id_.product_id
                     })
                     .unwrap();
-                let total = oline.price.unit * d.quantity;
-                let refund = OrderLinePriceModel {
-                    unit: oline.price.unit,
-                    total,
-                };
+                let total = oline.price.unit() * d.quantity;
+                let refund = OrderLinePriceModel::from((oline.price.unit(), total));
                 let val = (d.quantity, refund);
                 if let Some(r) = result {
                     r.qty.clear(); // no need to output saved requests

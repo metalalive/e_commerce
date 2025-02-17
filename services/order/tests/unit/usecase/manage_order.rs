@@ -128,6 +128,7 @@ fn validate_orderline_ok() {
             seller_id: d.0,
             product_id: d.1,
             quantity: d.2,
+            applied_attr: None,
         })
         .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
@@ -136,7 +137,7 @@ fn validate_orderline_ok() {
         assert_eq!(v.len(), 3);
         v.into_iter()
             .map(|m| {
-                let id = m.id_;
+                let id = m.id();
                 let search_key = (id.store_id, id.product_id);
                 let found = match search_key {
                     (52, 168) => true,
@@ -166,6 +167,7 @@ fn validate_orderline_client_errors() {
         seller_id: d.0,
         product_id: d.1,
         quantity: d.2,
+        applied_attr: None,
     })
     .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
@@ -293,11 +295,12 @@ fn ut_setup_orderlines() -> Vec<OrderLineModel> {
         (426, 192, 12, 216, 18, 15),
     ]
     .into_iter()
-    .map(|d| OrderLineModel {
-        id_: OrderLineIdentity {store_id: d.0, product_id: d.1},
-        price: OrderLinePriceModel {unit: d.2, total: d.3},
-        qty: OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update},
-        policy: OrderLineAppliedPolicyModel {reserved_until, warranty_until},
+    .map(|d| {
+        let id_ = OrderLineIdentity {store_id: d.0, product_id: d.1};
+        let price = OrderLinePriceModel::from((d.2, d.3));
+        let qty = OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update};
+        let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
+        OrderLineModel::from((id_, price, policy, qty))
     })
     .collect::<Vec<_>>()
 }
@@ -311,11 +314,11 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(11),
-                    (1, OrderLinePriceModel {unit: 10, total: 10}),
+                    (1, OrderLinePriceModel::from((10, 10))),
                 ),
                 (
                     return_time + Duration::seconds(30),
-                    (5, OrderLinePriceModel {unit: 13, total: 65}),
+                    (5, OrderLinePriceModel::from((13, 65))),
                 ),
             ]),
         },
@@ -324,19 +327,19 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(6),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
+                    (1, OrderLinePriceModel::from((12, 12))),
                 ),
                 (
                     return_time + Duration::seconds(28),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
+                    (1, OrderLinePriceModel::from((12, 12))),
                 ),
                 (
                     return_time + Duration::seconds(65),
-                    (2, OrderLinePriceModel {unit: 12, total: 24}),
+                    (2, OrderLinePriceModel::from((12, 24))),
                 ),
                 (
                     return_time + Duration::seconds(99),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
+                    (1, OrderLinePriceModel::from((12, 12))),
                 ),
             ]),
         },
@@ -345,15 +348,15 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(12),
-                    (2, OrderLinePriceModel {unit: 11, total: 22}),
+                    (2, OrderLinePriceModel::from((11, 22))),
                 ),
                 (
                     return_time + Duration::seconds(73),
-                    (3, OrderLinePriceModel {unit: 11, total: 33}),
+                    (3, OrderLinePriceModel::from((11, 33))),
                 ),
                 (
                     return_time + Duration::seconds(94),
-                    (1, OrderLinePriceModel {unit: 11, total: 11}),
+                    (1, OrderLinePriceModel::from((11, 11))),
                 ),
             ]),
         },
@@ -362,11 +365,11 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(10),
-                    (3, OrderLinePriceModel {unit: 15, total: 45}),
+                    (3, OrderLinePriceModel::from((15, 45))),
                 ),
                 (
                     return_time + Duration::seconds(19),
-                    (4, OrderLinePriceModel {unit: 15, total: 60}),
+                    (4, OrderLinePriceModel::from((15, 60))),
                 ),
             ]),
         },
@@ -406,7 +409,7 @@ async fn discard_unpaid_items_ok() {
     let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
     let mocked_seller_ids = mocked_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id)
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
         OrderLineModelSet {
@@ -439,7 +442,7 @@ async fn discard_unpaid_items_err_stocklvl() {
     let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
     let mocked_seller_ids = mocked_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id)
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
         OrderLineModelSet {
@@ -510,7 +513,7 @@ async fn return_lines_request_common(
     let logctx = shr_state.log_context().clone();
     let mocked_seller_ids = fetched_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id)
         .collect::<Vec<_>>();
     let currency_rate = ut_setup_order_currency(mocked_seller_ids);
     let o_repo = ut_oreturn_setup_repository_1(
@@ -526,6 +529,7 @@ async fn return_lines_request_common(
         seller_id: 800,
         product_id: 191,
         quantity: 2,
+        applied_attr: None,
     }];
     let authed_claim = AppAuthedClaim {
         profile: req_usr_id,
@@ -748,7 +752,7 @@ async fn replica_refund_ok() {
         let iter = fetched_oid_returns.iter().flat_map(|(_, ret)| {
             ret.qty.iter().map(|(t, (qty, refund))| {
                 let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
-                let mantissa = (refund.total as i64) * 10i64.pow(scale_limit);
+                let mantissa = (refund.total() as i64) * 10i64.pow(scale_limit);
                 (
                     ret.id_.store_id,
                     ret.id_.product_id,

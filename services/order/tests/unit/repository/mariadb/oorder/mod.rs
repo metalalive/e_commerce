@@ -66,27 +66,28 @@ fn ut_oline_init_setup(
 ) -> OrderLineModelSet {
     let order_req = lines
         .into_iter()
-        .map(|d| OrderLineModel {
-            id_: OrderLineIdentity {
+        .map(|d| {
+            let id_ = OrderLineIdentity {
                 store_id: d.0,
                 product_id: d.1,
-            },
-            qty: OrderLineQuantityModel {
+            };
+            let qty = OrderLineQuantityModel {
                 reserved: d.2,
                 paid: 0,
                 paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
+            };
+            let policy = OrderLineAppliedPolicyModel {
                 reserved_until: d.4 + Duration::minutes(2),
                 warranty_until: d.4 + Duration::minutes(4),
-            },
-            price: OrderLinePriceModel {
-                unit: d.3,
-                total: d.3 * d.2,
-            },
+            };
+            let price = OrderLinePriceModel::from((d.3, d.3 * d.2));
+            OrderLineModel::from((id_, price, policy, qty))
         })
         .collect::<Vec<_>>();
-    let seller_ids = order_req.iter().map(|v| v.id_.store_id).collect::<Vec<_>>();
+    let seller_ids = order_req
+        .iter()
+        .map(|v| v.id().store_id)
+        .collect::<Vec<_>>();
     OrderLineModelSet {
         order_id: oid.to_string(),
         owner_id,

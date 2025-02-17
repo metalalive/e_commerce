@@ -42,6 +42,7 @@ impl From<CartLineModel> for CartLineDto {
             product_id: value.id_.product_id,
             seller_id: value.id_.store_id,
             quantity: value.qty_req,
+            applied_attr: None, // TODO, finish implementation
         }
     }
 }

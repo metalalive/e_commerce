@@ -28,7 +28,7 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
     lines
         .into_iter()
         .map(|o| {
-            let (id_, price, qty, policy) = (o.id_, o.price, o.qty, o.policy);
+            let (id_, price, qty, policy) = (o.id(), o.price(), &o.qty, &o.policy);
             let combo = (id_.store_id, id_.product_id);
             let expect = match combo {
                 (1013, 9004) => (
@@ -53,7 +53,7 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
                 ),
             };
             let actual = (
-                qty.reserved, qty.paid, price.unit, price.total,
+                qty.reserved, qty.paid, price.unit(), price.total(),
                 qty.paid_last_update.is_none(), policy.warranty_until,
             );
             assert_eq!(actual, expect);
@@ -168,7 +168,7 @@ fn ut_fetch_lines_rsvtime_usr_cb(
         let mut actual_product_ids = mset
             .lines
             .iter()
-            .map(|line| (line.id_.product_id, line.qty.reserved))
+            .map(|line| (line.id().product_id, line.qty.reserved))
             .collect::<Vec<_>>();
         actual_product_ids.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(mset.lines.len(), expect.0);

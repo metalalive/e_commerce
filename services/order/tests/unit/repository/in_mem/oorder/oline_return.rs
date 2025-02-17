@@ -25,11 +25,11 @@ pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderRet
             qty: HashMap::from([
                 (
                     t_base - Duration::minutes(41),
-                    (1, OrderLinePriceModel { unit: 15, total: 15 }),
+                    (1, OrderLinePriceModel::from((15, 15))),
                 ),
                 (
                     t_base - Duration::seconds(1),
-                    (5, OrderLinePriceModel { unit: 15, total: 75 }),
+                    (5, OrderLinePriceModel::from((15, 75))),
                 ),
             ]),
         },
@@ -38,15 +38,15 @@ pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderRet
             qty: HashMap::from([
                 (
                     t_base - Duration::minutes(10),
-                    (5, OrderLinePriceModel { unit: 13, total: 65 }),
+                    (5, OrderLinePriceModel::from((13, 65))),
                 ),
                 (
                     t_base - Duration::seconds(55),
-                    (2, OrderLinePriceModel { unit: 13, total: 26 }),
+                    (2, OrderLinePriceModel::from((13, 26))),
                 ),
                 (
                     t_base - Duration::seconds(3),
-                    (3, OrderLinePriceModel { unit: 13, total: 39 }),
+                    (3, OrderLinePriceModel::from((13, 39))),
                 ),
             ]),
         },
@@ -54,7 +54,7 @@ pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderRet
             id_: OrderLineIdentity { store_id: 49, product_id: 195 },
             qty: HashMap::from([(
                 t_base - Duration::seconds(4),
-                (7, OrderLinePriceModel { unit: 16, total: 112 }),
+                (7, OrderLinePriceModel::from((16, 112))),
             )]),
         },
     ]
@@ -66,14 +66,14 @@ pub(crate) fn ut_setup_ret_models_ks2(t_base: DateTime<FixedOffset>) -> Vec<Orde
             id_: OrderLineIdentity { store_id: 48, product_id: 574 },
             qty: HashMap::from([(
                 t_base + Duration::seconds(18),
-                (1, OrderLinePriceModel { unit: 13, total: 13 }),
+                (1, OrderLinePriceModel::from((13, 13))),
             )]),
         },
         OrderReturnModel {
             id_: OrderLineIdentity { store_id: 49, product_id: 195 },
             qty: HashMap::from([(
                 t_base + Duration::seconds(40),
-                (2, OrderLinePriceModel { unit: 16, total: 32 }),
+                (2, OrderLinePriceModel::from((16, 32))),
             )]),
         },
     ]
@@ -113,7 +113,11 @@ async fn fetch_by_pid_ok() {
                     _others => (0usize, 0u32, 0u32),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -139,7 +143,11 @@ async fn fetch_by_pid_ok() {
                     _others => (0usize, 0u32, 0u32),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -160,7 +168,7 @@ pub(crate) fn ut_setup_fetch_by_ctime(
     req_set[0][1].qty.remove(&(mock_time - Duration::minutes(10)));
     req_set[1][1].qty.insert(
         mock_time + Duration::minutes(5),
-        (1, OrderLinePriceModel { unit: 16, total: 16 }),
+        (1, OrderLinePriceModel::from((16, 16))),
     );
     req_set[1][0].qty.remove(&(mock_time - Duration::minutes(41)));
     {
@@ -168,16 +176,16 @@ pub(crate) fn ut_setup_fetch_by_ctime(
         let ret = req_set[2].last_mut().unwrap();
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(34),
-            (1, OrderLinePriceModel { unit: 18, total: 18 }),
+            (1, OrderLinePriceModel::from((18, 18))),
         );
         assert!(prev_entry.is_none());
         ret.qty.insert(
             mock_time + Duration::seconds(51),
-            (3, OrderLinePriceModel { unit: 21, total: 63 }),
+            (3, OrderLinePriceModel::from((21, 63))),
         );
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(388),
-            (1, OrderLinePriceModel { unit: 21, total: 21 }),
+            (1, OrderLinePriceModel::from((21, 21))),
         );
         assert!(prev_entry.is_none());
         assert_eq!(ret.qty.len(), 4);
@@ -283,7 +291,7 @@ pub(crate) async fn fetch_by_ctime_common(
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
                 (
                     oid.clone(),
-                    (seller_id, prod_id, create_time, q, refund.total),
+                    (seller_id, prod_id, create_time, q, refund.total()),
                 )
             })
         });
@@ -310,7 +318,7 @@ pub(crate) async fn fetch_by_oid_ctime_common(
             assert!(m.qty.len() >= 1);
             let (seller_id, prod_id) = (m.id_.store_id, m.id_.product_id);
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
-                (seller_id, prod_id, create_time, q, refund.total)
+                (seller_id, prod_id, create_time, q, refund.total())
             })
         });
         let expect: HashSet<UTflatReturnExpectData, RandomState> =

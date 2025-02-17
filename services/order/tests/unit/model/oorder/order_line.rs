@@ -21,21 +21,16 @@ pub(super) fn ut_setup_order_lines(
     )>
 ) -> Vec<OrderLineModel> {
     data.into_iter()
-        .map(|d| OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: d.0,
-                product_id: d.1,
-            },
-            price: OrderLinePriceModel {unit: d.2, total: d.3},
-            qty: OrderLineQuantityModel {
-                reserved: d.4,
-                paid: d.5,
-                paid_last_update: d.6,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: d.7,
-                warranty_until: d.8,
-            },
+        .map(|d| {
+            let id_ = OrderLineIdentity {store_id: d.0, product_id: d.1};
+            let price= OrderLinePriceModel::from((d.2, d.3));
+            let qty = OrderLineQuantityModel {
+                reserved: d.4, paid: d.5, paid_last_update: d.6,
+            };
+            let policy = OrderLineAppliedPolicyModel {
+                reserved_until: d.7, warranty_until: d.8,
+            };
+            OrderLineModel::from((id_, price, policy, qty))
         })
         .collect::<Vec<_>>()
 } // end of fn ut_setup_order_lines
@@ -62,11 +57,12 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
         seller_id,
         product_id,
         quantity: 26,
+        applied_attr: None,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
     let m = result.unwrap();
-    assert_eq!(m.price.unit, 1015u32);
-    assert_eq!(m.price.total, 1015u32 * 26u32);
+    assert_eq!(m.price().unit(), 1015u32);
+    assert_eq!(m.price().total(), 1015u32 * 26u32);
     assert_eq!(m.qty.reserved, 26);
     let timenow = LocalTime::now().fixed_offset();
     let expect_reserved_time = timenow + Duration::seconds(69i64);
@@ -95,11 +91,12 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
         seller_id,
         product_id,
         quantity: 9,
+        applied_attr: None,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
     let m = result.unwrap();
-    assert_eq!(m.price.unit, 987u32);
-    assert_eq!(m.price.total, 987u32 * 9u32);
+    assert_eq!(m.price().unit(), 987u32);
+    assert_eq!(m.price().total(), 987u32 * 9u32);
     assert_eq!(m.qty.reserved, 9u32);
 }
 
@@ -125,6 +122,7 @@ fn convert_from_req_dto_violate_rsv_limit() {
         seller_id,
         product_id,
         quantity: 11,
+        applied_attr: None,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
     assert!(result.is_err());
@@ -155,6 +153,7 @@ fn convert_from_req_dto_product_id_mismatch() {
         seller_id,
         product_id,
         quantity: 2,
+        applied_attr: None,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
     assert!(result.is_err());
@@ -228,7 +227,7 @@ fn update_payments_ok() {
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[0]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let expect = match m.id_.product_id {
+        let expect = match m.id().product_id {
             812u64 => (4u32, d_charge_time[0]),
             890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
@@ -248,7 +247,7 @@ fn update_payments_ok() {
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[1]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let expect = match m.id_.product_id {
+        let expect = match m.id().product_id {
             812u64 => (5u32, d_charge_time[1]),
             890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
@@ -285,7 +284,7 @@ fn update_payments_nonexist() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 889);
     assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::NotExist));
-    assert_eq!(models[0].id_.product_id, 812);
+    assert_eq!(models[0].id().product_id, 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
 } // end of fn update_payments_nonexist
@@ -316,10 +315,10 @@ fn update_payments_invalid_quantity() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 812);
     assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::InvalidQuantity));
-    assert_eq!(models[0].id_.product_id, 812);
+    assert_eq!(models[0].id().product_id, 812);
     assert_eq!(models[0].qty.paid, 0); // not modified
     assert!(models[0].qty.paid_last_update.is_none());
-    assert_eq!(models[1].id_.product_id, 890);
+    assert_eq!(models[1].id().product_id, 890);
     assert_eq!(models[1].qty.paid, 9);
     assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
 } // end of fn update_payments_invalid_quantity
@@ -358,14 +357,14 @@ fn update_payments_old_record_omitted() {
         errors[0].reason,
         OrderLinePayUpdateErrorReason::Omitted
     ));
-    assert_eq!(models[0].id_.product_id, 812);
+    assert_eq!(models[0].id().product_id, 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
     assert_eq!(
         models[0].qty.paid_last_update.as_ref().unwrap(),
         &d_charge_time
     );
-    assert_eq!(models[1].id_.product_id, 890);
+    assert_eq!(models[1].id().product_id, 890);
     assert_eq!(models[1].qty.paid, 1); // not modified
     assert_eq!(
         models[1].qty.paid_last_update.as_ref().unwrap(),

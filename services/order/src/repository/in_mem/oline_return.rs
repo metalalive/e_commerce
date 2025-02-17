@@ -59,8 +59,8 @@ mod _oline_return {
                     "{} {} {} {}",
                     time.format(QTY_KEY_FORMAT),
                     qty,
-                    refund.unit,
-                    refund.total
+                    refund.unit(),
+                    refund.total()
                 )
             })
             .collect::<Vec<_>>()
@@ -76,7 +76,7 @@ mod _oline_return {
                 tokens.next().unwrap().parse().unwrap(),
                 tokens.next().unwrap().parse().unwrap(),
             );
-            (time, (q, OrderLinePriceModel { unit, total }))
+            (time, (q, OrderLinePriceModel::from((unit, total))))
         });
         HashMap::from_iter(iter)
     }

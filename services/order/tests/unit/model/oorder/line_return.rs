@@ -9,82 +9,34 @@ use order::model::{
     OrderLineQuantityModel, OrderReturnModel,
 };
 
+#[rustfmt::skip]
 fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec<OrderLineModel> {
     let paid_last_update = dt_now - Duration::days(3);
     let reserved_until = dt_now + Duration::hours(2);
     let warranty_until = dt_now + Duration::hours(8);
-    vec![
-        OrderLineModel {
-            price: OrderLinePriceModel { unit: 7, total: 70 },
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 812, // type: Package,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            price: OrderLinePriceModel {
-                unit: 11,
-                total: 99,
-            },
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 890, // type: Item,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 7,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            price: OrderLinePriceModel { unit: 5, total: 80 },
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 574, // type: Package,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 16,
-                paid: 12,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            price: OrderLinePriceModel {
-                unit: 13,
-                total: 130,
-            },
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 257, // type: Item,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 10,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
+    [
+        (812, (7, 70), 10, 0, None),
+        (890, (11, 99), 9, 7, Some(paid_last_update)),
+        (574, (5, 80), 16, 12, Some(paid_last_update)),
+        (257, (13, 130), 10, 10, Some(paid_last_update)),
     ]
+    .into_iter()
+    .map(
+        |(product_id, (unit, total), reserved, paid, paid_last_update)| {
+            let args = (
+                OrderLineIdentity {store_id, product_id},
+                OrderLinePriceModel::from((unit, total)),
+                OrderLineAppliedPolicyModel {
+                    reserved_until, warranty_until,
+                },
+                OrderLineQuantityModel {
+                    reserved, paid, paid_last_update,
+                },
+            );
+            OrderLineModel::from(args)
+        },
+    )
+    .collect::<Vec<_>>()
 } // end of fn ut_saved_orderline_setup
 
 fn ut_saved_oline_return_setup(
@@ -107,23 +59,11 @@ fn ut_saved_oline_return_setup(
             qty: HashMap::from([
                 (
                     last_returned[0].clone(),
-                    (
-                        2u32,
-                        OrderLinePriceModel {
-                            unit: 13,
-                            total: 26,
-                        },
-                    ),
+                    (2u32, OrderLinePriceModel::from((13, 26))),
                 ),
                 (
                     last_returned[1].clone(),
-                    (
-                        1u32,
-                        OrderLinePriceModel {
-                            unit: 13,
-                            total: 13,
-                        },
-                    ),
+                    (1u32, OrderLinePriceModel::from((13, 13))),
                 ),
             ]),
         },
@@ -134,7 +74,7 @@ fn ut_saved_oline_return_setup(
             },
             qty: HashMap::from([(
                 last_returned[0].clone(),
-                (1u32, OrderLinePriceModel { unit: 5, total: 5 }),
+                (1u32, OrderLinePriceModel::from((5, 5))),
             )]),
         },
     ]
@@ -153,23 +93,15 @@ fn filter_request_ok() {
         assert_eq!(num_returned, 1u32);
         objs
     };
-    let data = vec![
-        OrderLineReqDto {
+    let data = [(890, 4), (574, 1), (257, 3)]
+        .into_iter()
+        .map(|(product_id, quantity)| OrderLineReqDto {
             seller_id,
-            product_id: 890,
-            quantity: 4,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 574,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 257,
-            quantity: 3,
-        },
-    ];
+            product_id,
+            quantity,
+            applied_attr: None,
+        })
+        .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_ok());
     if let Ok(modified) = result {
@@ -197,23 +129,15 @@ fn filter_request_err_nonexist() {
     let dt_now = Local::now().fixed_offset();
     let o_lines = ut_saved_orderline_setup(dt_now.clone(), seller_id);
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-    let data = vec![
-        OrderLineReqDto {
+    let data = [(890, 4), (574, 1), (1888, 666)]
+        .into_iter()
+        .map(|(product_id, quantity)| OrderLineReqDto {
             seller_id,
-            product_id: 890,
-            quantity: 4,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 574,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 1888,
-            quantity: 666,
-        },
-    ];
+            product_id,
+            quantity,
+            applied_attr: None,
+        })
+        .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_err());
     if let Err(es) = result {
@@ -238,23 +162,15 @@ fn filter_request_warranty_expired() {
         objs
     };
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-    let data = vec![
-        OrderLineReqDto {
+    let data = [(890, 1), (574, 1), (257, 2)]
+        .into_iter()
+        .map(|(product_id, quantity)| OrderLineReqDto {
             seller_id,
-            product_id: 890,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 574,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 257,
-            quantity: 2,
-        },
-    ];
+            product_id,
+            quantity,
+            applied_attr: None,
+        })
+        .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_err());
     if let Err(es) = result {
@@ -273,28 +189,15 @@ fn filter_request_invalid_qty() {
     let dt_now = Local::now().fixed_offset();
     let o_lines = ut_saved_orderline_setup(dt_now.clone(), seller_id);
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-    let data = vec![
-        OrderLineReqDto {
+    let data = [(9999, 1), (890, 3), (574, 16), (257, 2)]
+        .into_iter()
+        .map(|(product_id, quantity)| OrderLineReqDto {
             seller_id,
-            product_id: 9999,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 890,
-            quantity: 3,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 574,
-            quantity: 16,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 257,
-            quantity: 2,
-        },
-    ];
+            product_id,
+            quantity,
+            applied_attr: None,
+        })
+        .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_err());
     if let Err(es) = result {
@@ -321,29 +224,21 @@ fn filter_request_err_duplicate() {
         let mut objs = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
         let interval_secs = hard_limit::MIN_SECS_INTVL_REQ as i64;
         let key = OrderReturnModel::dtime_round_secs(&dt_now, interval_secs).unwrap();
-        let value = (2, OrderLinePriceModel { unit: 5, total: 10 });
+        let value = (2, OrderLinePriceModel::from((5, 10)));
         objs.last_mut().unwrap().qty.insert(key, value);
         assert_eq!(objs[1].id_.product_id, 574);
         assert_eq!(objs[1].qty.len(), 2);
         objs
     }; // assume the record is already added to the return model
-    let data = vec![
-        OrderLineReqDto {
+    let data = [(890, 3), (574, 1), (257, 1)]
+        .into_iter()
+        .map(|(product_id, quantity)| OrderLineReqDto {
             seller_id,
-            product_id: 890,
-            quantity: 3,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 574,
-            quantity: 1,
-        },
-        OrderLineReqDto {
-            seller_id,
-            product_id: 257,
-            quantity: 1,
-        },
-    ];
+            product_id,
+            quantity,
+            applied_attr: None,
+        })
+        .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_err());
     if let Err(es) = result {

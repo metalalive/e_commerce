@@ -250,23 +250,22 @@ fn ut_setup_orderlines(mock_seller_ids: &[u32; 2]) -> Vec<OrderLineModel> {
     ];
     rawdata
         .into_iter()
-        .map(
-            |(store_id, product_id, unit, total, reserved)| OrderLineModel {
-                id_: OrderLineIdentity {
-                    store_id,
-                    product_id,
-                },
-                price: OrderLinePriceModel { unit, total },
-                qty: OrderLineQuantityModel {
-                    reserved,
-                    paid: 0,
-                    paid_last_update: None,
-                },
-                policy: OrderLineAppliedPolicyModel {
-                    reserved_until,
-                    warranty_until,
-                },
-            },
-        )
+        .map(|(store_id, product_id, unit, total, reserved)| {
+            let id_ = OrderLineIdentity {
+                store_id,
+                product_id,
+            };
+            let price = OrderLinePriceModel::from((unit, total));
+            let qty = OrderLineQuantityModel {
+                reserved,
+                paid: 0,
+                paid_last_update: None,
+            };
+            let policy = OrderLineAppliedPolicyModel {
+                reserved_until,
+                warranty_until,
+            };
+            OrderLineModel::from((id_, price, policy, qty))
+        })
         .collect()
 } // end of ut_setup_orderlines

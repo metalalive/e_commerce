@@ -321,7 +321,7 @@ fn mock_reserve_usr_cb_0(
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(req.lines.len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines[0].id_.store_id, req.lines[0].id_.product_id);
+    let id_combo = (req.lines[0].id().store_id, req.lines[0].id().product_id);
     let product = match id_combo {
         (1001, 9004) | (1001, 9005) => {
             assert_eq!(saved_store.products.len(), 1);
@@ -353,7 +353,10 @@ pub(crate) fn mock_reserve_usr_cb_1(
     req: &OrderLineModelSet,
 ) -> AppStockRepoReserveReturn {
     for om in req.lines.iter() {
-        let result = ms.stores.iter_mut().find(|m| om.id_.store_id == m.store_id);
+        let result = ms
+            .stores
+            .iter_mut()
+            .find(|m| om.id().store_id == m.store_id);
         assert!(result.is_some());
         if let Some(s) = result {
             let result = s.try_reserve(req.order_id.as_str(), om);
@@ -387,24 +390,22 @@ pub(crate) async fn ut_reserve_init_setup(
     num_req: u32,
     order_id: &str,
 ) {
-    let order_req = vec![OrderLineModel {
-        id_: OrderLineIdentity {
+    let order_req = vec![{
+        let id_ = OrderLineIdentity {
             store_id,
             product_id,
-        },
-        qty: OrderLineQuantityModel {
+        };
+        let qty = OrderLineQuantityModel {
             reserved: num_req,
             paid: 0,
             paid_last_update: None,
-        },
-        policy: OrderLineAppliedPolicyModel {
+        };
+        let policy = OrderLineAppliedPolicyModel {
             reserved_until: mock_warranty.clone(),
             warranty_until: mock_warranty,
-        },
-        price: OrderLinePriceModel {
-            unit: 4,
-            total: 4 * num_req,
-        },
+        };
+        let price = OrderLinePriceModel::from((4, 4 * num_req));
+        OrderLineModel::from((id_, price, policy, qty))
     }];
     let ol_set = OrderLineModelSet {
         order_id: order_id.to_string(),
@@ -483,24 +484,23 @@ async fn try_reserve_ok() {
     ];
     let order_req: Vec<_> = order_req_data
         .iter()
-        .map(
-            |&(store_id, product_id, reserved, unit, total)| OrderLineModel {
-                id_: OrderLineIdentity {
-                    store_id,
-                    product_id,
-                },
-                qty: OrderLineQuantityModel {
-                    reserved,
-                    paid: 0,
-                    paid_last_update: None,
-                },
-                policy: OrderLineAppliedPolicyModel {
-                    reserved_until: mock_warranty.clone(),
-                    warranty_until: mock_warranty.clone(),
-                },
-                price: OrderLinePriceModel { unit, total },
-            },
-        )
+        .map(|&(store_id, product_id, reserved, unit, total)| {
+            let id_ = OrderLineIdentity {
+                store_id,
+                product_id,
+            };
+            let qty = OrderLineQuantityModel {
+                reserved,
+                paid: 0,
+                paid_last_update: None,
+            };
+            let policy = OrderLineAppliedPolicyModel {
+                reserved_until: mock_warranty,
+                warranty_until: mock_warranty,
+            };
+            let price = OrderLinePriceModel::from((unit, total));
+            OrderLineModel::from((id_, price, policy, qty))
+        })
         .collect();
 
     let ol_set = OrderLineModelSet {
@@ -542,7 +542,7 @@ fn mock_reserve_usr_cb_2(
     let result = ms.stores[0]
         .products
         .iter_mut()
-        .find(|p| req.lines[0].id_.product_id == p.id_);
+        .find(|p| req.lines[0].id().product_id == p.id_);
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.num_avail();
@@ -550,8 +550,8 @@ fn mock_reserve_usr_cb_2(
         assert!(num_avail > 0);
         assert!(num_avail < req.lines[0].qty.reserved);
         let err = OrderLineCreateErrorDto {
-            seller_id: req.lines[0].id_.store_id,
-            product_id: req.lines[0].id_.product_id,
+            seller_id: req.lines[0].id().store_id,
+            product_id: req.lines[0].id().product_id,
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
             nonexist: None,
             shortage: None,
@@ -562,7 +562,7 @@ fn mock_reserve_usr_cb_2(
     let result = ms.stores[0]
         .products
         .iter_mut()
-        .find(|p| req.lines[1].id_.product_id == p.id_);
+        .find(|p| req.lines[1].id().product_id == p.id_);
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.num_avail();
@@ -570,8 +570,8 @@ fn mock_reserve_usr_cb_2(
         assert!(num_avail == 0);
         assert!(num_avail < req.lines[1].qty.reserved);
         let err = OrderLineCreateErrorDto {
-            seller_id: req.lines[1].id_.store_id,
-            product_id: req.lines[1].id_.product_id,
+            seller_id: req.lines[1].id().store_id,
+            product_id: req.lines[1].id().product_id,
             reason: OrderLineCreateErrorReason::OutOfStock,
             nonexist: None,
             shortage: None,
@@ -600,43 +600,30 @@ async fn try_reserve_shortage() {
     }; // assume someone already booked for some items
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    let order_req = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1001,
-                product_id: all_products[0].id_,
+    let order_req: Vec<_> = [
+        (1001, all_products[0].id_, 3, (4, 11)),
+        (1001, all_products[1].id_, 9, (20, 179)),
+    ]
+    .into_iter()
+    .map(|(store_id, product_id, reserved, (unit, total))| {
+        OrderLineModel::from((
+            OrderLineIdentity {
+                store_id,
+                product_id,
             },
-            qty: OrderLineQuantityModel {
-                reserved: 3,
+            OrderLinePriceModel::from((unit, total)),
+            OrderLineAppliedPolicyModel {
+                reserved_until: mock_warranty,
+                warranty_until: mock_warranty,
+            },
+            OrderLineQuantityModel {
+                reserved,
                 paid: 0,
                 paid_last_update: None,
             },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            price: OrderLinePriceModel { unit: 4, total: 11 },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1001,
-                product_id: all_products[1].id_,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            price: OrderLinePriceModel {
-                unit: 20,
-                total: 179,
-            },
-        },
-    ];
+        ))
+    })
+    .collect();
     let ol_set = OrderLineModelSet {
         order_id: "xx1".to_string(),
         lines: order_req,
@@ -699,24 +686,22 @@ async fn try_reserve_user_cb_err() {
     }; // assume someone already booked for some items
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    let order_req = vec![OrderLineModel {
-        id_: OrderLineIdentity {
+    let order_req = vec![{
+        let id_ = OrderLineIdentity {
             store_id: expect_slset.stores[0].store_id,
             product_id: all_products[2].id_,
-        },
-        qty: OrderLineQuantityModel {
+        };
+        let qty = OrderLineQuantityModel {
             reserved: 9,
             paid: 0,
             paid_last_update: None,
-        },
-        policy: OrderLineAppliedPolicyModel {
-            reserved_until: mock_warranty.clone(),
-            warranty_until: mock_warranty.clone(),
-        },
-        price: OrderLinePriceModel {
-            unit: 20,
-            total: 179,
-        },
+        };
+        let policy = OrderLineAppliedPolicyModel {
+            reserved_until: mock_warranty,
+            warranty_until: mock_warranty,
+        };
+        let price = OrderLinePriceModel::from((20, 179));
+        OrderLineModel::from((id_, price, policy, qty))
     }];
     let ol_set = OrderLineModelSet {
         order_id: "xx1".to_string(),

@@ -215,7 +215,7 @@ impl StoreStockModel {
         let _satisfied = self
             .products
             .iter()
-            .filter(|p| req.id_.product_id == p.id_)
+            .filter(|p| req.id().product_id == p.id_)
             .any(|p| {
                 let num_taking = min(p.quantity.num_avail(), num_required);
                 num_required -= num_taking;
@@ -227,7 +227,7 @@ impl StoreStockModel {
             let _ = self
                 .products
                 .iter_mut()
-                .filter(|p| req.id_.product_id == p.id_)
+                .filter(|p| req.id().product_id == p.id_)
                 .any(|p| {
                     let num_taking = p.quantity.reserve(oid, num_required);
                     num_required -= num_taking;
@@ -406,8 +406,8 @@ impl StockLevelModelSet {
             .iter()
             .filter_map(|req| {
                 let mut error = OrderLineCreateErrorDto {
-                    seller_id: req.id_.store_id,
-                    product_id: req.id_.product_id,
+                    seller_id: req.id().store_id,
+                    product_id: req.id().product_id,
                     rsv_limit: None,
                     shortage: None,
                     reason: OrderLineCreateErrorReason::NotExist,
@@ -416,7 +416,7 @@ impl StockLevelModelSet {
                 let result = self
                     .stores
                     .iter_mut()
-                    .find(|m| req.id_.store_id == m.store_id);
+                    .find(|m| req.id().store_id == m.store_id);
                 let opt_err = if let Some(store) = result {
                     if let Some((errtype, num)) = store.try_reserve(oid, req) {
                         error.shortage = Some(num);

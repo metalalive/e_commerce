@@ -44,7 +44,11 @@ async fn fetch_request_by_id_ok() {
                     _others => (0usize, 0u32, 0u32),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -76,7 +80,11 @@ async fn fetch_request_by_id_ok() {
                     _others => (0usize, 0u32, 0u32),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })

@@ -112,10 +112,10 @@ async fn update_payment_ok() {
     assert!(result.is_ok());
     if let Ok(mut lines) = result {
         assert_eq!(lines.len(), 3);
-        lines.sort_by(|a, b| a.id_.product_id.cmp(&b.id_.product_id));
+        lines.sort_by(|a, b| a.id().product_id.cmp(&b.id().product_id));
         let fn1 =
             |line: OrderLineModel, exp_product_id: u64, exp_paid: u32, exp_duration: Duration| {
-                assert_eq!(line.id_.product_id, exp_product_id);
+                assert_eq!(line.id().product_id, exp_product_id);
                 assert_eq!(line.qty.paid, exp_paid);
                 let expect = create_time.round_subsecs(1) + exp_duration;
                 let actual = line.qty.paid_last_update.unwrap().round_subsecs(1);

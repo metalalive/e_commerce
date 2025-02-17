@@ -62,8 +62,8 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
                         args.add(prod_id).unwrap();
                         args.add(ctime.naive_utc()).unwrap();
                         args.add(qty).unwrap();
-                        args.add(refund.unit).unwrap();
-                        args.add(refund.total).unwrap();
+                        args.add(refund.unit()).unwrap();
+                        args.add(refund.total()).unwrap();
                         seq_start += 1;
                     })
                     .count();
@@ -178,7 +178,7 @@ impl ReturnsPerOrder {
         let quantity = row.try_get::<u32, usize>(3)?;
         let unit = row.try_get::<u32, usize>(4)?;
         let total = row.try_get::<u32, usize>(5)?;
-        let refund = OrderLinePriceModel { unit, total };
+        let refund = OrderLinePriceModel::from((unit, total));
         saved_ret.qty.insert(create_time, (quantity, refund));
         Ok(())
     }

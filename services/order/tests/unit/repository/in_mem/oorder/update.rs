@@ -109,7 +109,7 @@ fn ut_usr_cb_ok_1(
         .map(|d| {
             let result = models
                 .iter_mut()
-                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
+                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -136,7 +136,7 @@ fn ut_usr_cb_ok_2(
         .map(|d| {
             let result = models
                 .iter()
-                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
+                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, d.qty);
@@ -224,7 +224,7 @@ fn ut_usr_cb_err_2(
         .map(|d| {
             let result = models
                 .iter()
-                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
+                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -301,7 +301,7 @@ fn ut_rd_oline_set_usr_cb<'a>(
         assert_eq!(ol_set.owner_id, owner_id);
         let mut product_id_set: HashSet<(u32, u64)> = HashSet::from_iter(product_ids.into_iter());
         let all_items_found = ol_set.lines.iter().all(|m| {
-            let key = (m.id_.store_id, m.id_.product_id);
+            let key = (m.id().store_id, m.id().product_id);
             product_id_set.remove(&key)
         });
         assert!(all_items_found);

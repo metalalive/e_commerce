@@ -6,9 +6,8 @@ use std::vec::Vec;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::rpc::dto::{
-    ProdAttrPriceSetDto, ProdAttrValueDto, ProductAttrPriceDto, ProductPriceEditDto,
-};
+use order::api::dto::ProdAttrValueDto;
+use order::api::rpc::dto::{ProdAttrPriceSetDto, ProductAttrPriceDto, ProductPriceEditDto};
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 
 #[rustfmt::skip]

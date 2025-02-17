@@ -158,7 +158,7 @@ mod _orderline {
         data: &[OrderLineModel],
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         let kv_iter = data.iter().map(|m| {
-            let pkey = inmem_pkey(oid, m.id_.store_id, m.id_.product_id);
+            let pkey = inmem_pkey(oid, m.id().store_id, m.id().product_id);
             (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
@@ -289,8 +289,8 @@ pub struct OrderInMemRepo {
 
 impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
     fn from(value: &OrderLineModel) -> Self {
-        let seller_id_s = value.id_.store_id.to_string();
-        let prod_id = value.id_.product_id.to_string();
+        let seller_id_s = value.id().store_id.to_string();
+        let prod_id = value.id().product_id.to_string();
         let _paid_last_update = if let Some(v) = value.qty.paid_last_update.as_ref() {
             v.to_rfc3339()
         } else {
@@ -312,11 +312,11 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
             ),
             (
                 _orderline::InMemColIdx::PriceUnit,
-                value.price.unit.to_string(),
+                value.price().unit().to_string(),
             ),
             (
                 _orderline::InMemColIdx::PriceTotal,
-                value.price.total.to_string(),
+                value.price().total().to_string(),
             ),
             (
                 _orderline::InMemColIdx::PolicyReserved,
@@ -348,14 +348,13 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
         let product_id = row
             .get::<usize>(_orderline::InMemColIdx::ProductId.into())
             .unwrap().parse().unwrap();
-        let price = OrderLinePriceModel {
-            unit: row
-                .get::<usize>(_orderline::InMemColIdx::PriceUnit.into())
+        let args: (u32, u32) = (
+            row.get::<usize>(_orderline::InMemColIdx::PriceUnit.into())
                 .unwrap().parse().unwrap(),
-            total: row
-                .get::<usize>(_orderline::InMemColIdx::PriceTotal.into())
-                .unwrap().parse().unwrap(),
-        };
+            row.get::<usize>(_orderline::InMemColIdx::PriceTotal.into())
+                .unwrap().parse().unwrap()
+        );
+        let price = OrderLinePriceModel::from(args);
         let qty_paid_last_update = {
             let p = row.get::<usize>(_orderline::InMemColIdx::QtyPaidLastUpdate.into());
             let p = p.unwrap().as_str();
@@ -386,13 +385,8 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
             DateTime::parse_from_rfc3339(s.as_str()).unwrap()
         };
         let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id,
-            },
-            price, policy, qty,
-        }
+        let id_ = OrderLineIdentity { store_id: seller_id, product_id };
+        OrderLineModel::from((id_, price, policy, qty))
     }
 } // end of impl into OrderLineModel
 

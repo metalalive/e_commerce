@@ -142,10 +142,10 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
                 args.add(oid.as_column()).unwrap();
                 args.add(seq as u16).unwrap(); // match the column type in db table
                 seq += 1;
-                args.add(o.id_.store_id).unwrap();
-                args.add(o.id_.product_id).unwrap();
-                args.add(o.price.unit).unwrap();
-                args.add(o.price.total).unwrap();
+                args.add(o.id().store_id).unwrap();
+                args.add(o.id().product_id).unwrap();
+                args.add(o.price().unit()).unwrap();
+                args.add(o.price().total()).unwrap();
                 args.add(o.qty.reserved).unwrap();
                 args.add(rsved_until).unwrap();
                 args.add(warranty_until).unwrap();
@@ -332,8 +332,8 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
         lines
             .iter()
             .map(|line| {
-                args.add(line.id_.store_id).unwrap();
-                args.add(line.id_.product_id).unwrap();
+                args.add(line.id().store_id).unwrap();
+                args.add(line.id().product_id).unwrap();
                 args.add(line.qty.paid).unwrap();
             })
             .count();
@@ -341,8 +341,8 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
             .iter()
             .map(|line| {
                 let time = line.qty.paid_last_update.as_ref().unwrap();
-                args.add(line.id_.store_id).unwrap();
-                args.add(line.id_.product_id).unwrap();
+                args.add(line.id().store_id).unwrap();
+                args.add(line.id().product_id).unwrap();
                 args.add(time.naive_utc()).unwrap();
             })
             .count();
@@ -350,9 +350,8 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
         lines
             .into_iter()
             .map(|line| {
-                let id_ = line.id_;
-                args.add(id_.store_id).unwrap();
-                args.add(id_.product_id).unwrap();
+                args.add(line.id().store_id).unwrap();
+                args.add(line.id().product_id).unwrap();
             })
             .count();
         args
@@ -488,10 +487,10 @@ impl TryFrom<OLineRow> for OrderLineModel {
         let warranty_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
 
         let id_ = OrderLineIdentity {store_id, product_id};
-        let price = OrderLinePriceModel { unit, total };
+        let price = OrderLinePriceModel::from((unit, total));
         let qty = OrderLineQuantityModel {reserved, paid, paid_last_update};
         let policy = OrderLineAppliedPolicyModel {warranty_until, reserved_until};
-        Ok(OrderLineModel {id_, price, qty, policy})
+        Ok(OrderLineModel::from((id_, price, policy, qty)))
     }
 } // end of impl OrderLineModel
 

@@ -30,7 +30,7 @@ fn ut_setup_olines_gen_stock(
     olines
         .iter()
         .map(|ol| {
-            let store_id = ol.id_.store_id;
+            let store_id = ol.id().store_id;
             if stores.get_mut(&store_id).is_none() {
                 let value = StoreStockModel {
                     store_id,
@@ -40,7 +40,7 @@ fn ut_setup_olines_gen_stock(
             }
             let store = stores.get_mut(&store_id).unwrap();
             let value = ProductStockModel {
-                id_: ol.id_.product_id,
+                id_: ol.id().product_id,
                 is_create: true,
                 expiry: mock_expiry.into(),
                 quantity: StockQuantityModel {
@@ -146,15 +146,15 @@ async fn ut_verify_fetch_all_olines(
         assert_eq!(lines.len(), ORDERS_NUM_LINES[0]);
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
         assert_eq!(lines[0].qty.reserved, 4);
-        assert_eq!(lines[0].id_.store_id, mock_seller_ids[0]);
-        assert_eq!(lines[0].id_.product_id, 190);
-        assert_eq!(lines[0].price.unit, 10);
-        assert_eq!(lines[0].price.total, 39);
+        assert_eq!(lines[0].id().store_id, mock_seller_ids[0]);
+        assert_eq!(lines[0].id().product_id, 190);
+        assert_eq!(lines[0].price().unit(), 10);
+        assert_eq!(lines[0].price().total(), 39);
         assert_eq!(lines[2].qty.reserved, 6);
-        assert_eq!(lines[2].id_.store_id, mock_seller_ids[1]);
-        assert_eq!(lines[2].id_.product_id, 1190);
-        assert_eq!(lines[2].price.unit, 40);
-        assert_eq!(lines[2].price.total, 225);
+        assert_eq!(lines[2].id().store_id, mock_seller_ids[1]);
+        assert_eq!(lines[2].id().product_id, 1190);
+        assert_eq!(lines[2].price().unit(), 40);
+        assert_eq!(lines[2].price().total(), 225);
     }
     let result = o_repo.fetch_all_lines(mock_oid[1].clone()).await;
     assert!(result.is_ok());
@@ -162,10 +162,10 @@ async fn ut_verify_fetch_all_olines(
         assert_eq!(lines.len(), ORDERS_NUM_LINES[1]);
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
         assert_eq!(lines[0].qty.reserved, 16);
-        assert_eq!(lines[0].id_.store_id, mock_seller_ids[1]);
-        assert_eq!(lines[0].id_.product_id, 194);
-        assert_eq!(lines[0].price.unit, 15);
-        assert_eq!(lines[0].price.total, 240);
+        assert_eq!(lines[0].id().store_id, mock_seller_ids[1]);
+        assert_eq!(lines[0].id().product_id, 194);
+        assert_eq!(lines[0].price().unit(), 15);
+        assert_eq!(lines[0].price().total(), 240);
     }
 }
 
@@ -195,8 +195,8 @@ async fn ut_verify_fetch_specific_olines(
     if let Ok(mut lines) = result {
         assert_eq!(lines.len(), 2);
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
-        assert!(lines[0].id_ == pids[2]);
-        assert!(lines[1].id_ == pids[0]);
+        assert!(lines[0].id() == &pids[2]);
+        assert!(lines[1].id() == &pids[0]);
         assert_eq!(lines[0].qty.reserved, 4);
         assert_eq!(lines[1].qty.reserved, 10);
     }
@@ -214,8 +214,8 @@ async fn ut_verify_fetch_specific_olines(
     if let Ok(mut lines) = result {
         assert_eq!(lines.len(), 2);
         lines.sort_by(|a, b| a.qty.reserved.cmp(&b.qty.reserved));
-        assert!(lines[0].id_ == pids[0]);
-        assert!(lines[1].id_ == pids[2]);
+        assert!(lines[0].id() == &pids[0]);
+        assert!(lines[1].id() == &pids[2]);
         assert_eq!(lines[0].qty.reserved, 20);
         assert_eq!(lines[1].qty.reserved, 33);
     }

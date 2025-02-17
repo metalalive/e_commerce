@@ -160,7 +160,7 @@ fn mock_reserve_usr_cb_0(
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(req.lines.len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines[0].id_.store_id, req.lines[0].id_.product_id);
+    let id_combo = (req.lines[0].id().store_id, req.lines[0].id().product_id);
     let product = match id_combo {
         (1013, 9006) => saved_store
             .products
@@ -302,16 +302,16 @@ fn mock_reserve_usr_cb_2(
         .count();
     let errors = vec![
         OrderLineCreateErrorDto {
-            seller_id: req.lines[0].id_.store_id,
-            product_id: req.lines[0].id_.product_id,
+            seller_id: req.lines[0].id().store_id,
+            product_id: req.lines[0].id().product_id,
             nonexist: None,
             rsv_limit: None,
             shortage: Some(2),
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
         },
         OrderLineCreateErrorDto {
-            seller_id: req.lines[1].id_.store_id,
-            product_id: req.lines[1].id_.product_id,
+            seller_id: req.lines[1].id().store_id,
+            product_id: req.lines[1].id().product_id,
             nonexist: None,
             rsv_limit: None,
             shortage: Some(1),
@@ -412,7 +412,7 @@ fn mock_reserve_usr_cb_3(
         .iter()
         .map(|line| {
             let mut line_rsv_req = line.qty.reserved;
-            match line.id_.product_id {
+            match line.id().product_id {
                 9006 => inner_try_reserve!(9006, 120, 14, store.products, oid, line_rsv_req),
                 9008 => inner_try_reserve!(9008, 49, 37, store.products, oid, line_rsv_req),
                 _others => {

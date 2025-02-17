@@ -9,9 +9,9 @@ use tokio::time::sleep;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
+use order::api::dto::ProdAttrValueDto;
 use order::api::rpc::dto::{
-    ProdAttrPriceSetDto, ProdAttrValueDto, ProductAttrPriceDto, ProductPriceDeleteDto,
-    ProductPriceEditDto,
+    ProdAttrPriceSetDto, ProductAttrPriceDto, ProductPriceDeleteDto, ProductPriceEditDto,
 };
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::{app_repo_product_price, AbsProductPriceRepo};

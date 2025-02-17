@@ -6,19 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::CurrencyDto;
 
-use crate::api::dto::ShippingDto;
+use crate::api::dto::{ProdAttrValueDto, ShippingDto};
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
     pub items: Option<Vec<u64>>,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum ProdAttrValueDto {
-    Int(i32),
-    Str(String),
-    Bool(bool),
 }
 
 #[derive(Deserialize)]

@@ -8,7 +8,8 @@ use std::vec::Vec;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
-use crate::api::rpc::dto::{ProdAttrPriceSetDto, ProdAttrValueDto, ProductPriceEditDto};
+use crate::api::dto::ProdAttrValueDto;
+use crate::api::rpc::dto::{ProdAttrPriceSetDto, ProductPriceEditDto};
 use crate::api::web::dto::OrderLineReqDto;
 use crate::error::AppError;
 
@@ -21,7 +22,7 @@ pub type ProductPriceCreateArgs = (u64, u32, [DateTime<FixedOffset>; 3], ProdAtt
 struct ProdAttriPriceModel {
     pricing: ProdAttrPricingMap,
     last_update: DateTime<FixedOffset>,
-}
+} // TODO, expose to order-line module for reuse
 
 #[derive(Debug, Eq)]
 pub struct ProductPriceModel {
