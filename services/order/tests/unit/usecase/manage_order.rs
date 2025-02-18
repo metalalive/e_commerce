@@ -11,10 +11,11 @@ use ecommerce_common::api::rpc::dto::OrderReplicaRefundReqDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
 
+use order::api::dto::ProdAttrValueDto;
 use order::api::rpc::dto::{
     OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, StockReturnErrorDto,
 };
-use order::api::web::dto::OrderLineReqDto;
+use order::api::web::dto::{OlineProductAttrDto, OrderLineReqDto};
 use order::constant::app_meta;
 use order::error::AppError;
 use order::model::{
@@ -61,8 +62,13 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
         let start_after = DateTime::parse_from_rfc3339(d.1).unwrap();
         let end_before =  DateTime::parse_from_rfc3339(d.2).unwrap();
         let attr_lastupdate = start_after;
+        let attr_map = HashMap::from([
+            ("goat-true".to_string(), 9i32),
+            ("sheep-kit".to_string(), 8),
+            ("buflo-56".to_string(), 19)
+        ]);
         let ts = [start_after , end_before, attr_lastupdate];
-        let args = (d.0, d.3, ts, None);
+        let args = (d.0, d.3, ts, Some(attr_map));
         ProductPriceModel::from(args)
     };
     vec![
@@ -83,6 +89,7 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
                 (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", 480u32),
                 (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 490),
                 (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 399),
+                (1080,"2020-05-01T21:49:04+02:00", "2024-08-31T09:01:55-10:00", 28),
             ]
             .into_iter().map(raw2obj).collect::<Vec<_>>(),
         },
@@ -122,15 +129,31 @@ fn ut_setup_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
 fn validate_orderline_ok() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
-    let data = [(52u32, 168u64, 6u32), (51, 1168, 1), (51, 168, 10)]
-        .into_iter()
-        .map(|d| OrderLineReqDto {
+    let data = [
+        (52u32, 168u64, 6u32, "goat", ProdAttrValueDto::Bool(true)),
+        (
+            51,
+            1168,
+            1,
+            "sheep",
+            ProdAttrValueDto::Str("kit".to_string()),
+        ),
+        (51, 168, 10, "buflo", ProdAttrValueDto::Int(56)),
+    ]
+    .into_iter()
+    .map(|d| {
+        let oline_attr = OlineProductAttrDto {
+            label_id: d.3.to_string(),
+            value: d.4,
+        };
+        OrderLineReqDto {
             seller_id: d.0,
             product_id: d.1,
             quantity: d.2,
-            applied_attr: None,
-        })
-        .collect::<Vec<_>>();
+            applied_attr: Some(vec![oline_attr]),
+        }
+    })
+    .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_ok());
     if let Ok(v) = result {
@@ -156,49 +179,52 @@ fn validate_orderline_client_errors() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
     let data = [
-        (51u32, 169u64, 6u32),
-        (52, 174, 4),
-        (52, 900, 2),
-        (51, 1168, 11),
-        (52, 901, 9),
+        (51u32, 169u64, 6u32, None),
+        (52, 174, 4, None),
+        (52, 900, 2, None),
+        (51, 1168, 11, None),
+        (52, 901, 9, None),
+        (52, 1080, 12, Some(("alpaca", ProdAttrValueDto::Bool(true)))),
     ]
     .into_iter()
-    .map(|d| OrderLineReqDto {
-        seller_id: d.0,
-        product_id: d.1,
-        quantity: d.2,
-        applied_attr: None,
+    .map(|d| {
+        let oline_attr = d.3.map(|c| {
+            vec![OlineProductAttrDto {
+                label_id: c.0.to_string(),
+                value: c.1,
+            }]
+        });
+        OrderLineReqDto {
+            seller_id: d.0,
+            product_id: d.1,
+            quantity: d.2,
+            applied_attr: oline_attr,
+        }
     })
     .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_err());
     if let Err(CreateOrderUsKsErr::ReqContent(v)) = result {
         let errs = v.order_lines.unwrap();
-        assert_eq!(errs.len(), 4);
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 900)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(v.product_policy);
-            assert!(!v.product_price);
-        }
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 901)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(v.product_policy);
-            assert!(!v.product_price);
-        }
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 174)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(!v.product_policy);
-            assert!(v.product_price);
-        }
+        assert_eq!(errs.len(), 5);
+        [
+            (52, 900, true, false),
+            (52, 901, true, false),
+            (52, 174, false, true),
+            (52, 1080, true, true),
+        ]
+        .into_iter()
+        .map(|d| {
+            let found = errs
+                .iter()
+                .find(|e| e.seller_id == d.0 && e.product_id == d.1)
+                .unwrap();
+            if let Some(v) = found.nonexist.as_ref() {
+                assert_eq!(v.product_policy, d.2);
+                assert_eq!(v.product_price, d.3);
+            }
+        })
+        .count();
         let found = errs
             .iter()
             .find(|e| e.seller_id == 51 && e.product_id == 169)

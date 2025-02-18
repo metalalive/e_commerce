@@ -19,7 +19,7 @@ type ProdAttrPricingMap = Option<HashMap<String, i32>>;
 pub type ProductPriceCreateArgs = (u64, u32, [DateTime<FixedOffset>; 3], ProdAttrPricingMap);
 
 #[derive(Debug, Clone, Eq)]
-struct ProdAttriPriceModel {
+pub(super) struct ProdAttriPriceModel {
     pricing: ProdAttrPricingMap,
     last_update: DateTime<FixedOffset>,
 } // TODO, expose to order-line module for reuse
@@ -117,6 +117,16 @@ impl ProdAttriPriceModel {
             }
         })
     }
+    pub(super) fn total_amount(&self) -> DefaultResult<i32, AppError> {
+        self.pricing.as_ref().map_or(Ok(0i32), |m| {
+            m.values()
+                .try_fold(0i32, |acc, &num| acc.checked_add(num))
+                .ok_or_else(|| AppError {
+                    code: AppErrorCode::DataCorruption,
+                    detail: Some("prod-attr-price-sum-overflow".to_string()),
+                })
+        })
+    }
 } // end of impl ProdAttriPriceModel
 
 impl<'a> TryFrom<&'a ProductPriceEditDto> for ProductPriceModel {
@@ -199,6 +209,71 @@ impl ProductPriceModel {
     pub(crate) fn deserialize_attrmap(raw: &str) -> DefaultResult<ProdAttrPricingMap, AppError> {
         ProdAttriPriceModel::deserialize_map(raw)
     }
+
+    fn find_product(&self, d: &OrderLineReqDto) -> bool {
+        // TODO, validate expiry of the pricing rule
+        let id_match = self.product_id() == d.product_id;
+        let chosen_attr_match = d.applied_attr.as_ref().map_or(true, |chosen| {
+            if chosen.is_empty() {
+                true
+            } else {
+                self.attr_price_map().as_ref().map_or(false, |vm| {
+                    chosen.iter().all(|c| {
+                        let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
+                        vm.contains_key(&k)
+                    })
+                })
+            }
+        });
+        id_match && chosen_attr_match
+    }
+
+    pub(super) fn extract_attributes(
+        &self,
+        d: &OrderLineReqDto,
+    ) -> DefaultResult<ProdAttriPriceModel, AppError> {
+        let newmap = if let Some(chosen) = d.applied_attr.as_ref() {
+            if chosen.is_empty() {
+                None
+            } else {
+                if let Some(vm) = self.attr_price_map().as_ref() {
+                    let mut nonexist = Vec::new();
+                    let map_iter = chosen.iter().filter_map(|c| {
+                        let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
+                        if let Some(extra_amount) = vm.get(&k) {
+                            Some((k, *extra_amount))
+                        } else {
+                            nonexist.push(c);
+                            None
+                        }
+                    });
+                    let map = HashMap::from_iter(map_iter);
+                    if nonexist.is_empty() {
+                        Some(map)
+                    } else {
+                        let detail = format!("price-attr-extract-fail : {:?}", nonexist);
+                        return Err(AppError {
+                            code: AppErrorCode::InvalidInput,
+                            detail: Some(detail),
+                        });
+                    }
+                } else {
+                    let detail = format!("price-attr-extract-fail : {:?}", chosen);
+                    return Err(AppError {
+                        code: AppErrorCode::InvalidInput,
+                        detail: Some(detail),
+                    });
+                }
+            }
+        } else {
+            None
+        };
+        Ok(ProdAttriPriceModel {
+            pricing: newmap,
+            last_update: self.attr_lastupdate(),
+        })
+    } // end of fn extract_attributes
+
     fn update(&mut self, d: &ProductPriceEditDto) -> DefaultResult<(), AppError> {
         (self.price, self.end_before) = (d.price, d.end_before);
         self.start_after = d.start_after;
@@ -256,9 +331,8 @@ impl ProductPriceModelSet {
     } // end of fn update
 
     pub(crate) fn find_product(&self, d: &OrderLineReqDto) -> Option<&ProductPriceModel> {
-        // TODO, validate expiry of the pricing rule
         if self.store_id == d.seller_id {
-            self.items.iter().find(|m| m.product_id() == d.product_id)
+            self.items.iter().find(|m| m.find_product(d))
         } else {
             None
         }

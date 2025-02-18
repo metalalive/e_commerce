@@ -46,7 +46,7 @@ pub struct ShippingDto {
     pub option: Vec<ShippingOptionDto>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 pub enum ProdAttrValueDto {
     Int(i32),

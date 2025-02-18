@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Duration, FixedOffset, Local as LocalTime};
 use rust_decimal::Decimal;
 
@@ -5,7 +7,8 @@ use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::web::dto::OrderLineReqDto;
+use order::api::dto::ProdAttrValueDto;
+use order::api::web::dto::{OlineProductAttrDto, OrderLineReqDto};
 use order::model::{
     CurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
     OrderLinePriceModel, OrderLineQuantityModel, ProductPolicyModel, ProductPriceModel,
@@ -130,6 +133,125 @@ fn convert_from_req_dto_violate_rsv_limit() {
         assert_eq!(e.code, AppErrorCode::ExceedingMaxLimit);
     }
 }
+
+#[test]
+fn convert_from_req_with_attributes_ok() {
+    let (seller_id, product_id) = (19, 146);
+    let policym = ProductPolicyModel {
+        product_id,
+        is_create: false,
+        auto_cancel_secs: 69,
+        warranty_hours: 23,
+        max_num_rsv: 29,
+        min_num_rsv: 5,
+    };
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap();
+        let attr_lastupdate = DateTime::parse_from_rfc3339("2022-10-03T07:56:04+03:30").unwrap();
+        let ts = [start_after, end_before, attr_lastupdate];
+        let attrmap = HashMap::from([
+            ("Foxn-87".to_string(), 3),
+            ("pln9-995".to_string(), 17),
+            ("bonb-154".to_string(), 19),
+        ]);
+        ProductPriceModel::from((product_id, 487, ts, Some(attrmap)))
+    };
+    [
+        (Vec::new(), 487u32),
+        (vec![("Foxn", 87), ("pln9", 995)], 507),
+        (vec![("Foxn", 87), ("bonb", 154)], 509),
+        (vec![("pln9", 995), ("bonb", 154)], 523),
+        (vec![("Foxn", 87), ("pln9", 995), ("bonb", 154)], 526),
+    ]
+    .into_iter()
+    .map(|raw| {
+        let (ds, expect_unitprice) = raw;
+        let applied_attr = ds
+            .into_iter()
+            .map(|v| OlineProductAttrDto {
+                label_id: v.0.to_string(),
+                value: ProdAttrValueDto::Int(v.1),
+            })
+            .collect::<Vec<_>>();
+        let data = OrderLineReqDto {
+            seller_id,
+            product_id,
+            quantity: 11,
+            applied_attr: Some(applied_attr),
+        };
+        let result = OrderLineModel::try_from(data, &policym, &pricem);
+        let m = result.unwrap();
+        assert_eq!(m.price().unit(), expect_unitprice);
+        assert_eq!(m.price().total(), expect_unitprice * 11u32);
+        assert_eq!(m.qty.reserved, 11u32);
+    })
+    .count();
+} // end of fn convert_from_req_with_attributes_ok
+
+#[test]
+fn convert_from_req_with_attributes_error() {
+    let (seller_id, product_id) = (19, 146);
+    let policym = ProductPolicyModel {
+        product_id,
+        is_create: false,
+        auto_cancel_secs: 69,
+        warranty_hours: 23,
+        max_num_rsv: 29,
+        min_num_rsv: 5,
+    };
+    let pricem = {
+        let start_after = DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap();
+        let end_before = DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap();
+        let attr_lastupdate = DateTime::parse_from_rfc3339("2022-10-03T07:56:04+03:30").unwrap();
+        let ts = [start_after, end_before, attr_lastupdate];
+        let attrmap = HashMap::from([
+            ("aNzo-871".to_string(), 5),
+            ("pln9-995".to_string(), i32::MAX),
+            ("lama-230".to_string(), i32::MIN),
+            ("jucy-319".to_string(), -50000),
+        ]);
+        ProductPriceModel::from((product_id, 350, ts, Some(attrmap)))
+    };
+    [
+        (
+            vec![("aNzo", 871), ("xxxx", 995)],
+            AppErrorCode::InvalidInput,
+        ),
+        (
+            vec![("aNzo", 871), ("pln9", 995)],
+            AppErrorCode::DataCorruption,
+        ),
+        (vec![("pln9", 995)], AppErrorCode::DataCorruption),
+        (
+            vec![("lama", 230), ("jucy", 319)],
+            AppErrorCode::DataCorruption,
+        ),
+    ]
+    .into_iter()
+    .map(|raw| {
+        let (ds, expect_ecode) = raw;
+        let applied_attr = ds
+            .into_iter()
+            .map(|v| OlineProductAttrDto {
+                label_id: v.0.to_string(),
+                value: ProdAttrValueDto::Int(v.1),
+            })
+            .collect::<Vec<_>>();
+        let data = OrderLineReqDto {
+            seller_id,
+            product_id,
+            quantity: 11,
+            applied_attr: Some(applied_attr),
+        };
+        let result = OrderLineModel::try_from(data, &policym, &pricem);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert_eq!(e.code, expect_ecode);
+        }
+    })
+    .count();
+} // end of fn convert_from_req_with_attributes_error
 
 #[test]
 fn convert_from_req_dto_product_id_mismatch() {

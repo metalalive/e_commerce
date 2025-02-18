@@ -26,6 +26,7 @@ use crate::constant::hard_limit;
 use crate::error::AppError;
 use crate::generate_custom_uid;
 
+use super::product_price::ProdAttriPriceModel;
 use super::{
     BaseProductIdentity, CurrencyModel, OrderCurrencyModel, ProductPolicyModel, ProductPriceModel,
 };
@@ -53,7 +54,6 @@ pub struct OrderLinePriceModel {
     // is NOT converted with buyer's currency exchange rate
     unit_base: u32,
     total: u32,
-    // TODO, add product-attribute pricing map
 }
 
 pub struct OrderLineQuantityModel {
@@ -65,6 +65,9 @@ pub struct OrderLineQuantityModel {
 pub struct OrderLineModel {
     id_: OrderLineIdentity,
     price: OrderLinePriceModel,
+    ////attr_charge: ProdAttriPriceModel,
+    // TODO, new field `attr-combo-seq` for shortening identification of the
+    // combination of attributes selected in the order line
     pub policy: OrderLineAppliedPolicyModel,
     pub qty: OrderLineQuantityModel,
 }
@@ -212,6 +215,29 @@ impl From<(u32, u32)> for OrderLinePriceModel {
 }
 
 impl OrderLinePriceModel {
+    fn finalize_price<'a, 'b>(
+        data: &'a OrderLineReqDto,
+        pricem: &'b ProductPriceModel,
+    ) -> DefaultResult<(Self, ProdAttriPriceModel), AppError> {
+        let attrprice = pricem.extract_attributes(data)?;
+        let baseprice = i32::try_from(pricem.base_price()).map_err(|e| AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(format!("oline-calc-baseprice: {:?}", e)),
+        })?;
+        let total_attr_amount = attrprice.total_amount()?;
+        let final_unit_price = baseprice.checked_add(total_attr_amount).ok_or(AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some("oline-calc-final-unitprice: overflow".to_string()),
+        })?;
+        let final_unit_price = u32::try_from(final_unit_price).map_err(|e| AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(format!("oline-calc-final-unitprice: {:?}", e)),
+        })?;
+        let price_total = final_unit_price * data.quantity;
+        let obj = Self::from((final_unit_price, price_total));
+        Ok((obj, attrprice))
+    }
+
     fn into_paym_dto(self, curr_ex: CurrencyModel) -> PayAmountDto {
         let fraction_limit = curr_ex.name.amount_fraction_scale();
         let p_unit_seller = Decimal::new(self.unit() as i64, 0u32);
@@ -299,28 +325,25 @@ impl OrderLineModel {
     ) -> DefaultResult<Self, AppError> {
         Self::validate_id_match(&data, policym, pricem)?;
         Self::validate_rsv_limit(&data, policym)?;
+        // TODO, move the code below into applied policy model
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
-        // TODO, move the code below into order-line price model
-        let baseprice = pricem.base_price();
-        let price_total = baseprice * data.quantity;
-        Ok(Self {
-            id_: OrderLineIdentity {
-                store_id: data.seller_id,
-                product_id: data.product_id,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: data.quantity,
-                paid: 0,
-                paid_last_update: None,
-            },
-            price: OrderLinePriceModel::from((baseprice, price_total)),
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        })
+        let (lineprice, applied_attr) = OrderLinePriceModel::finalize_price(&data, pricem)?;
+        let id_ = OrderLineIdentity {
+            store_id: data.seller_id,
+            product_id: data.product_id,
+        };
+        let qty = OrderLineQuantityModel {
+            reserved: data.quantity,
+            paid: 0,
+            paid_last_update: None,
+        };
+        let policy = OrderLineAppliedPolicyModel {
+            reserved_until,
+            warranty_until,
+        };
+        Ok(Self::from((id_, lineprice, policy, qty)))
     } // end of fn try_from
 
     pub fn generate_order_id(machine_code: u8) -> String {
@@ -434,6 +457,7 @@ impl From<OrderLineModel> for InventoryEditStockLevelDto {
 
 impl TryFrom<OrderLineModelSet> for OrderCreateRespOkDto {
     type Error = Vec<AppError>;
+
     fn try_from(value: OrderLineModelSet) -> Result<Self, Self::Error> {
         let OrderLineModelSet {
             order_id,

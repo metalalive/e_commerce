@@ -7,13 +7,19 @@ use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, PhyAddrErrorDto, QuotaResourceErrorDto,
 };
 
-use crate::api::dto::ShippingDto;
+use crate::api::dto::{ProdAttrValueDto, ShippingDto};
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct OlineProductAttrDto {
+    pub label_id: String,
+    pub value: ProdAttrValueDto,
+}
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
     pub seller_id: u32,
     pub product_id: u64,
     pub quantity: u32,
+    pub applied_attr: Option<Vec<OlineProductAttrDto>>,
 }
 
 // TODO , extra field to indicate whether to discard specific line
