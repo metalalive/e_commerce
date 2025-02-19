@@ -6,7 +6,7 @@ use order::api::web::dto::{OrderLineReqDto, OrderLineReturnErrorReason};
 use order::constant::hard_limit;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
-    OrderLineQuantityModel, OrderReturnModel,
+    OrderLineQuantityModel, OrderReturnModel, ProdAttriPriceModel,
 };
 
 #[rustfmt::skip]
@@ -14,6 +14,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
     let paid_last_update = dt_now - Duration::days(3);
     let reserved_until = dt_now + Duration::hours(2);
     let warranty_until = dt_now + Duration::hours(8);
+    let attr_lastupdate = dt_now - Duration::days(1);
     [
         (812, (7, 70), 10, 0, None),
         (890, (11, 99), 9, 7, Some(paid_last_update)),
@@ -32,6 +33,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
                 OrderLineQuantityModel {
                     reserved, paid, paid_last_update,
                 },
+                ProdAttriPriceModel::from((attr_lastupdate, None)),
             );
             OrderLineModel::from(args)
         },

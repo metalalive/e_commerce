@@ -118,8 +118,20 @@
             ALTER TABLE `product_price` DROP COLUMN `attr_lastupdate`, DROP COLUMN `attr_map`;
         </rollback>
     </changeSet> 
-
     <changeSet id="tag_version_0.2.1" author="T.H.">
         <tagDatabase tag="0.2.1" />
+    </changeSet>
+    <changeSet id="add_attr_pricing__orderline" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` ADD COLUMN `attr_lastupdate` DATETIME NOT NULL, ADD COLUMN `attr_price` LONGTEXT NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` DROP COLUMN `attr_lastupdate`, DROP COLUMN `attr_price`;
+        </rollback>
+    </changeSet> 
+
+    <changeSet id="tag_version_0.2.2" author="T.H.">
+        <tagDatabase tag="0.2.2" />
     </changeSet>
 </databaseChangeLog>

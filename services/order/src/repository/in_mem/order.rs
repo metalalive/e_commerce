@@ -19,8 +19,8 @@ use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFet
 use crate::error::AppError;
 use crate::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
-    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, ShippingModel,
-    ShippingOptionModel,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
+    ProdAttriPriceModel, ShippingModel, ShippingOptionModel,
 };
 
 use super::super::{
@@ -130,9 +130,8 @@ mod _orderline {
     pub(super) const TABLE_LABEL: &str = "order_line_reserved";
     #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        SellerID, ProductId, QtyReserved, PriceUnit, PriceTotal,
-        PolicyReserved, PolicyWarranty, QtyPaid, QtyPaidLastUpdate,
-        TotNumColumns,
+        SellerID, ProductId, QtyReserved, PriceUnit, PriceTotal, PolicyReserved, PolicyWarranty,
+        QtyPaid, QtyPaidLastUpdate, AttrLastUpdate, AttrPriceMap, TotNumColumns,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
@@ -146,7 +145,9 @@ mod _orderline {
                 InMemColIdx::PriceTotal => 6,
                 InMemColIdx::PolicyReserved => 7,
                 InMemColIdx::PolicyWarranty => 8,
-                InMemColIdx::TotNumColumns => 9,
+                InMemColIdx::AttrLastUpdate => 9,
+                InMemColIdx::AttrPriceMap => 10,
+                InMemColIdx::TotNumColumns => 11,
             }
         }
     }
@@ -300,7 +301,16 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
         let mut row = (0.._orderline::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
+        let attributes = value.attrs_charge();
         [
+            (
+                _orderline::InMemColIdx::AttrLastUpdate,
+                attributes.lastupdate().to_rfc3339(),
+            ),
+            (
+                _orderline::InMemColIdx::AttrPriceMap,
+                attributes.serialize_map().unwrap(),
+            ),
             (
                 _orderline::InMemColIdx::QtyReserved,
                 value.qty.reserved.to_string(),
@@ -380,14 +390,30 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
         };
         let warranty_until = {
             let s = row
-                .get::<usize>(_orderline::InMemColIdx::PolicyReserved.into())
+                .get::<usize>(_orderline::InMemColIdx::PolicyWarranty.into())
                 .unwrap();
             DateTime::parse_from_rfc3339(s.as_str()).unwrap()
         };
+
         let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
+
+        let attr_lastupdate = {
+            let s = row
+                .get::<usize>(_orderline::InMemColIdx::AttrLastUpdate.into())
+                .unwrap();
+            DateTime::parse_from_rfc3339(s.as_str()).unwrap()
+        };
+        let attr_pricemap = {
+            let s = row
+                .get::<usize>(_orderline::InMemColIdx::AttrPriceMap.into())
+                .unwrap();
+            ProdAttriPriceModel::deserialize_map(s.as_str()).unwrap()
+        };
+        let args = (attr_lastupdate, attr_pricemap);
+        let attrs_charge = ProdAttriPriceModel::from(args);
         let id_ = OrderLineIdentity { store_id: seller_id, product_id };
-        OrderLineModel::from((id_, price, policy, qty))
-    }
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
+    } // end of fn from
 } // end of impl into OrderLineModel
 
 impl From<ContactModelWrapper> for AppInMemFetchedSingleRow {

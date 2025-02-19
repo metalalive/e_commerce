@@ -13,7 +13,7 @@ pub use order::{
     ShippingModel, ShippingOptionModel,
 };
 pub use product_policy::{ProductPolicyModel, ProductPolicyModelSet};
-pub use product_price::{ProductPriceModel, ProductPriceModelSet};
+pub use product_price::{ProdAttriPriceModel, ProductPriceModel, ProductPriceModelSet};
 pub use stock_level::{
     ProductStockIdentity, ProductStockIdentity2, ProductStockModel, StockLevelModelSet,
     StockQtyRsvModel, StockQuantityModel, StoreStockModel,

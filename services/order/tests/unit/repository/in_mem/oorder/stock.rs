@@ -17,8 +17,8 @@ use order::error::AppError;
 use order::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
     OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
-    ProductStockIdentity, ProductStockModel, StockLevelModelSet, StockQtyRsvModel,
-    StockQuantityModel, StoreStockModel,
+    ProdAttriPriceModel, ProductStockIdentity, ProductStockModel, StockLevelModelSet,
+    StockQtyRsvModel, StockQuantityModel, StoreStockModel,
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveReturn, AppStockRepoReserveUserFunc,
@@ -405,7 +405,9 @@ pub(crate) async fn ut_reserve_init_setup(
             warranty_until: mock_warranty,
         };
         let price = OrderLinePriceModel::from((4, 4 * num_req));
-        OrderLineModel::from((id_, price, policy, qty))
+        let attr_lastupdate = mock_warranty - Duration::days(14);
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     }];
     let ol_set = OrderLineModelSet {
         order_id: order_id.to_string(),
@@ -422,6 +424,7 @@ pub(crate) async fn ut_reserve_init_setup(
 async fn try_reserve_ok() {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(9);
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
@@ -499,7 +502,8 @@ async fn try_reserve_ok() {
                 warranty_until: mock_warranty,
             };
             let price = OrderLinePriceModel::from((unit, total));
-            OrderLineModel::from((id_, price, policy, qty))
+            let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+            OrderLineModel::from((id_, price, policy, qty, attrs_charge))
         })
         .collect();
 
@@ -586,6 +590,7 @@ fn mock_reserve_usr_cb_2(
 async fn try_reserve_shortage() {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(8);
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
@@ -621,6 +626,7 @@ async fn try_reserve_shortage() {
                 paid: 0,
                 paid_last_update: None,
             },
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
         ))
     })
     .collect();
@@ -676,6 +682,7 @@ fn mock_reserve_usr_cb_3(
 async fn try_reserve_user_cb_err() {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::minutes(6);
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
@@ -701,7 +708,8 @@ async fn try_reserve_user_cb_err() {
             warranty_until: mock_warranty,
         };
         let price = OrderLinePriceModel::from((20, 179));
-        OrderLineModel::from((id_, price, policy, qty))
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     }];
     let ol_set = OrderLineModelSet {
         order_id: "xx1".to_string(),

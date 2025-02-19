@@ -16,7 +16,7 @@ use ecommerce_common::model::BaseProductIdentity;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
-use crate::model::{ProductPriceModel, ProductPriceModelSet};
+use crate::model::{ProdAttriPriceModel, ProductPriceModel, ProductPriceModelSet};
 use crate::repository::AbsProductPriceRepo;
 
 use super::{run_query_once, DATETIME_FORMAT};
@@ -49,7 +49,8 @@ impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
         items
             .into_iter()
             .map(|item| {
-                let (p_id, baseprice, ts, attr_prices) = item.into_parts();
+                let attrprices_serial = item.attrs_charge().serialize_map().unwrap();
+                let (p_id, baseprice, ts, _) = item.into_parts();
                 let [start_after, end_before, attr_lastupdate] = ts;
                 let tz = start_after.fixed_offset().timezone();
                 let start_tz_utc = tz.local_minus_utc() / 60;
@@ -66,7 +67,6 @@ impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
                 out.add(t2).unwrap();
                 out.add(start_tz_utc as i16).unwrap();
                 out.add(end_tz_utc as i16).unwrap();
-                let attrprices_serial = ProductPriceModel::serialize_attrmap(&attr_prices).unwrap();
                 out.add(attrprices_serial).unwrap();
             })
             .count();
@@ -154,7 +154,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
             .iter()
             .map(|item| {
                 out.add(item.product_id()).unwrap();
-                let t = item.attr_lastupdate().to_utc();
+                let t = item.attrs_charge().lastupdate().to_utc();
                 out.add(t.format(DATETIME_FORMAT).to_string()).unwrap();
             })
             .count();
@@ -162,8 +162,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
             .iter()
             .map(|item| {
                 out.add(item.product_id()).unwrap();
-                let attrprice = item.attr_price_map();
-                let serial = ProductPriceModel::serialize_attrmap(attrprice).unwrap();
+                let serial = item.attrs_charge().serialize_map().unwrap();
                 out.add(serial).unwrap();
             })
             .count();
@@ -421,7 +420,7 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
                 code: AppErrorCode::DataCorruption,
                 detail: Some(format!("cvt-prod-attr-price: {}", e.to_string())),
             })?;
-            ProductPriceModel::deserialize_attrmap(serial)?
+            ProdAttriPriceModel::deserialize_map(serial)?
         };
         //println!("[DEBUG] product-id : {}, start_after naive: {:?}, final:{:?}",
         //        product_id, start_after_naive, start_after);

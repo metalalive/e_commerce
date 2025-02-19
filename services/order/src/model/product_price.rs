@@ -19,7 +19,7 @@ type ProdAttrPricingMap = Option<HashMap<String, i32>>;
 pub type ProductPriceCreateArgs = (u64, u32, [DateTime<FixedOffset>; 3], ProdAttrPricingMap);
 
 #[derive(Debug, Clone, Eq)]
-pub(super) struct ProdAttriPriceModel {
+pub struct ProdAttriPriceModel {
     pricing: ProdAttrPricingMap,
     last_update: DateTime<FixedOffset>,
 } // TODO, expose to order-line module for reuse
@@ -62,6 +62,14 @@ impl Clone for ProductPriceModel {
         }
     }
 }
+impl From<(DateTime<FixedOffset>, ProdAttrPricingMap)> for ProdAttriPriceModel {
+    fn from(d: (DateTime<FixedOffset>, ProdAttrPricingMap)) -> Self {
+        Self {
+            pricing: d.1,
+            last_update: d.0,
+        }
+    }
+}
 
 impl<'a> TryFrom<&'a ProdAttrPriceSetDto> for ProdAttriPriceModel {
     type Error = AppError;
@@ -83,10 +91,7 @@ impl<'a> TryFrom<&'a ProdAttrPriceSetDto> for ProdAttriPriceModel {
             }
             Some(map)
         };
-        Ok(Self {
-            pricing,
-            last_update: d.last_update,
-        })
+        Ok(Self::from((d.last_update, pricing)))
     }
 }
 
@@ -99,24 +104,6 @@ impl ProdAttriPriceModel {
         };
         format!("{}-{}", label_id, val_str)
     }
-    fn serialize_map(opt: &ProdAttrPricingMap) -> DefaultResult<String, AppError> {
-        serde_json::to_string(opt).map_err(|e| {
-            let detail = format!("prod-attr-price-serialize-map : {:?}", e);
-            AppError {
-                code: AppErrorCode::DataCorruption,
-                detail: Some(detail),
-            }
-        })
-    }
-    fn deserialize_map(raw: &str) -> DefaultResult<ProdAttrPricingMap, AppError> {
-        serde_json::from_str::<ProdAttrPricingMap>(raw).map_err(|e| {
-            let detail = format!("prod-attr-price-deserialize-map : {:?}", e);
-            AppError {
-                code: AppErrorCode::DataCorruption,
-                detail: Some(detail),
-            }
-        })
-    }
     pub(super) fn total_amount(&self) -> DefaultResult<i32, AppError> {
         self.pricing.as_ref().map_or(Ok(0i32), |m| {
             m.values()
@@ -126,6 +113,27 @@ impl ProdAttriPriceModel {
                     detail: Some("prod-attr-price-sum-overflow".to_string()),
                 })
         })
+    }
+    pub(crate) fn serialize_map(&self) -> DefaultResult<String, AppError> {
+        serde_json::to_string(&self.pricing).map_err(|e| {
+            let detail = format!("prod-attr-price-serialize-map : {:?}", e);
+            AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(detail),
+            }
+        })
+    }
+    pub(crate) fn deserialize_map(raw: &str) -> DefaultResult<ProdAttrPricingMap, AppError> {
+        serde_json::from_str::<ProdAttrPricingMap>(raw).map_err(|e| {
+            let detail = format!("prod-attr-price-deserialize-map : {:?}", e);
+            AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(detail),
+            }
+        })
+    }
+    pub(crate) fn lastupdate(&self) -> DateTime<FixedOffset> {
+        self.last_update
     }
 } // end of impl ProdAttriPriceModel
 
@@ -152,10 +160,7 @@ impl From<ProductPriceCreateArgs> for ProductPriceModel {
             price: d.1,
             start_after: d.2[0],
             end_before: d.2[1],
-            attributes: ProdAttriPriceModel {
-                pricing: d.3,
-                last_update: d.2[2],
-            },
+            attributes: ProdAttriPriceModel::from((d.2[2], d.3)),
             is_create: false,
         }
     }
@@ -184,11 +189,8 @@ impl ProductPriceModel {
     pub(crate) fn end_before(&self) -> DateTime<FixedOffset> {
         self.end_before
     }
-    pub(crate) fn attr_lastupdate(&self) -> DateTime<FixedOffset> {
-        self.attributes.last_update
-    }
-    pub(crate) fn attr_price_map(&self) -> &ProdAttrPricingMap {
-        &self.attributes.pricing
+    pub(crate) fn attrs_charge(&self) -> &ProdAttriPriceModel {
+        &self.attributes
     }
     pub(crate) fn split_by_update_state(ms: Vec<Self>) -> (Vec<Self>, Vec<Self>) {
         let (mut l_add, mut l_modify) = (vec![], vec![]);
@@ -203,12 +205,6 @@ impl ProductPriceModel {
             .count(); // TODO, swtich to feature `drain-filter` when it becomes stable
         (l_add, l_modify)
     }
-    pub(crate) fn serialize_attrmap(opt: &ProdAttrPricingMap) -> DefaultResult<String, AppError> {
-        ProdAttriPriceModel::serialize_map(opt)
-    }
-    pub(crate) fn deserialize_attrmap(raw: &str) -> DefaultResult<ProdAttrPricingMap, AppError> {
-        ProdAttriPriceModel::deserialize_map(raw)
-    }
 
     fn find_product(&self, d: &OrderLineReqDto) -> bool {
         // TODO, validate expiry of the pricing rule
@@ -217,7 +213,7 @@ impl ProductPriceModel {
             if chosen.is_empty() {
                 true
             } else {
-                self.attr_price_map().as_ref().map_or(false, |vm| {
+                self.attrs_charge().pricing.as_ref().map_or(false, |vm| {
                     chosen.iter().all(|c| {
                         let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
                         vm.contains_key(&k)
@@ -236,7 +232,7 @@ impl ProductPriceModel {
             if chosen.is_empty() {
                 None
             } else {
-                if let Some(vm) = self.attr_price_map().as_ref() {
+                if let Some(vm) = self.attrs_charge().pricing.as_ref() {
                     let mut nonexist = Vec::new();
                     let map_iter = chosen.iter().filter_map(|c| {
                         let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
@@ -268,10 +264,8 @@ impl ProductPriceModel {
         } else {
             None
         };
-        Ok(ProdAttriPriceModel {
-            pricing: newmap,
-            last_update: self.attr_lastupdate(),
-        })
+        let args = (self.attrs_charge().lastupdate(), newmap);
+        Ok(ProdAttriPriceModel::from(args))
     } // end of fn extract_attributes
 
     fn update(&mut self, d: &ProductPriceEditDto) -> DefaultResult<(), AppError> {

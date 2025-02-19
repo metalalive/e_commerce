@@ -52,8 +52,8 @@ pub struct OrderLinePriceModel {
     // the price values here are smallest unit in seller's currency.
     // In this order-processing service the price amount in this struct
     // is NOT converted with buyer's currency exchange rate
-    unit_base: u32,
-    total: u32,
+    _unit: u32,
+    _total: u32,
 }
 
 pub struct OrderLineQuantityModel {
@@ -65,7 +65,7 @@ pub struct OrderLineQuantityModel {
 pub struct OrderLineModel {
     id_: OrderLineIdentity,
     price: OrderLinePriceModel,
-    ////attr_charge: ProdAttriPriceModel,
+    attrs_charge: ProdAttriPriceModel,
     // TODO, new field `attr-combo-seq` for shortening identification of the
     // combination of attributes selected in the order line
     pub policy: OrderLineAppliedPolicyModel,
@@ -209,8 +209,8 @@ impl OrderLineQuantityModel {
 }
 
 impl From<(u32, u32)> for OrderLinePriceModel {
-    fn from((unit_base, total): (u32, u32)) -> Self {
-        Self { unit_base, total }
+    fn from((_unit, _total): (u32, u32)) -> Self {
+        Self { _unit, _total }
     }
 }
 
@@ -251,15 +251,18 @@ impl OrderLinePriceModel {
     }
 
     pub fn unit(&self) -> u32 {
-        self.unit_base
+        self._unit
     }
     pub fn total(&self) -> u32 {
-        self.total
+        self._total
     }
 } // end of impl OrderLinePriceModel
 
 #[rustfmt::skip]
-type OLineModelCvtArgs = (OrderLineIdentity, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel);
+type OLineModelCvtArgs = (
+    OrderLineIdentity, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel,
+    ProdAttriPriceModel,
+);
 
 impl From<OLineModelCvtArgs> for OrderLineModel {
     fn from(value: OLineModelCvtArgs) -> Self {
@@ -268,6 +271,7 @@ impl From<OLineModelCvtArgs> for OrderLineModel {
             price: value.1,
             policy: value.2,
             qty: value.3,
+            attrs_charge: value.4,
         }
     }
 }
@@ -329,7 +333,7 @@ impl OrderLineModel {
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
-        let (lineprice, applied_attr) = OrderLinePriceModel::finalize_price(&data, pricem)?;
+        let (lineprice, attrs_charge) = OrderLinePriceModel::finalize_price(&data, pricem)?;
         let id_ = OrderLineIdentity {
             store_id: data.seller_id,
             product_id: data.product_id,
@@ -343,7 +347,8 @@ impl OrderLineModel {
             reserved_until,
             warranty_until,
         };
-        Ok(Self::from((id_, lineprice, policy, qty)))
+        let args = (id_, lineprice, policy, qty, attrs_charge);
+        Ok(Self::from(args))
     } // end of fn try_from
 
     pub fn generate_order_id(machine_code: u8) -> String {
@@ -412,6 +417,9 @@ impl OrderLineModel {
     pub fn price(&self) -> &OrderLinePriceModel {
         &self.price
     }
+    pub(crate) fn attrs_charge(&self) -> &ProdAttriPriceModel {
+        &self.attrs_charge
+    }
 
     pub fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
         let Self {
@@ -419,6 +427,7 @@ impl OrderLineModel {
             price,
             policy,
             qty,
+            attrs_charge: _,
         } = self;
         OrderLinePayDto {
             seller_id: id_.store_id,
@@ -426,7 +435,7 @@ impl OrderLineModel {
             quantity: qty.reserved,
             reserved_until: policy.reserved_until.to_rfc3339(),
             amount: price.into_paym_dto(curr_m),
-        }
+        } // TODO, add attribute pricing to this dto object
     }
 } // end of impl OrderLineModel
 

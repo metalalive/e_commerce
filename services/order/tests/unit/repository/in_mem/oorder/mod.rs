@@ -1,4 +1,6 @@
-use chrono::{DateTime, FixedOffset, Local};
+use std::collections::HashMap;
+
+use chrono::{DateTime, Duration, FixedOffset, Local};
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
@@ -6,7 +8,7 @@ use order::api::dto::ShippingMethod;
 use order::datastore::AbstInMemoryDStore;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
-    OrderLineQuantityModel, ShippingModel, ShippingOptionModel,
+    OrderLineQuantityModel, ProdAttriPriceModel, ShippingModel, ShippingOptionModel,
 };
 use order::repository::OrderInMemRepo;
 
@@ -235,37 +237,39 @@ pub(crate) fn ut_setup_shipping(mock_seller_ids: &[u32; 2]) -> Vec<ShippingModel
 fn ut_setup_orderlines(mock_seller_ids: &[u32; 2]) -> Vec<OrderLineModel> {
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
-    let rawdata = [
-        (mock_seller_ids[0], 190u64, 10u32, 39u32, 4u32),
-        (mock_seller_ids[1], 190, 12, 60, 5),
-        (mock_seller_ids[0], 1190, 9, 67, 10),
-        (mock_seller_ids[1], 1190, 40, 225, 6),
-        (mock_seller_ids[1], 192, 10, 80, 18),
-        (mock_seller_ids[0], 193, 12, 320, 32),
-        (mock_seller_ids[1], 194, 15, 240, 16),
-        (mock_seller_ids[1], 198, 12, 240, 20),
-        (mock_seller_ids[0], 199, 8, 264, 33),
-        (mock_seller_ids[0], 201, 5, 165, 33),
-        (mock_seller_ids[0], 202, 23, 69, 3),
-    ];
-    rawdata
-        .into_iter()
-        .map(|(store_id, product_id, unit, total, reserved)| {
-            let id_ = OrderLineIdentity {
-                store_id,
-                product_id,
-            };
-            let price = OrderLinePriceModel::from((unit, total));
-            let qty = OrderLineQuantityModel {
-                reserved,
-                paid: 0,
-                paid_last_update: None,
-            };
-            let policy = OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            };
-            OrderLineModel::from((id_, price, policy, qty))
-        })
-        .collect()
+    let attr_lastupdate = reserved_until - Duration::hours(15);
+    [
+        (mock_seller_ids[0], 190u64, 10, 39, 4, Some(-10)),
+        (mock_seller_ids[1], 190, 12, 60, 5, Some(11)),
+        (mock_seller_ids[0], 1190, 9, 67, 10, Some(-12)),
+        (mock_seller_ids[1], 1190, 40, 225, 6, Some(13)),
+        (mock_seller_ids[1], 192, 10, 80, 18, Some(-14)),
+        (mock_seller_ids[0], 193, 12, 320, 32, None),
+        (mock_seller_ids[1], 194, 15, 240, 16, Some(8)),
+        (mock_seller_ids[1], 198, 12, 240, 20, Some(-9)),
+        (mock_seller_ids[0], 199, 8, 264, 33, Some(10)),
+        (mock_seller_ids[0], 201, 5, 165, 33, Some(-11)),
+        (mock_seller_ids[0], 202, 23, 69, 3, None),
+    ]
+    .into_iter()
+    .map(|d| {
+        let id_ = OrderLineIdentity {
+            store_id: d.0,
+            product_id: d.1,
+        };
+        let price = OrderLinePriceModel::from((d.2, d.3));
+        let qty = OrderLineQuantityModel {
+            reserved: d.4,
+            paid: 0,
+            paid_last_update: None,
+        };
+        let policy = OrderLineAppliedPolicyModel {
+            reserved_until,
+            warranty_until,
+        };
+        let attrprice = d.5.map(|v| HashMap::from([("duglas-567".to_string(), v)]));
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, attrprice));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
+    })
+    .collect()
 } // end of ut_setup_orderlines

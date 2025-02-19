@@ -25,8 +25,8 @@ use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
 use crate::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
-    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, ShippingModel,
-    ShippingOptionModel,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
+    ProdAttriPriceModel, ShippingModel, ShippingOptionModel,
 };
 use crate::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppOrderFetchRangeCallback, AppOrderRepoUpdateLinesUserFunc,
@@ -118,10 +118,10 @@ impl<'a, 'b> From<InsertSellerCurrencyArg<'a, 'b>> for (String, MySqlArguments) 
 
 impl<'a, 'b> InsertOLineArg<'a, 'b> {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`price_unit`,\
-                       `price_total`,`qty_rsved`,`rsved_until`,`warranty_until`";
+        let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`price_unit`,`price_total`,\
+                       `qty_rsved`,`rsved_until`,`warranty_until`,`attr_lastupdate`,`attr_price`";
         let items = (0..num_batch)
-            .map(|_| "(?,?,?,?,?,?,?,?,?)")
+            .map(|_| "(?,?,?,?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
             "INSERT INTO `order_line_detail`({}) VALUES {}",
@@ -139,6 +139,8 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
             .map(|o| {
                 let rsved_until = o.policy.reserved_until.naive_utc();
                 let warranty_until = o.policy.warranty_until.naive_utc();
+                let attr_lupdate = o.attrs_charge().lastupdate().naive_utc();
+                let attr_pricemap = o.attrs_charge().serialize_map().unwrap();
                 args.add(oid.as_column()).unwrap();
                 args.add(seq as u16).unwrap(); // match the column type in db table
                 seq += 1;
@@ -149,6 +151,8 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
                 args.add(o.qty.reserved).unwrap();
                 args.add(rsved_until).unwrap();
                 args.add(warranty_until).unwrap();
+                args.add(attr_lupdate).unwrap();
+                args.add(attr_pricemap).unwrap();
             })
             .count();
         args
@@ -370,7 +374,7 @@ impl<'a> From<UpdateOLinePayArg<'a>> for (String, MySqlArguments) {
 
 const OLINE_SELECT_PREFIX: &str = "SELECT `store_id`,`product_id`,`price_unit`,\
    `price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,`rsved_until`,\
-    `warranty_until` FROM `order_line_detail`";
+    `warranty_until`,`attr_lastupdate`,`attr_price` FROM `order_line_detail`";
 
 impl From<FetchAllLinesArg> for (String, MySqlArguments) {
     fn from(value: FetchAllLinesArg) -> (String, MySqlArguments) {
@@ -485,12 +489,22 @@ impl TryFrom<OLineRow> for OrderLineModel {
         };
         let reserved_until = row.try_get::<NaiveDateTime, usize>(7)?.and_utc().into();
         let warranty_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
+        let attr_lupdate = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
+        let attrprice = {
+            let raw = row.try_get::<&[u8], usize>(10)?;
+            let serial = std::str::from_utf8(raw).map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(format!("cvt-prod-attr-price: {}", e.to_string())),
+            })?;
+            ProdAttriPriceModel::deserialize_map(serial)?
+        };
 
         let id_ = OrderLineIdentity {store_id, product_id};
         let price = OrderLinePriceModel::from((unit, total));
         let qty = OrderLineQuantityModel {reserved, paid, paid_last_update};
         let policy = OrderLineAppliedPolicyModel {warranty_until, reserved_until};
-        Ok(OrderLineModel::from((id_, price, policy, qty)))
+        let attr_chg = ProdAttriPriceModel::from((attr_lupdate, attrprice));
+        Ok(OrderLineModel::from((id_, price, policy, qty, attr_chg)))
     }
 } // end of impl OrderLineModel
 

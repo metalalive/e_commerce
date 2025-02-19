@@ -16,7 +16,7 @@ use crate::datastore::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKeys, AppInMemFetchedSingleTable,
 };
 use crate::error::AppError;
-use crate::model::{ProductPriceModel, ProductPriceModelSet};
+use crate::model::{ProdAttriPriceModel, ProductPriceModel, ProductPriceModelSet};
 
 const TABLE_LABELS: [&str; 2] = ["store_meta", "product_price"];
 
@@ -84,15 +84,13 @@ impl TryFrom<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
         let (store_id, items) = value;
         let mut errs = Vec::new();
         let kv_pairs = items.into_iter().filter_map(|m| {
-            let (product_id, price, t_range, attrmap) = m.into_parts();
-            let result = ProductPriceModel::serialize_attrmap(&attrmap);
-            let attrmap_serial = match result {
-                Ok(v) => v,
-                Err(e) => {
-                    errs.push(e);
-                    return None;
-                }
+            let result = m.attrs_charge().serialize_map().map_err(|e| errs.push(e));
+            let attrmap_serial = if let Ok(v) = result {
+                v
+            } else {
+                return None;
             };
+            let (product_id, price, t_range, _) = m.into_parts();
             let pkey = format!("{store_id}-{product_id}");
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into())
@@ -310,7 +308,7 @@ impl ProductPriceInMemRepo {
                         DateTime::parse_from_rfc3339(attr_lupdate).unwrap(),
                     ];
                     let attrmap =
-                        ProductPriceModel::deserialize_attrmap(attrmap_serial.as_str()).unwrap();
+                        ProdAttriPriceModel::deserialize_map(attrmap_serial.as_str()).unwrap();
                     let args = (product_id, baseprice, ts, attrmap);
                     let obj = ProductPriceModel::from(args);
                     (seller_id, obj)

@@ -181,6 +181,7 @@ fn mock_reserve_usr_cb_0(
     Ok(())
 } // end of mock_reserve_usr_cb_0
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn try_reserve_ok() {
     let mock_warranty = DateTime::parse_from_rfc3339("3015-11-29T15:02:30.005-03:00").unwrap();
@@ -220,60 +221,40 @@ async fn try_reserve_ok() {
         .await;
     }
     {
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await,
-            (2, 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await,
-            (0, 0, 14)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await,
-            (17 + 7 + 4, 3, 120)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await,
-            (0, 1, 37)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await,
-            ((3 + 1), 1, 46)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await;
+        assert_eq!(actual, (2, 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await;
+        assert_eq!(actual, (0, 0, 14));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await;
+        assert_eq!(actual, (17 + 7 + 4, 3, 120));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
+        assert_eq!(actual, (0, 1, 37));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
+        assert_eq!(actual, ((3 + 1), 1, 46));
     }
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T07:29:01.027-03:00").unwrap();
         let lines = vec![
-            (1013, 9004, 2, 3, mock_warranty + Duration::minutes(1)),
-            (1013, 9006, 3, 4, mock_rsved_end + Duration::minutes(2)),
-            (1014, 9008, 29, 20, mock_warranty + Duration::minutes(3)),
-            (1014, 9009, 6, 15, mock_rsved_end + Duration::minutes(4)),
+            (1013, 9004, 2, 3, None, mock_warranty + Duration::minutes(1)),
+            (1013, 9006, 3, 4, Some(1), mock_rsved_end + Duration::minutes(2)),
+            (1014, 9008, 29, 20, None, mock_warranty + Duration::minutes(3)),
+            (1014, 9009, 6, 15, Some(4), mock_rsved_end + Duration::minutes(4)),
         ];
         ut_oline_init_setup("800eff40", 123, create_time, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     {
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await,
-            ((2 + 2), 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await,
-            (3, 0, 14)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await,
-            (17 + 7 + 4, 3, 120)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await,
-            (29, 1, 37)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await,
-            ((3 + 1 + 6), 1, 46)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await;
+        assert_eq!(actual, ((2 + 2), 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await;
+        assert_eq!(actual, (3, 0, 14));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await;
+        assert_eq!(actual, (17 + 7 + 4, 3, 120));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
+        assert_eq!(actual, (29, 1, 37));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
+        assert_eq!(actual, ((3 + 1 + 6), 1, 46));
     }
     // verify order lines and top-level metadata
     ut_verify_fetch_all_olines_ok(&o_repo).await;
@@ -348,8 +329,8 @@ async fn try_reserve_shortage() {
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T06:35:00.519-02:00").unwrap();
         let lines = vec![
-            (1015, 9003, 12, 3, mock_warranty.clone()),
-            (1015, 9002, 6, 4, mock_warranty.clone()),
+            (1015, 9003, 12, 3, None, mock_warranty),
+            (1015, 9002, 6, 4, None, mock_warranty),
         ];
         ut_oline_init_setup("8100ffe0", 123, create_time, lines)
     };
@@ -460,6 +441,7 @@ fn mock_return_usr_cb_1(
     vec![]
 }
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn try_return_ok() {
     let ds = dstore_ctx_setup();
@@ -486,20 +468,8 @@ async fn try_return_ok() {
         let create_time = Local::now().fixed_offset();
         let mock_warranty = create_time + Duration::days(7);
         let lines = vec![
-            (
-                mock_seller,
-                9006,
-                123,
-                4,
-                mock_warranty + Duration::hours(1),
-            ),
-            (
-                mock_seller,
-                9008,
-                50,
-                20,
-                mock_warranty + Duration::hours(10),
-            ),
+            (mock_seller, 9006, 123, 4, None, mock_warranty + Duration::hours(1)),
+            (mock_seller, 9008, 50, 20, Some(2), mock_warranty + Duration::hours(10)),
         ];
         ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines)
     };
@@ -508,7 +478,7 @@ async fn try_return_ok() {
     let data = {
         let items = [
             (mock_seller, 9006u64, 1i32, all_products[8].expiry.clone()),
-            (mock_seller, 9008, 1, all_products[9].expiry.clone()),
+            (mock_seller, 9008, 1, all_products[9].expiry),
             (mock_seller, 9008, 5, all_products[10].expiry.clone()),
         ]
         .into_iter()

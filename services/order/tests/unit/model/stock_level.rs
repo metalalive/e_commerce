@@ -14,7 +14,8 @@ use order::api::web::dto::OrderLineCreateErrorReason;
 use order::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
     OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
-    ProductStockModel, StockLevelModelSet, StockQtyRsvModel, StockQuantityModel, StoreStockModel,
+    ProdAttriPriceModel, ProductStockModel, StockLevelModelSet, StockQtyRsvModel,
+    StockQuantityModel, StoreStockModel,
 };
 
 use crate::model::verify_stocklvl_model;
@@ -267,6 +268,7 @@ fn ut_get_curr_qty(store: &StoreStockModel, req: &OrderLineModel) -> Vec<StockQu
 fn reserve_ok_1() {
     let create_time = DateTime::parse_from_rfc3339("2022-09-16T14:59:00.091-08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(10);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -302,7 +304,8 @@ fn reserve_ok_1() {
             paid: 0,
             paid_last_update: None,
         };
-        OrderLineModel::from((id_, price, policy, qty))
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     })
     .collect();
     let ol_set = OrderLineModelSet {
@@ -364,6 +367,7 @@ fn reserve_ok_1() {
 fn reserve_ok_2() {
     let create_time = DateTime::parse_from_rfc3339("2022-09-16T14:59:00.091-08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(11);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -399,6 +403,7 @@ fn reserve_ok_2() {
                 paid: 0,
                 paid_last_update: None,
             },
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
         );
         OrderLineModel::from(args)
     })
@@ -443,6 +448,7 @@ fn reserve_ok_2() {
 #[test]
 fn reserve_shortage() {
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(13);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -484,6 +490,7 @@ fn reserve_shortage() {
                 paid: 0,
                 paid_last_update: None,
             },
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
         ))
     })
     .collect();
@@ -517,6 +524,7 @@ fn reserve_shortage() {
 #[test]
 fn reserve_seller_nonexist() {
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(14);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![StoreStockModel {
@@ -546,6 +554,7 @@ fn reserve_seller_nonexist() {
                 paid: 0,
                 paid_last_update: None,
             },
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
         ))
     })
     .collect::<Vec<_>>();

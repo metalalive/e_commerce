@@ -21,8 +21,8 @@ use order::error::AppError;
 use order::model::{
     CurrencyModel, CurrencyModelSet, OrderCurrencyModel, OrderLineAppliedPolicyModel,
     OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderLinePriceModel,
-    OrderLineQuantityModel, OrderReturnModel, ProductPolicyModel, ProductPolicyModelSet,
-    ProductPriceModel, ProductPriceModelSet,
+    OrderLineQuantityModel, OrderReturnModel, ProdAttriPriceModel, ProductPolicyModel,
+    ProductPolicyModelSet, ProductPriceModel, ProductPriceModelSet,
 };
 use order::repository::{AbsOrderRepo, AbsOrderReturnRepo};
 use order::usecase::{
@@ -313,6 +313,7 @@ async fn create_order_snapshot_currency_err() {
 fn ut_setup_orderlines() -> Vec<OrderLineModel> {
     let base_time = Local::now().fixed_offset();
     let paid_last_update = Some(base_time + Duration::minutes(4));
+    let attr_lastupdate = base_time - Duration::minutes(6);
     let reserved_until = base_time + Duration::minutes(5);
     let warranty_until = base_time + Duration::days(14);
     [
@@ -326,7 +327,8 @@ fn ut_setup_orderlines() -> Vec<OrderLineModel> {
         let price = OrderLinePriceModel::from((d.2, d.3));
         let qty = OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update};
         let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
-        OrderLineModel::from((id_, price, policy, qty))
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     })
     .collect::<Vec<_>>()
 }

@@ -9,7 +9,8 @@ use ecommerce_common::api::dto::CurrencyDto;
 use order::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
     OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
-    ProductStockModel, StockLevelModelSet, StockQuantityModel, StoreStockModel,
+    ProdAttriPriceModel, ProductStockModel, StockLevelModelSet, StockQuantityModel,
+    StoreStockModel,
 };
 use order::repository::AbsOrderStockRepo;
 
@@ -58,11 +59,14 @@ fn ut_default_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
     }
 }
 
+#[rustfmt::skip]
+type UtestOlineInitScalar = (u32, u64, u32, u32, Option<i32>, DateTime<FixedOffset>);
+
 fn ut_oline_init_setup(
     oid: &str,
     owner_id: u32,
     create_time: DateTime<FixedOffset>,
-    lines: Vec<(u32, u64, u32, u32, DateTime<FixedOffset>)>,
+    lines: Vec<UtestOlineInitScalar>,
 ) -> OrderLineModelSet {
     let order_req = lines
         .into_iter()
@@ -77,11 +81,14 @@ fn ut_oline_init_setup(
                 paid_last_update: None,
             };
             let policy = OrderLineAppliedPolicyModel {
-                reserved_until: d.4 + Duration::minutes(2),
-                warranty_until: d.4 + Duration::minutes(4),
+                reserved_until: d.5 + Duration::minutes(2),
+                warranty_until: d.5 + Duration::minutes(4),
             };
             let price = OrderLinePriceModel::from((d.3, d.3 * d.2));
-            OrderLineModel::from((id_, price, policy, qty))
+            let att_lastupdate = d.5 - Duration::minutes(35);
+            let attr_price = d.4.map(|v| HashMap::from([("bolu".to_string(), v)]));
+            let attr_chg = ProdAttriPriceModel::from((att_lastupdate, attr_price));
+            OrderLineModel::from((id_, price, policy, qty, attr_chg))
         })
         .collect::<Vec<_>>();
     let seller_ids = order_req

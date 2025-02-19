@@ -11,7 +11,8 @@ use order::api::dto::ProdAttrValueDto;
 use order::api::web::dto::{OlineProductAttrDto, OrderLineReqDto};
 use order::model::{
     CurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
-    OrderLinePriceModel, OrderLineQuantityModel, ProductPolicyModel, ProductPriceModel,
+    OrderLinePriceModel, OrderLineQuantityModel, ProdAttriPriceModel, ProductPolicyModel,
+    ProductPriceModel,
 };
 
 #[rustfmt::skip]
@@ -33,7 +34,9 @@ pub(super) fn ut_setup_order_lines(
             let policy = OrderLineAppliedPolicyModel {
                 reserved_until: d.7, warranty_until: d.8,
             };
-            OrderLineModel::from((id_, price, policy, qty))
+            let attr_lastupdate = d.7 - Duration::days(15);
+            let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+            OrderLineModel::from((id_, price, policy, qty, attrs_charge))
         })
         .collect::<Vec<_>>()
 } // end of fn ut_setup_order_lines

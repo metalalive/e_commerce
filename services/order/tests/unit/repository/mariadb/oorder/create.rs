@@ -203,8 +203,8 @@ async fn fetch_lines_by_rsvtime_ok() {
     for (mock_oid, mock_currency_label, mock_currency_rate) in mock_misc {
         rsv_time += Duration::days(2);
         let lines = vec![
-            (mock_seller, 9012, mock_rsv_qty, 29, rsv_time),
-            (mock_seller, 9013, mock_rsv_qty + 1, 25, rsv_time + Duration::days(1)),
+            (mock_seller, 9012, mock_rsv_qty, 29, Some(3), rsv_time),
+            (mock_seller, 9013, mock_rsv_qty + 1, 25, None, rsv_time + Duration::days(1)),
         ];
         let mut ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
         ol_set.currency.sellers.get_mut(&mock_seller)
@@ -243,7 +243,7 @@ async fn fetch_toplvl_meta_ok() {
         create_time += Duration::minutes(3);
         let rsv_time = now + Duration::days(1);
         let lines = vec![(
-            mock_seller, 9014, mock_rsv_qty, 29, rsv_time,
+            mock_seller, 9014, mock_rsv_qty, 29, Some(5), rsv_time,
         )];
         let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines);
         let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
@@ -295,9 +295,9 @@ async fn fetch_seller_currency_ok() {
     ut_setup_stock_product(o_repo.stock(), mock_sellers[1], 554, 10).await;
     ut_setup_stock_product(o_repo.stock(), mock_sellers[2], 1492, 15).await;
     let lines = vec![
-        (mock_sellers[0], 1405, 8, mock_item_price, rsv_time),
-        (mock_sellers[1], 554, 9, mock_item_price, rsv_time),
-        (mock_sellers[2], 1492, 8, mock_item_price, rsv_time),
+        (mock_sellers[0], 1405, 8, mock_item_price, Some(7), rsv_time),
+        (mock_sellers[1], 554, 9, mock_item_price, None, rsv_time),
+        (mock_sellers[2], 1492, 8, mock_item_price, Some(8), rsv_time),
     ];
     let mut ol_set = ut_oline_init_setup(mock_oid, mock_buyer_id, create_time, lines);
     {
