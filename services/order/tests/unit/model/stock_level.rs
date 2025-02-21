@@ -308,19 +308,19 @@ fn reserve_ok_1() {
         OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     })
     .collect();
-    let ol_set = OrderLineModelSet {
-        order_id: "AliceOrdered".to_string(),
-        lines: reqs,
-        create_time: create_time.clone(),
-        owner_id: 123,
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+    let ol_set = {
+        let order_id = "AliceOrdered".to_string();
+        let lines = reqs;
+        let owner_id = 123;
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
-        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[2]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines()[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[2]),
     ]
     .into_iter()
     .map(|v1| {
@@ -409,18 +409,18 @@ fn reserve_ok_2() {
     })
     .collect::<Vec<_>>();
 
-    let ol_set = OrderLineModelSet {
-        order_id: "BobCart".to_string(),
-        lines: reqs,
-        create_time,
-        owner_id: 321,
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+    let ol_set = {
+        let order_id = "BobCart".to_string();
+        let lines = reqs;
+        let owner_id = 321;
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
-        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines()[1]),
     ]
     .into_iter()
     .map(|v1| {
@@ -494,24 +494,25 @@ fn reserve_shortage() {
         ))
     })
     .collect();
-    let ol_set = OrderLineModelSet {
-        order_id: "xx1".to_string(),
-        lines: reqs,
-        owner_id: 123,
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+    let ol_set = {
+        let order_id = "xx1".to_string();
+        let lines = reqs;
+        let owner_id = 123;
+        let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
     {
-        let (expect, actual) = (&ol_set.lines[0], &error[0]);
+        let (expect, actual) = (&ol_set.lines()[0], &error[0]);
         assert_eq!(expect.id().store_id, actual.seller_id);
         assert_eq!(expect.id().product_id, actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::NotEnoughToClaim
         ));
-        let (expect, actual) = (&ol_set.lines[2], &error[1]);
+        let (expect, actual) = (&ol_set.lines()[2], &error[1]);
         assert_eq!(expect.id().store_id, actual.seller_id);
         assert_eq!(expect.id().product_id, actual.product_id);
         assert!(matches!(
@@ -559,17 +560,18 @@ fn reserve_seller_nonexist() {
     })
     .collect::<Vec<_>>();
 
-    let ol_set = OrderLineModelSet {
-        order_id: "xx1".to_string(),
-        lines: reqs,
-        owner_id: 321,
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
-        currency: ut_setup_order_currency(vec![1013, 1099]),
+    let ol_set = {
+        let order_id = "xx1".to_string();
+        let lines = reqs;
+        let owner_id = 321;
+        let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
+        let currency = ut_setup_order_currency(vec![1013, 1099]);
+        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);
     {
-        let (expect, actual) = (&ol_set.lines[1], &error[0]);
+        let (expect, actual) = (&ol_set.lines()[1], &error[0]);
         assert_eq!(expect.id().store_id, actual.seller_id);
         assert_eq!(expect.id().product_id, actual.product_id);
         assert!(matches!(

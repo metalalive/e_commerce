@@ -52,19 +52,18 @@ async fn ut_setup_saved_order(
     assert!(lines.len() >= 3);
     assert!(!billings.is_empty());
     assert!(!shippings.is_empty());
-    let ol_set = OrderLineModelSet {
-        order_id: mock_oid.to_string(),
-        lines,
-        owner_id: mock_usr_id,
-        currency: ut_setup_order_currency(mock_seller_ids),
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
+    let ol_set = {
+        let order_id = mock_oid.to_string();
+        let currency = ut_setup_order_currency(mock_seller_ids);
+        let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
+        OrderLineModelSet::from((order_id, mock_usr_id, create_time, currency, lines))
     };
     let stockrepo = o_repo.stock();
     let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
     assert!(result.is_ok());
     let result = o_repo
         .save_contact(
-            ol_set.order_id.as_str(),
+            ol_set.id().as_str(),
             billings.remove(0),
             shippings.remove(0),
         )
@@ -271,20 +270,20 @@ fn ut_rd_oline_set_usr_cb<'a>(
     ol_set: OrderLineModelSet,
 ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + 'a>> {
     let fut = async move {
-        let (owner_id, product_ids) = match ol_set.order_id.as_str() {
+        let (owner_id, product_ids) = match ol_set.id().as_str() {
             "OrderIDone" => {
-                assert_eq!(ol_set.lines.len(), 3);
+                assert_eq!(ol_set.lines().len(), 3);
                 (
                     126u32,
                     vec![(576u32, 190u64), (576u32, 192u64), (117u32, 193u64)],
                 )
             }
             "OrderIDtwo" => {
-                assert_eq!(ol_set.lines.len(), 1);
+                assert_eq!(ol_set.lines().len(), 1);
                 (127u32, vec![(117, 1190)])
             }
             "OrderIDthree" => {
-                assert_eq!(ol_set.lines.len(), 2);
+                assert_eq!(ol_set.lines().len(), 2);
                 (128u32, vec![(576, 1190), (576, 194)])
             }
             "OrderIDfive" => {
@@ -298,9 +297,9 @@ fn ut_rd_oline_set_usr_cb<'a>(
                 (0u32, vec![])
             }
         };
-        assert_eq!(ol_set.owner_id, owner_id);
+        assert_eq!(ol_set.owner(), owner_id);
         let mut product_id_set: HashSet<(u32, u64)> = HashSet::from_iter(product_ids.into_iter());
-        let all_items_found = ol_set.lines.iter().all(|m| {
+        let all_items_found = ol_set.lines().iter().all(|m| {
             let key = (m.id().store_id, m.id().product_id);
             product_id_set.remove(&key)
         });

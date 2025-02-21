@@ -16,9 +16,9 @@ use ecommerce_common::api::web::dto::{
 };
 
 use crate::api::rpc::dto::{
-    OrderLineStockReturningDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto,
-    OrderReplicaStockReservingDto, OrderReplicaStockReturningDto, StockLevelReturnDto,
-    StockReturnErrorDto,
+    InventoryEditStockLevelDto, OrderLineStockReturningDto, OrderReplicaInventoryDto,
+    OrderReplicaInventoryReqDto, OrderReplicaStockReservingDto, OrderReplicaStockReturningDto,
+    StockLevelReturnDto, StockReturnErrorDto,
 };
 use crate::api::web::dto::{
     BillingReqDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
@@ -118,13 +118,8 @@ impl CreateOrderUseCase {
         let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
         let usr_id = self.auth_claim.profile;
-        let ol_set = OrderLineModelSet {
-            order_id: oid,
-            lines: o_items,
-            currency: o_currency,
-            create_time: timenow, // trait `Copy` implemented, clone implicitly
-            owner_id: usr_id,
-        };
+        let args = (oid, usr_id, timenow, o_currency, o_items);
+        let ol_set = OrderLineModelSet::from(args);
         // repository implementation should treat order-line reservation and
         // stock-level update as a single atomic operation
         self.try_reserve_stock(&ol_set).await?;
@@ -132,7 +127,7 @@ impl CreateOrderUseCase {
         // Contact info might be lost after order lines were saved, if power outage happenes
         // at here. TODO: Improve the code here
         self.repo_order
-            .save_contact(ol_set.order_id.as_str(), o_bl, o_sh)
+            .save_contact(ol_set.id().as_str(), o_bl, o_sh)
             .await
             .map_err(|e| {
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-fail-save: {e}");
@@ -626,19 +621,16 @@ impl OrderDiscardUnpaidItemsUseCase {
         ol_set: OrderLineModelSet,
     ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + 'a>> {
         let fut = async move {
-            let (order_id, unpaid_lines) = (
-                ol_set.order_id,
-                ol_set
-                    .lines
-                    .into_iter()
-                    .filter(|m| m.qty.has_unpaid())
-                    .collect::<Vec<OrderLineModel>>(),
-            );
+            let order_id = ol_set.id().to_string();
+            let unpaid_lines = ol_set.unpaid_lines();
             if unpaid_lines.is_empty() {
                 Ok(()) // all items have been paid, nothing to discard for now.
             } else {
                 let st_repo = o_repo.stock();
-                let items = unpaid_lines.into_iter().map(OrderLineModel::into).collect();
+                let items = unpaid_lines
+                    .into_iter()
+                    .map(InventoryEditStockLevelDto::from)
+                    .collect();
                 let data = StockLevelReturnDto { items, order_id };
                 let _return_result = st_repo.try_return(Self::read_stocklvl_cb, data).await?;
                 Ok(()) // TODO, logging the stock-return result, the result may not be able

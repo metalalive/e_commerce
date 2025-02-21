@@ -464,12 +464,10 @@ impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
         let owner_id = row.try_get::<u32, usize>(1)?;
         let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
         let buyer = BuyerCurrencyRow(&row, 3).try_into()?;
-        Ok(OrderLineModelSet {
-            order_id, owner_id, create_time,
-            currency: OrderCurrencyModel {buyer, sellers: sellers_currency},
-            lines: vec![],
-        })
-    } // end of fn try-into
+        let currency = OrderCurrencyModel {buyer, sellers: sellers_currency};
+        let args = (order_id, owner_id, create_time, currency, Vec::new());
+        Ok(OrderLineModelSet::from(args))
+    }
 } // end of impl TopLvlMetaRow
 
 #[rustfmt::skip]
@@ -494,7 +492,7 @@ impl TryFrom<OLineRow> for OrderLineModel {
             let raw = row.try_get::<&[u8], usize>(10)?;
             let serial = std::str::from_utf8(raw).map_err(|e| AppError {
                 code: AppErrorCode::DataCorruption,
-                detail: Some(format!("cvt-prod-attr-price: {}", e.to_string())),
+                detail: Some(format!("cvt-prod-attr-price: {}", e)),
             })?;
             ProdAttriPriceModel::deserialize_map(serial)?
         };
@@ -726,11 +724,12 @@ impl AbsOrderRepo for OrderMariaDbRepo {
                 .into_iter()
                 .map(|row| OLineRow(row).try_into())
                 .collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
-            ol_set.lines = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+            let newlines = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
                 return Err(e.to_owned());
             } else {
                 results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>()
             };
+            ol_set.append_lines(newlines);
             usr_cb(self, ol_set).await?;
         } // end of loop
         Ok(())
@@ -863,10 +862,10 @@ impl OrderMariaDbRepo {
         limit: usize,
     ) -> DefaultResult<(), AppError> {
         let (oid, usr_id, ctime, olines) = (
-            ol_set.order_id.as_str(),
-            ol_set.owner_id,
-            &ol_set.create_time,
-            &ol_set.lines,
+            ol_set.id().as_str(),
+            ol_set.owner(),
+            ol_set.create_time(),
+            ol_set.lines(),
         );
         if olines.len() > hard_limit::MAX_ORDER_LINES_PER_REQUEST {
             let d = format!(
@@ -883,15 +882,16 @@ impl OrderMariaDbRepo {
         let oid = OidBytes::try_from(oid)?;
         {
             // check precision of currency rates, should not exceed the limit
-            ol_set.currency.buyer.check_rate_range()?;
-            let ms = ol_set.currency.sellers.values().collect::<Vec<_>>();
+            ol_set.currency().buyer.check_rate_range()?;
+            let ms = ol_set.currency().sellers.values().collect::<Vec<_>>();
             CurrencyModel::check_rate_range_multi(ms)?;
         }
-        let (sql_patt, args) = InsertTopMetaArg(&oid, usr_id, ctime, &ol_set.currency.buyer).into();
+        let (sql_patt, args) =
+            InsertTopMetaArg(&oid, usr_id, &ctime, &ol_set.currency().buyer).into();
         let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
 
-        let (sql_patt, args) = InsertSellerCurrencyArg(&oid, &ol_set.currency.sellers).into();
-        let _rs = run_query_once(tx, sql_patt, args, Some(ol_set.currency.sellers.len())).await?;
+        let (sql_patt, args) = InsertSellerCurrencyArg(&oid, &ol_set.currency().sellers).into();
+        let _rs = run_query_once(tx, sql_patt, args, Some(ol_set.currency().sellers.len())).await?;
 
         let mut num_processed = 0;
         let mut data = olines.iter().collect::<Vec<_>>();

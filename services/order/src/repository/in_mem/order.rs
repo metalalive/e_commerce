@@ -235,12 +235,12 @@ mod _order_toplvl_meta {
     pub(super) fn to_inmem_tbl(
         data: &OrderLineModelSet,
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
-        let pkey = data.order_id.clone();
+        let pkey = data.id().to_string();
         let value = vec![
-            data.owner_id.to_string(),
-            data.create_time.to_rfc3339(),
-            data.currency.buyer.name.to_string(),
-            data.currency.buyer.rate.to_string(),
+            data.owner().to_string(),
+            data.create_time().to_rfc3339(),
+            data.currency().buyer.name.to_string(),
+            data.currency().buyer.rate.to_string(),
         ];
         HashMap::from([(pkey, value)])
     } // end of fn to_inmem_tbl
@@ -850,19 +850,15 @@ impl AbsOrderRepo for OrderInMemRepo {
             let InnerTopLvlWrapper(owner_id, create_time, buyer_currency, buyer_exrate) =
                 self.fetch_toplvl_meta(oid.as_str()).await?;
             let ms = self.fetch_lines_common(keys).await?;
-            let mset = OrderLineModelSet {
-                order_id: oid,
-                owner_id,
-                create_time,
-                lines: ms,
-                currency: OrderCurrencyModel {
-                    buyer: CurrencyModel {
-                        name: buyer_currency,
-                        rate: buyer_exrate,
-                    },
-                    sellers: std::collections::HashMap::new(),
-                }, // TODO, will be deleted once refactored
-            };
+            let currency = OrderCurrencyModel {
+                buyer: CurrencyModel {
+                    name: buyer_currency,
+                    rate: buyer_exrate,
+                },
+                sellers: std::collections::HashMap::new(),
+            }; // TODO, will be deleted once refactored
+            let args = (oid, owner_id, create_time, currency, ms);
+            let mset = OrderLineModelSet::from(args);
             usr_cb(self, mset).await?;
         }
         Ok(())
@@ -968,15 +964,15 @@ impl OrderInMemRepo {
     pub(super) fn gen_lowlvl_tablerows(
         lineset: &OrderLineModelSet,
     ) -> Vec<(String, AppInMemFetchedSingleTable)> {
-        let oid = lineset.order_id.as_str();
+        let oid = lineset.id().as_str();
         vec![
             (
                 _orderline::TABLE_LABEL.to_string(),
-                _orderline::to_inmem_tbl(oid, &lineset.lines),
+                _orderline::to_inmem_tbl(oid, lineset.lines()),
             ),
             (
                 _seller_currencies::TABLE_LABEL.to_string(),
-                _seller_currencies::to_inmem_tbl(oid, &lineset.currency.sellers),
+                _seller_currencies::to_inmem_tbl(oid, &lineset.currency().sellers),
             ),
             (
                 _order_toplvl_meta::TABLE_LABEL.to_string(),

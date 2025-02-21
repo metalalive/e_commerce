@@ -85,11 +85,11 @@ pub struct OrderReturnModel {
   // , add different shipping address for each return
 
 pub struct OrderLineModelSet {
-    pub order_id: String,
-    pub owner_id: u32,
-    pub create_time: DateTime<FixedOffset>,
-    pub currency: OrderCurrencyModel,
-    pub lines: Vec<OrderLineModel>,
+    order_id: String,
+    owner_id: u32,
+    create_time: DateTime<FixedOffset>,
+    lines: Vec<OrderLineModel>,
+    currency: OrderCurrencyModel,
 }
 
 impl From<ShippingOptionModel> for ShippingOptionDto {
@@ -215,9 +215,9 @@ impl From<(u32, u32)> for OrderLinePriceModel {
 }
 
 impl OrderLinePriceModel {
-    fn finalize_price<'a, 'b>(
-        data: &'a OrderLineReqDto,
-        pricem: &'b ProductPriceModel,
+    fn finalize_price(
+        data: &OrderLineReqDto,
+        pricem: &ProductPriceModel,
     ) -> DefaultResult<(Self, ProdAttriPriceModel), AppError> {
         let attrprice = pricem.extract_attributes(data)?;
         let baseprice = i32::try_from(pricem.base_price()).map_err(|e| AppError {
@@ -449,8 +449,8 @@ impl From<OrderLineModel> for OrderLineStockReservingDto {
     }
 }
 
-impl From<OrderLineModel> for InventoryEditStockLevelDto {
-    fn from(value: OrderLineModel) -> InventoryEditStockLevelDto {
+impl<'a> From<&'a OrderLineModel> for InventoryEditStockLevelDto {
+    fn from(value: &'a OrderLineModel) -> InventoryEditStockLevelDto {
         assert!(value.qty.reserved >= value.qty.paid);
         let num_returning = (value.qty.reserved - value.qty.paid) as i32;
         InventoryEditStockLevelDto {
@@ -461,6 +461,23 @@ impl From<OrderLineModel> for InventoryEditStockLevelDto {
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
           // , becuase the editing data, converted from order line, does NOT really reflect
           // the expiry time of the original stock item
+    }
+}
+
+#[rustfmt::skip]
+type OrderTopLvlCvtArgs = (
+    String, u32, DateTime<FixedOffset>, OrderCurrencyModel, Vec<OrderLineModel>
+);
+
+impl From<OrderTopLvlCvtArgs> for OrderLineModelSet {
+    fn from(d: OrderTopLvlCvtArgs) -> Self {
+        Self {
+            order_id: d.0,
+            owner_id: d.1,
+            create_time: d.2,
+            currency: d.3,
+            lines: d.4,
+        }
     }
 }
 
@@ -530,6 +547,30 @@ impl OrderLineModelSet {
         } else {
             Err(errors.remove(0))
         }
+    }
+    pub fn id(&self) -> &String {
+        &self.order_id
+    }
+    pub fn owner(&self) -> u32 {
+        self.owner_id
+    }
+    pub(crate) fn create_time(&self) -> DateTime<FixedOffset> {
+        self.create_time
+    }
+    pub fn currency(&self) -> &OrderCurrencyModel {
+        &self.currency
+    }
+    pub fn lines(&self) -> &[OrderLineModel] {
+        &self.lines
+    }
+    pub(crate) fn append_lines(&mut self, new: Vec<OrderLineModel>) {
+        self.lines.extend(new);
+    }
+    pub(crate) fn unpaid_lines(&self) -> Vec<&OrderLineModel> {
+        self.lines
+            .iter()
+            .filter(|m| m.qty.has_unpaid())
+            .collect::<Vec<_>>()
     }
 } // end of impl OrderLineModelSet
 

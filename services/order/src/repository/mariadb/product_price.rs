@@ -200,7 +200,7 @@ impl From<InsertUpdateMetaArg> for (String, MySqlArguments) {
 }
 
 #[rustfmt::skip]
-const SELECT_COLUMN_SEQ: [&'static str ; 8] = [
+const SELECT_COLUMN_SEQ: [&str ; 8] = [
     "`product_id`", "`price`", "`start_after`", "`end_before`",
     "`start_tz_utc`", "`end_tz_utc`", "`attr_lastupdate`", "`attr_map`",
 ];
@@ -418,7 +418,7 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
             let raw = value.try_get::<&[u8], usize>(7)?;
             let serial = std::str::from_utf8(raw).map_err(|e| AppError {
                 code: AppErrorCode::DataCorruption,
-                detail: Some(format!("cvt-prod-attr-price: {}", e.to_string())),
+                detail: Some(format!("cvt-prod-attr-price: {}", e)),
             })?;
             ProdAttriPriceModel::deserialize_map(serial)?
         };

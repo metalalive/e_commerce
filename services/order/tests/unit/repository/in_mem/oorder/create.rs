@@ -115,18 +115,17 @@ async fn ut_verify_create_order(
             },
             sellers: seller_currencies,
         };
-        let ol_set = OrderLineModelSet {
-            order_id: mock_oid[idx].clone(),
-            owner_id: bcdata.0,
-            create_time: DateTime::parse_from_rfc3339(mock_create_time[idx]).unwrap(),
-            lines,
-            currency,
+        let ol_set = {
+            let order_id = mock_oid[idx].clone();
+            let owner_id = bcdata.0;
+            let create_time = DateTime::parse_from_rfc3339(mock_create_time[idx]).unwrap();
+            OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
         };
         let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
         assert!(result.is_ok());
         let result = o_repo
             .save_contact(
-                ol_set.order_id.as_str(),
+                ol_set.id().as_str(),
                 billings.remove(0),
                 shippings.remove(0),
             )

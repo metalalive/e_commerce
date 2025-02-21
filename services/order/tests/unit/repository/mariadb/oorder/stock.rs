@@ -15,7 +15,7 @@ use super::super::super::in_mem::oorder::stock::{
 };
 use super::super::dstore_ctx_setup;
 use super::create::ut_verify_fetch_all_olines_ok;
-use super::ut_oline_init_setup;
+use super::{ut_default_order_currency, ut_oline_init_setup};
 use crate::model::verify_stocklvl_model;
 
 #[rustfmt::skip]
@@ -158,9 +158,9 @@ fn mock_reserve_usr_cb_0(
     req: &OrderLineModelSet,
 ) -> AppStockRepoReserveReturn {
     assert_eq!(ms.stores.len(), 1);
-    assert_eq!(req.lines.len(), 1);
+    assert_eq!(req.lines().len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines[0].id().store_id, req.lines[0].id().product_id);
+    let id_combo = (req.lines()[0].id().store_id, req.lines()[0].id().product_id);
     let product = match id_combo {
         (1013, 9006) => saved_store
             .products
@@ -173,10 +173,10 @@ fn mock_reserve_usr_cb_0(
         }
     };
     assert!(product.quantity.rsv_detail.is_none());
-    product.quantity.booked += req.lines[0].qty.reserved;
+    product.quantity.booked += req.lines()[0].qty.reserved;
     product.quantity.rsv_detail = Some(StockQtyRsvModel {
-        oid: req.order_id.clone(),
-        reserved: req.lines[0].qty.reserved,
+        oid: req.id().clone(),
+        reserved: req.lines()[0].qty.reserved,
     });
     Ok(())
 } // end of mock_reserve_usr_cb_0
@@ -240,7 +240,8 @@ async fn try_reserve_ok() {
             (1014, 9008, 29, 20, None, mock_warranty + Duration::minutes(3)),
             (1014, 9009, 6, 15, Some(4), mock_rsved_end + Duration::minutes(4)),
         ];
-        ut_oline_init_setup("800eff40", 123, create_time, lines)
+        let currency = ut_default_order_currency(vec![1013, 1014]);
+        ut_oline_init_setup("800eff40", 123, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
@@ -264,7 +265,7 @@ fn mock_reserve_usr_cb_2(
     ms: &mut StockLevelModelSet,
     req: &OrderLineModelSet,
 ) -> AppStockRepoReserveReturn {
-    assert_eq!(req.lines.len(), 2);
+    assert_eq!(req.lines().len(), 2);
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(ms.stores[0].products.len(), 2);
     ms.stores[0]
@@ -283,16 +284,16 @@ fn mock_reserve_usr_cb_2(
         .count();
     let errors = vec![
         OrderLineCreateErrorDto {
-            seller_id: req.lines[0].id().store_id,
-            product_id: req.lines[0].id().product_id,
+            seller_id: req.lines()[0].id().store_id,
+            product_id: req.lines()[0].id().product_id,
             nonexist: None,
             rsv_limit: None,
             shortage: Some(2),
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
         },
         OrderLineCreateErrorDto {
-            seller_id: req.lines[1].id().store_id,
-            product_id: req.lines[1].id().product_id,
+            seller_id: req.lines()[1].id().store_id,
+            product_id: req.lines()[1].id().product_id,
             nonexist: None,
             rsv_limit: None,
             shortage: Some(1),
@@ -332,7 +333,8 @@ async fn try_reserve_shortage() {
             (1015, 9003, 12, 3, None, mock_warranty),
             (1015, 9002, 6, 4, None, mock_warranty),
         ];
-        ut_oline_init_setup("8100ffe0", 123, create_time, lines)
+        let currency = ut_default_order_currency(vec![1015]);
+        ut_oline_init_setup("8100ffe0", 123, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
     assert!(result.is_err());
@@ -388,8 +390,8 @@ fn mock_reserve_usr_cb_3(
     }
     assert_eq!(ms.stores.len(), 1);
     let store = &mut ms.stores[0];
-    let oid = req.order_id.as_str();
-    req.lines
+    let oid = req.id().as_str();
+    req.lines()
         .iter()
         .map(|line| {
             let mut line_rsv_req = line.qty.reserved;
@@ -471,7 +473,8 @@ async fn try_return_ok() {
             (mock_seller, 9006, 123, 4, None, mock_warranty + Duration::hours(1)),
             (mock_seller, 9008, 50, 20, Some(2), mock_warranty + Duration::hours(10)),
         ];
-        ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines)
+        let currency = ut_default_order_currency(vec![mock_seller]);
+        ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
     assert!(result.is_ok());

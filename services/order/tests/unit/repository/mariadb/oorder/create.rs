@@ -16,7 +16,7 @@ use order::repository::{app_repo_order, AbsOrderRepo, AppStockRepoReserveReturn}
 use super::super::super::in_mem::oorder::stock::ut_reserve_init_setup;
 use super::super::super::in_mem::oorder::{ut_setup_billing, ut_setup_shipping};
 use super::super::dstore_ctx_setup;
-use super::{ut_oline_init_setup, ut_setup_stock_product};
+use super::{ut_default_order_currency, ut_oline_init_setup, ut_setup_stock_product};
 
 #[rustfmt::skip]
 pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>) {
@@ -158,22 +158,22 @@ fn ut_fetch_lines_rsvtime_usr_cb(
 ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + '_>> {
     let fut = async move {
         let mock_seller = 1033u32;
-        println!("[DEBUG] fetched oids : {}", mset.order_id.as_str());
-        let expect = match mset.order_id.as_str() {
+        println!("[DEBUG] fetched oids : {}", mset.id().as_str());
+        let expect = match mset.id().as_str() {
             "0e927d72" => (1usize, vec![(9013u64, 14u32)], CurrencyDto::INR, "79.0045"),
             "0e927d73" => (2, vec![(9012, 15), (9013, 16)], CurrencyDto::IDR, "16298.0110"),
             "0e927d74" => (1, vec![(9012, 17)], CurrencyDto::THB, "38.7160"),
             _others => (0, vec![], CurrencyDto::Unknown, "-0.00"),
         }; // remind `BINARY` column is right-padded with zero in MariaDB
         let mut actual_product_ids = mset
-            .lines
+            .lines()
             .iter()
             .map(|line| (line.id().product_id, line.qty.reserved))
             .collect::<Vec<_>>();
         actual_product_ids.sort_by(|a, b| a.0.cmp(&b.0));
-        assert_eq!(mset.lines.len(), expect.0);
+        assert_eq!(mset.lines().len(), expect.0);
         assert_eq!(actual_product_ids, expect.1);
-        let result = mset.currency.sellers.get(&mock_seller)
+        let result = mset.currency().sellers.get(&mock_seller)
             .map(|v| {
                 assert_eq!(v.name, expect.2);
                 assert_eq!(v.rate.to_string().as_str(), expect.3);
@@ -206,12 +206,13 @@ async fn fetch_lines_by_rsvtime_ok() {
             (mock_seller, 9012, mock_rsv_qty, 29, Some(3), rsv_time),
             (mock_seller, 9013, mock_rsv_qty + 1, 25, None, rsv_time + Duration::days(1)),
         ];
-        let mut ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
-        ol_set.currency.sellers.get_mut(&mock_seller)
+        let mut currency = ut_default_order_currency(vec![mock_seller]);
+        currency.sellers.get_mut(&mock_seller)
             .map(|v| {
                 v.name = mock_currency_label;
                 v.rate = mock_currency_rate;
             });
+        let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, currency, lines);
         let result = o_repo
             .stock()
             .try_reserve(mock_reserve_usr_cb_0, &ol_set)
@@ -245,7 +246,8 @@ async fn fetch_toplvl_meta_ok() {
         let lines = vec![(
             mock_seller, 9014, mock_rsv_qty, 29, Some(5), rsv_time,
         )];
-        let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines);
+        let currency = ut_default_order_currency(vec![mock_seller]);
+        let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines);
         let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
         assert!(result.is_ok());
         mock_usr_id += 10;
@@ -299,18 +301,20 @@ async fn fetch_seller_currency_ok() {
         (mock_sellers[1], 554, 9, mock_item_price, None, rsv_time),
         (mock_sellers[2], 1492, 8, mock_item_price, Some(8), rsv_time),
     ];
-    let mut ol_set = ut_oline_init_setup(mock_oid, mock_buyer_id, create_time, lines);
-    {
-        ol_set.currency.buyer.rate = Decimal::new(2909, 2);
-        ol_set.currency.sellers.get_mut(&mock_sellers[0]).map(|v| {
+    let currency = {
+        let mut c = ut_default_order_currency(mock_sellers.to_vec());
+        c.buyer.rate = Decimal::new(2909, 2);
+        c.sellers.get_mut(&mock_sellers[0]).map(|v| {
             v.name = CurrencyDto::IDR;
             v.rate = Decimal::new(102030405, 4);
         });
-        ol_set.currency.sellers.get_mut(&mock_sellers[2]).map(|v| {
+        c.sellers.get_mut(&mock_sellers[2]).map(|v| {
             v.name = CurrencyDto::USD;
             v.rate = Decimal::new(1, 0);
         });
-    }
+        c
+    };
+    let ol_set = ut_oline_init_setup(mock_oid, mock_buyer_id, create_time, currency, lines);
     let result = o_repo
         .stock()
         .try_reserve(mock_reserve_usr_cb_0, &ol_set)

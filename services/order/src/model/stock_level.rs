@@ -400,9 +400,9 @@ impl StockLevelModelSet {
     // this model instance will be no longer clean and should be discarded immediately.
     pub fn try_reserve(&mut self, ol_set: &OrderLineModelSet) -> Vec<OrderLineCreateErrorDto> {
         self.sort_by_expiry(true);
-        let oid = ol_set.order_id.as_str();
+        let oid = ol_set.id().as_str();
         ol_set
-            .lines
+            .lines()
             .iter()
             .filter_map(|req| {
                 let mut error = OrderLineCreateErrorDto {

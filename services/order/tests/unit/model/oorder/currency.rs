@@ -146,12 +146,12 @@ fn order_to_web_resp_dto_ok() {
         (mock_seller_ids[2], 50129, 426, 2656, 6, 0, None,
          mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16)),
     ];
-    let model = OrderLineModelSet {
-        order_id: "extremelyInDepth".to_string(),
-        owner_id: 1234,
-        create_time: mock_ctime,
-        currency: ut_common_order_currency(mock_seller_ids),
-        lines: ut_setup_order_lines(mock_olines_data),
+    let model = {
+        let order_id = "extremelyInDepth".to_string();
+        let owner_id = 1234;
+        let currency = ut_common_order_currency(mock_seller_ids);
+        let lines = ut_setup_order_lines(mock_olines_data);
+        OrderLineModelSet::from((order_id, owner_id, mock_ctime, currency, lines))
     };
     let result = OrderCreateRespOkDto::try_from(model);
     assert!(result.is_ok());

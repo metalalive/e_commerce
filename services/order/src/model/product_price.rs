@@ -231,35 +231,33 @@ impl ProductPriceModel {
         let newmap = if let Some(chosen) = d.applied_attr.as_ref() {
             if chosen.is_empty() {
                 None
-            } else {
-                if let Some(vm) = self.attrs_charge().pricing.as_ref() {
-                    let mut nonexist = Vec::new();
-                    let map_iter = chosen.iter().filter_map(|c| {
-                        let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
-                        if let Some(extra_amount) = vm.get(&k) {
-                            Some((k, *extra_amount))
-                        } else {
-                            nonexist.push(c);
-                            None
-                        }
-                    });
-                    let map = HashMap::from_iter(map_iter);
-                    if nonexist.is_empty() {
-                        Some(map)
+            } else if let Some(vm) = self.attrs_charge().pricing.as_ref() {
+                let mut nonexist = Vec::new();
+                let map_iter = chosen.iter().filter_map(|c| {
+                    let k = ProdAttriPriceModel::map_key(c.label_id.as_str(), &c.value);
+                    if let Some(extra_amount) = vm.get(&k) {
+                        Some((k, *extra_amount))
                     } else {
-                        let detail = format!("price-attr-extract-fail : {:?}", nonexist);
-                        return Err(AppError {
-                            code: AppErrorCode::InvalidInput,
-                            detail: Some(detail),
-                        });
+                        nonexist.push(c);
+                        None
                     }
+                });
+                let map = HashMap::from_iter(map_iter);
+                if nonexist.is_empty() {
+                    Some(map)
                 } else {
-                    let detail = format!("price-attr-extract-fail : {:?}", chosen);
+                    let detail = format!("price-attr-extract-fail : {:?}", nonexist);
                     return Err(AppError {
                         code: AppErrorCode::InvalidInput,
                         detail: Some(detail),
                     });
                 }
+            } else {
+                let detail = format!("price-attr-extract-fail : {:?}", chosen);
+                return Err(AppError {
+                    code: AppErrorCode::InvalidInput,
+                    detail: Some(detail),
+                });
             }
         } else {
             None

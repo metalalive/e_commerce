@@ -66,9 +66,10 @@ fn ut_oline_init_setup(
     oid: &str,
     owner_id: u32,
     create_time: DateTime<FixedOffset>,
-    lines: Vec<UtestOlineInitScalar>,
+    currency: OrderCurrencyModel,
+    lines_raw: Vec<UtestOlineInitScalar>,
 ) -> OrderLineModelSet {
-    let order_req = lines
+    let olines_req = lines_raw
         .into_iter()
         .map(|d| {
             let id_ = OrderLineIdentity {
@@ -91,15 +92,6 @@ fn ut_oline_init_setup(
             OrderLineModel::from((id_, price, policy, qty, attr_chg))
         })
         .collect::<Vec<_>>();
-    let seller_ids = order_req
-        .iter()
-        .map(|v| v.id().store_id)
-        .collect::<Vec<_>>();
-    OrderLineModelSet {
-        order_id: oid.to_string(),
-        owner_id,
-        create_time,
-        lines: order_req,
-        currency: ut_default_order_currency(seller_ids),
-    }
+    let args = (oid.to_string(), owner_id, create_time, currency, olines_req);
+    OrderLineModelSet::from(args)
 } // end of fn fn ut_oline_init_setup

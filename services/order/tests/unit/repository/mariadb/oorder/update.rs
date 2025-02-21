@@ -8,7 +8,7 @@ use order::model::{OrderLineIdentity, OrderLineModel, OrderLineModelSet, StockLe
 use order::repository::{app_repo_order, AppStockRepoReserveReturn};
 
 use super::super::dstore_ctx_setup;
-use super::{ut_oline_init_setup, ut_setup_stock_product};
+use super::{ut_default_order_currency, ut_oline_init_setup, ut_setup_stock_product};
 
 fn mock_reserve_usr_cb_0(
     ms: &mut StockLevelModelSet,
@@ -49,7 +49,8 @@ async fn update_payment_ok() {
             (1031, 9003, 10, 100, None, create_time),
             (1032, 9011, 15, 110, Some(3), create_time),
         ];
-        let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
+        let currency = ut_default_order_currency(vec![1032, 1031]);
+        let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, currency, lines);
         let result = o_repo
             .stock()
             .try_reserve(mock_reserve_usr_cb_0, &ol_set)

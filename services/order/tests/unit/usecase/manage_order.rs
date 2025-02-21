@@ -440,19 +440,19 @@ async fn discard_unpaid_items_ok() {
         .map(|v| v.id().store_id)
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
-        OrderLineModelSet {
-            order_id: "xx1".to_string(),
-            owner_id: 123,
-            create_time: create_time.clone(),
-            lines: mocked_olines.drain(0..2).collect(),
-            currency: ut_setup_order_currency(mocked_seller_ids.clone()),
+        {
+            let order_id = "xx1".to_string();
+            let owner_id = 123;
+            let lines = mocked_olines.drain(0..2).collect();
+            let currency = ut_setup_order_currency(mocked_seller_ids.clone());
+            OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
         },
-        OrderLineModelSet {
-            order_id: "xx2".to_string(),
-            owner_id: 124,
-            create_time,
-            lines: mocked_olines,
-            currency: ut_setup_order_currency(mocked_seller_ids),
+        {
+            let order_id = "xx2".to_string();
+            let owner_id = 124;
+            let lines = mocked_olines;
+            let currency = ut_setup_order_currency(mocked_seller_ids);
+            OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
         },
     ];
     let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
@@ -473,19 +473,19 @@ async fn discard_unpaid_items_err_stocklvl() {
         .map(|v| v.id().store_id)
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
-        OrderLineModelSet {
-            order_id: "xx1".to_string(),
-            owner_id: 500,
-            create_time: create_time.clone(),
-            lines: mocked_olines.drain(0..1).collect(),
-            currency: ut_setup_order_currency(mocked_seller_ids.clone()),
+        {
+            let order_id = "xx1".to_string();
+            let owner_id = 500;
+            let lines = mocked_olines.drain(0..1).collect();
+            let currency = ut_setup_order_currency(mocked_seller_ids.clone());
+            OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
         },
-        OrderLineModelSet {
-            order_id: "xx2".to_string(),
-            owner_id: 510,
-            create_time,
-            lines: mocked_olines,
-            currency: ut_setup_order_currency(mocked_seller_ids),
+        {
+            let order_id = "xx2".to_string();
+            let owner_id = 510;
+            let lines = mocked_olines;
+            let currency = ut_setup_order_currency(mocked_seller_ids);
+            OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
         },
     ];
     let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
