@@ -1,13 +1,14 @@
-use crate::api::web::dto::{CartDto, CartLineDto};
+use ecommerce_common::model::BaseProductIdentity;
 
-use super::BaseProductIdentity;
+use crate::api::web::dto::{CartDto, CartLineDto}; // OlineProductAttrDto
 
 pub struct CartLineModel {
     pub id_: BaseProductIdentity,
-    // TODO, add fields which indicate
-    // - product variant (e.g. specific size, color, etc.
-    //   it may be structure like JSON but immutable in this service)
-    // - extra cost to the product variant above
+    // TODO, add following field which represents product variant (e.g.
+    // specific size, color, etc.) attributes, no need to resolve the
+    // chosen attributes in cart line, they might be changed later on
+    // before checkout.
+    //// chosen_attr: Option<Vec<OlineProductAttrDto>>,
     pub qty_req: u32,
     // current price and stock level are excluded
 }

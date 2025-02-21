@@ -326,8 +326,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             .lines()
             .iter()
             .map(|d| ProductStockIdentity2 {
-                store_id: d.id().store_id,
-                product_id: d.id().product_id,
+                store_id: d.id().store_id(),
+                product_id: d.id().product_id(),
             })
             .collect();
         let (mut stock_mset, rsv_set, d_lock) = self

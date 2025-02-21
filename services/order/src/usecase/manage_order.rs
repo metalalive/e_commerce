@@ -33,8 +33,9 @@ use ecommerce_common::model::order::BillingModel;
 use crate::constant::app_meta;
 use crate::error::AppError;
 use crate::model::{
-    OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
-    ProductPolicyModelSet, ProductPriceModelSet, ShippingModel, StockLevelModelSet,
+    OlineDupError, OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet, ShippingModel,
+    StockLevelModelSet,
 };
 use crate::repository::{
     AbsCurrencyRepo, AbsOrderRepo, AbsOrderReturnRepo, AbsProductPriceRepo, AbstProductPolicyRepo,
@@ -119,7 +120,7 @@ impl CreateOrderUseCase {
         let timenow = LocalTime::now().fixed_offset();
         let usr_id = self.auth_claim.profile;
         let args = (oid, usr_id, timenow, o_currency, o_items);
-        let ol_set = OrderLineModelSet::from(args);
+        let ol_set = OrderLineModelSet::try_from(args).map_err(Self::handle_toplvl_error)?;
         // repository implementation should treat order-line reservation and
         // stock-level update as a single atomic operation
         self.try_reserve_stock(&ol_set).await?;
@@ -324,6 +325,7 @@ impl CreateOrderUseCase {
                                     rsv_limit: Some(rsv_limit),
                                     nonexist: None,
                                     shortage: None,
+                                    attr_vals: None,
                                     reason: OrderLineCreateErrorReason::RsvLimitViolation,
                                 };
                                 client_errors.push(e);
@@ -345,6 +347,7 @@ impl CreateOrderUseCase {
                         reason: OrderLineCreateErrorReason::NotExist,
                         nonexist: Some(nonexist),
                         shortage: None,
+                        attr_vals: None,
                     };
                     client_errors.push(e);
                     None
@@ -363,6 +366,17 @@ impl CreateOrderUseCase {
             Err(CreateOrderUsKsErr::ReqContent(Box::new(err_dto)))
         }
     } // end of fn validate_orderline
+
+    fn handle_toplvl_error(es: Vec<OlineDupError>) -> CreateOrderUsKsErr {
+        let olines_err = es.into_iter().map(OrderLineCreateErrorDto::from).collect();
+        let error = OrderCreateRespErrorDto {
+            order_lines: Some(olines_err),
+            billing: None,
+            shipping: None,
+            quota_olines: None,
+        };
+        CreateOrderUsKsErr::ReqContent(Box::new(error))
+    }
 
     async fn try_reserve_stock(
         &self,

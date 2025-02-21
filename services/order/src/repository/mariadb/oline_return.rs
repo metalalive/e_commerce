@@ -33,6 +33,7 @@ struct ReturnOidMap {
 
 impl InsertReqArg {
     fn sql_pattern(num_batch: usize) -> String {
+        // TODO, add column `attr_seq` to order-line return request
         let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`create_time`,\
             `quantity`,`price_unit`,`price_total`";
         let items = (0..num_batch)
@@ -51,8 +52,9 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
         let mut args = MySqlArguments::default();
         reqs.into_iter()
             .map(|req| {
-                let (id_, qty_map) = (req.id_, req.qty);
-                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
+                let qty_map = req.qty;
+                let seller_id = req.id_.store_id();
+                let prod_id = req.id_.product_id();
                 qty_map
                     .into_iter()
                     .map(|(ctime, (qty, refund))| {
@@ -79,6 +81,7 @@ impl From<InsertReqArg> for (String, MySqlArguments) {
     }
 }
 
+// TODO, add column `attr_seq` to order-line return request
 const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_id`,`create_time`,\
             `quantity`,`price_unit`,`price_total`";
 
@@ -99,10 +102,9 @@ impl<'q> IntoArguments<'q, MySql> for FetchByIdArg {
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
-            .map(|id_| {
-                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
-                args.add(seller_id).unwrap();
-                args.add(prod_id).unwrap();
+            .map(|pid| {
+                args.add(pid.store_id()).unwrap();
+                args.add(pid.product_id()).unwrap();
             })
             .count();
         args
@@ -142,7 +144,7 @@ impl From<FetchByIdAndTimeArg> for (String, MySqlArguments) {
         let (oid_b, start, end) = (value.0, value.1, value.2);
         let sql_patt = format!(
             "SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` \
-                                WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
+             WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
         );
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column()).unwrap();
@@ -159,10 +161,8 @@ impl ReturnsPerOrder {
     fn try_merge(&mut self, row: MySqlRow) -> DefaultResult<(), AppError> {
         let store_id = row.try_get::<u32, usize>(0)?;
         let product_id = row.try_get::<u64, usize>(1)?;
-        let id_ = OrderLineIdentity {
-            store_id,
-            product_id,
-        };
+        let attr_seq_dummy = 0u16; // TODO, finish implementation
+        let id_ = OrderLineIdentity::from((store_id, product_id, attr_seq_dummy));
         let result = self.0.iter_mut().find(|ret| ret.id_ == id_);
         let saved_ret = if let Some(v) = result {
             v

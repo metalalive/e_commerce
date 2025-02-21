@@ -25,7 +25,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
     .map(
         |(product_id, (unit, total), reserved, paid, paid_last_update)| {
             let args = (
-                OrderLineIdentity {store_id, product_id},
+                OrderLineIdentity::from((store_id, product_id, 0)),
                 OrderLinePriceModel::from((unit, total)),
                 OrderLineAppliedPolicyModel {
                     reserved_until, warranty_until,
@@ -54,10 +54,7 @@ fn ut_saved_oline_return_setup(
     ];
     vec![
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 257, // type: Item,
-            },
+            id_: OrderLineIdentity::from((store_id, 257, 0)),
             qty: HashMap::from([
                 (
                     last_returned[0].clone(),
@@ -70,10 +67,7 @@ fn ut_saved_oline_return_setup(
             ]),
         },
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id,
-                product_id: 574, // type: Package,
-            },
+            id_: OrderLineIdentity::from((store_id, 574, 0)),
             qty: HashMap::from([(
                 last_returned[0].clone(),
                 (1u32, OrderLinePriceModel::from((5, 5))),
@@ -113,7 +107,7 @@ fn filter_request_ok() {
             .map(|m| {
                 let num_returned = m.qty.values().map(|d| d.0).sum::<u32>();
                 let actual = (m.qty.len(), num_returned);
-                let expect = match m.id_.product_id {
+                let expect = match m.id_.product_id() {
                     890u64 => (1usize, 4u32),
                     574 => (1, 1),
                     257 => (1, 3),
@@ -228,7 +222,7 @@ fn filter_request_err_duplicate() {
         let key = OrderReturnModel::dtime_round_secs(&dt_now, interval_secs).unwrap();
         let value = (2, OrderLinePriceModel::from((5, 10)));
         objs.last_mut().unwrap().qty.insert(key, value);
-        assert_eq!(objs[1].id_.product_id, 574);
+        assert_eq!(objs[1].id_.product_id(), 574);
         assert_eq!(objs[1].qty.len(), 2);
         objs
     }; // assume the record is already added to the return model

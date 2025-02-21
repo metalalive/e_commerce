@@ -119,9 +119,10 @@ impl<'a, 'b> From<InsertSellerCurrencyArg<'a, 'b>> for (String, MySqlArguments) 
 impl<'a, 'b> InsertOLineArg<'a, 'b> {
     fn sql_pattern(num_batch: usize) -> String {
         let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`price_unit`,`price_total`,\
-                       `qty_rsved`,`rsved_until`,`warranty_until`,`attr_lastupdate`,`attr_price`";
+                       `qty_rsved`,`rsved_until`,`warranty_until`,`attr_lastupdate`,\
+                       `attr_price`,`attr_seq`";
         let items = (0..num_batch)
-            .map(|_| "(?,?,?,?,?,?,?,?,?,?,?)")
+            .map(|_| "(?,?,?,?,?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
             "INSERT INTO `order_line_detail`({}) VALUES {}",
@@ -144,8 +145,8 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
                 args.add(oid.as_column()).unwrap();
                 args.add(seq as u16).unwrap(); // match the column type in db table
                 seq += 1;
-                args.add(o.id().store_id).unwrap();
-                args.add(o.id().product_id).unwrap();
+                args.add(o.id().store_id()).unwrap();
+                args.add(o.id().product_id()).unwrap();
                 args.add(o.price().unit()).unwrap();
                 args.add(o.price().total()).unwrap();
                 args.add(o.qty.reserved).unwrap();
@@ -153,6 +154,7 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
                 args.add(warranty_until).unwrap();
                 args.add(attr_lupdate).unwrap();
                 args.add(attr_pricemap).unwrap();
+                args.add(o.id().attrs_seq_num()).unwrap();
             })
             .count();
         args
@@ -310,7 +312,7 @@ impl<'a> From<InsertShipOption<'a>> for (String, MySqlArguments) {
 
 impl<'a> UpdateOLinePayArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
-        let condition = "(`store_id`=? AND `product_id`=?)";
+        let condition = "(`store_id`=? AND `product_id`=? AND `attr_seq`=?)";
         let case_ops = (0..num_batch)
             .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
@@ -336,8 +338,9 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
         lines
             .iter()
             .map(|line| {
-                args.add(line.id().store_id).unwrap();
-                args.add(line.id().product_id).unwrap();
+                args.add(line.id().store_id()).unwrap();
+                args.add(line.id().product_id()).unwrap();
+                args.add(line.id().attrs_seq_num()).unwrap();
                 args.add(line.qty.paid).unwrap();
             })
             .count();
@@ -345,8 +348,9 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
             .iter()
             .map(|line| {
                 let time = line.qty.paid_last_update.as_ref().unwrap();
-                args.add(line.id().store_id).unwrap();
-                args.add(line.id().product_id).unwrap();
+                args.add(line.id().store_id()).unwrap();
+                args.add(line.id().product_id()).unwrap();
+                args.add(line.id().attrs_seq_num()).unwrap();
                 args.add(time.naive_utc()).unwrap();
             })
             .count();
@@ -354,8 +358,9 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
         lines
             .into_iter()
             .map(|line| {
-                args.add(line.id().store_id).unwrap();
-                args.add(line.id().product_id).unwrap();
+                args.add(line.id().store_id()).unwrap();
+                args.add(line.id().product_id()).unwrap();
+                args.add(line.id().attrs_seq_num()).unwrap();
             })
             .count();
         args
@@ -372,7 +377,7 @@ impl<'a> From<UpdateOLinePayArg<'a>> for (String, MySqlArguments) {
     }
 }
 
-const OLINE_SELECT_PREFIX: &str = "SELECT `store_id`,`product_id`,`price_unit`,\
+const OLINE_SELECT_PREFIX: &str = "SELECT `store_id`,`product_id`,`attr_seq`,`price_unit`,\
    `price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,`rsved_until`,\
     `warranty_until`,`attr_lastupdate`,`attr_price` FROM `order_line_detail`";
 
@@ -388,7 +393,7 @@ impl From<FetchAllLinesArg> for (String, MySqlArguments) {
 impl<'a> FetchLineByIdArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
         let items = (0..num_batch)
-            .map(|_| "(`store_id`=? AND `product_id`=?)")
+            .map(|_| "(`store_id`=? AND `product_id`=? AND `attr_seq`=?)")
             .collect::<Vec<_>>();
         format!(
             "{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND ({})",
@@ -402,9 +407,10 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a> {
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
-            .map(|id_| {
-                args.add(id_.store_id).unwrap();
-                args.add(id_.product_id).unwrap();
+            .map(|pid| {
+                args.add(pid.store_id()).unwrap();
+                args.add(pid.product_id()).unwrap();
+                args.add(pid.attrs_seq_num()).unwrap();
             })
             .count();
         args
@@ -455,7 +461,6 @@ impl TryInto<(u32, CurrencyModel)> for SellerCurrencyRow {
     }
 }
 
-#[rustfmt::skip]
 impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<OrderLineModelSet, Self::Error> {
@@ -464,9 +469,18 @@ impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
         let owner_id = row.try_get::<u32, usize>(1)?;
         let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
         let buyer = BuyerCurrencyRow(&row, 3).try_into()?;
-        let currency = OrderCurrencyModel {buyer, sellers: sellers_currency};
+        let currency = OrderCurrencyModel {
+            buyer,
+            sellers: sellers_currency,
+        };
         let args = (order_id, owner_id, create_time, currency, Vec::new());
-        Ok(OrderLineModelSet::from(args))
+        OrderLineModelSet::try_from_repo(args).map_err(|mut es| {
+            let e = es.remove(0);
+            AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            }
+        })
     }
 } // end of impl TopLvlMetaRow
 
@@ -477,27 +491,27 @@ impl TryFrom<OLineRow> for OrderLineModel {
         let row = value.0;
         let store_id = row.try_get::<u32, usize>(0)?;
         let product_id = row.try_get::<u64, usize>(1)?;
-        let unit = row.try_get::<u32, usize>(2)?;
-        let total = row.try_get::<u32, usize>(3)?;
-        let reserved = row.try_get::<u32, usize>(4)?;
-        let paid = row.try_get::<u32, usize>(5)?;
+        let attr_seq = row.try_get::<u16, usize>(2)?;
+        let unit = row.try_get::<u32, usize>(3)?;
+        let total = row.try_get::<u32, usize>(4)?;
+        let reserved = row.try_get::<u32, usize>(5)?;
+        let paid = row.try_get::<u32, usize>(6)?;
         let paid_last_update = {
-            let r = row.try_get::<Option<NaiveDateTime>, usize>(6)?;
+            let r = row.try_get::<Option<NaiveDateTime>, usize>(7)?;
             r.map(|t| t.and_utc().into())
         };
-        let reserved_until = row.try_get::<NaiveDateTime, usize>(7)?.and_utc().into();
-        let warranty_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
-        let attr_lupdate = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
+        let reserved_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
+        let warranty_until = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
+        let attr_lupdate = row.try_get::<NaiveDateTime, usize>(10)?.and_utc().into();
         let attrprice = {
-            let raw = row.try_get::<&[u8], usize>(10)?;
+            let raw = row.try_get::<&[u8], usize>(11)?;
             let serial = std::str::from_utf8(raw).map_err(|e| AppError {
                 code: AppErrorCode::DataCorruption,
                 detail: Some(format!("cvt-prod-attr-price: {}", e)),
             })?;
             ProdAttriPriceModel::deserialize_map(serial)?
         };
-
-        let id_ = OrderLineIdentity {store_id, product_id};
+        let id_ = OrderLineIdentity::from((store_id, product_id, attr_seq));
         let price = OrderLinePriceModel::from((unit, total));
         let qty = OrderLineQuantityModel {reserved, paid, paid_last_update};
         let policy = OrderLineAppliedPolicyModel {warranty_until, reserved_until};
@@ -661,13 +675,11 @@ impl AbsOrderRepo for OrderMariaDbRepo {
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
         let oid = data.oid.clone();
         let oid_b = OidBytes::try_from(oid.as_str())?;
+        let attr_seq_dummy = 0u16; // TODO, finish implementation
         let pids = data
             .lines
             .iter()
-            .map(|d| OrderLineIdentity {
-                store_id: d.seller_id,
-                product_id: d.product_id,
-            })
+            .map(|d| OrderLineIdentity::from((d.seller_id, d.product_id, attr_seq_dummy)))
             .collect::<Vec<_>>();
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;

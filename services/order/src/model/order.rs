@@ -13,23 +13,24 @@ use ecommerce_common::api::rpc::dto::{
 };
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
+use ecommerce_common::model::BaseProductIdentity;
 
 use crate::api::dto::{ShippingDto, ShippingMethod, ShippingOptionDto};
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, OrderLineStockReservingDto, OrderLineStockReturningDto,
 };
 use crate::api::web::dto::{
-    OrderCreateRespOkDto, OrderLineReqDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason,
-    ShipOptionSellerErrorReason, ShippingErrorDto, ShippingOptionErrorDto,
+    OrderCreateRespOkDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineReqDto,
+    OrderLineReturnErrorDto, OrderLineReturnErrorReason, ShipOptionSellerErrorReason,
+    ShippingErrorDto, ShippingOptionErrorDto,
 };
+
 use crate::constant::hard_limit;
 use crate::error::AppError;
 use crate::generate_custom_uid;
 
 use super::product_price::ProdAttriPriceModel;
-use super::{
-    BaseProductIdentity, CurrencyModel, OrderCurrencyModel, ProductPolicyModel, ProductPriceModel,
-};
+use super::{CurrencyModel, OrderCurrencyModel, ProductPolicyModel, ProductPriceModel};
 
 pub struct ShippingOptionModel {
     pub seller_id: u32,
@@ -41,7 +42,14 @@ pub struct ShippingModel {
     pub option: Vec<ShippingOptionModel>,
 }
 
-pub type OrderLineIdentity = BaseProductIdentity;
+#[derive(Clone, Debug)]
+pub struct OrderLineIdentity {
+    _base: BaseProductIdentity,
+    // `attr_set_req` is a sequence number which refers to specific set of
+    // product attributes chosen by customer in an order line, this sequence number
+    // could be shared with other applications e.g. payment or inventory,
+    _attr_set_req: u16,
+}
 
 pub struct OrderLineAppliedPolicyModel {
     pub reserved_until: DateTime<FixedOffset>,
@@ -202,6 +210,40 @@ impl TryFrom<ShippingDto> for ShippingModel {
     } // end of try_from
 } // end of impl ShippingModel
 
+impl From<&OrderLineReqDto> for OrderLineIdentity {
+    fn from(d: &OrderLineReqDto) -> Self {
+        let args = (d.seller_id, d.product_id, 0);
+        Self::from(args)
+    }
+}
+impl From<(u32, u64, u16)> for OrderLineIdentity {
+    fn from(d: (u32, u64, u16)) -> Self {
+        Self {
+            _base: BaseProductIdentity {
+                store_id: d.0,
+                product_id: d.1,
+            },
+            _attr_set_req: d.2,
+        }
+    }
+}
+impl PartialEq for OrderLineIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        (self._base == other._base) && (self._attr_set_req == other._attr_set_req)
+    }
+}
+impl OrderLineIdentity {
+    pub fn store_id(&self) -> u32 {
+        self._base.store_id
+    }
+    pub fn product_id(&self) -> u64 {
+        self._base.product_id
+    }
+    pub fn attrs_seq_num(&self) -> u16 {
+        self._attr_set_req
+    }
+}
+
 impl OrderLineQuantityModel {
     pub fn has_unpaid(&self) -> bool {
         self.reserved > self.paid
@@ -322,6 +364,19 @@ impl OrderLineModel {
         }
     }
 
+    fn update_attr_seqs(lines: &mut Vec<Self>) {
+        let mut grps: HashMap<BaseProductIdentity, u16> = HashMap::new();
+        lines
+            .iter_mut()
+            .map(|line| {
+                let k = line.id()._base.clone();
+                let curr_seq: u16 = *grps.entry(k.clone()).or_default();
+                line.id_._attr_set_req = curr_seq;
+                grps.insert(k, curr_seq + 1);
+            })
+            .count();
+    }
+
     pub fn try_from(
         data: OrderLineReqDto,
         policym: &ProductPolicyModel,
@@ -334,10 +389,7 @@ impl OrderLineModel {
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
         let (lineprice, attrs_charge) = OrderLinePriceModel::finalize_price(&data, pricem)?;
-        let id_ = OrderLineIdentity {
-            store_id: data.seller_id,
-            product_id: data.product_id,
-        };
+        let id_ = OrderLineIdentity::from((data.seller_id, data.product_id, 0));
         let qty = OrderLineQuantityModel {
             reserved: data.quantity,
             paid: 0,
@@ -371,7 +423,7 @@ impl OrderLineModel {
         data.into_iter()
             .filter_map(|d| {
                 let result = models.iter_mut().find(|m| {
-                    (m.id_.store_id == d.seller_id) && (m.id_.product_id == d.product_id)
+                    (m.id_.store_id() == d.seller_id) && (m.id_.product_id() == d.product_id)
                 });
                 let possible_error = if let Some(m) = result {
                     let new_paid_qty = m.qty.paid + d.qty;
@@ -430,20 +482,20 @@ impl OrderLineModel {
             attrs_charge: _,
         } = self;
         OrderLinePayDto {
-            seller_id: id_.store_id,
-            product_id: id_.product_id,
+            seller_id: id_.store_id(),
+            product_id: id_.product_id(),
             quantity: qty.reserved,
             reserved_until: policy.reserved_until.to_rfc3339(),
             amount: price.into_paym_dto(curr_m),
-        } // TODO, add attribute pricing to this dto object
+        } // TODO, add attribute pricing, and attr-set-seq-num to this dto object
     }
 } // end of impl OrderLineModel
 
 impl From<OrderLineModel> for OrderLineStockReservingDto {
     fn from(value: OrderLineModel) -> OrderLineStockReservingDto {
         OrderLineStockReservingDto {
-            seller_id: value.id_.store_id,
-            product_id: value.id_.product_id,
+            seller_id: value.id_.store_id(),
+            product_id: value.id_.product_id(),
             qty: value.qty.reserved,
         }
     }
@@ -454,8 +506,8 @@ impl<'a> From<&'a OrderLineModel> for InventoryEditStockLevelDto {
         assert!(value.qty.reserved >= value.qty.paid);
         let num_returning = (value.qty.reserved - value.qty.paid) as i32;
         InventoryEditStockLevelDto {
-            store_id: value.id_.store_id,
-            product_id: value.id_.product_id,
+            store_id: value.id_.store_id(),
+            product_id: value.id_.product_id(),
             qty_add: num_returning,
             expiry: value.policy.reserved_until,
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
@@ -464,20 +516,72 @@ impl<'a> From<&'a OrderLineModel> for InventoryEditStockLevelDto {
     }
 }
 
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
+pub struct OlineDupError {
+    base_id: BaseProductIdentity,
+    attr_vals: Vec<String>,
+}
+
+impl OlineDupError {
+    fn find_duplicate(given: &[OrderLineModel]) -> Vec<Self> {
+        let mut grps: HashMap<Self, Vec<&OrderLineModel>> = HashMap::new();
+        for line in given {
+            let mut attr_vals = line.attrs_charge().applied_attributes();
+            attr_vals.sort(); // ensure hash key consistent in hashmap
+            let k = Self {
+                base_id: line.id()._base.clone(),
+                attr_vals,
+            };
+            grps.entry(k).or_default().push(line);
+        }
+        grps.into_iter()
+            .filter_map(
+                |(key, lines)| {
+                    if lines.len() > 1 {
+                        Some(key)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect()
+    }
+}
+
+impl ToString for OlineDupError {
+    fn to_string(&self) -> String {
+        format!(
+            "order-line-dup, id: {:?}, attributes: {:?}",
+            self.base_id, self.attr_vals
+        )
+    }
+}
+
+impl From<OlineDupError> for OrderLineCreateErrorDto {
+    fn from(e: OlineDupError) -> Self {
+        let OlineDupError { attr_vals, base_id } = e;
+        let attr_vals = attr_vals.into_iter().collect::<Vec<_>>();
+        Self {
+            seller_id: base_id.store_id,
+            product_id: base_id.product_id,
+            reason: OrderLineCreateErrorReason::DuplicateLines,
+            attr_vals: Some(attr_vals),
+            nonexist: None,
+            shortage: None,
+            rsv_limit: None,
+        }
+    }
+}
+
 #[rustfmt::skip]
 type OrderTopLvlCvtArgs = (
     String, u32, DateTime<FixedOffset>, OrderCurrencyModel, Vec<OrderLineModel>
 );
 
-impl From<OrderTopLvlCvtArgs> for OrderLineModelSet {
-    fn from(d: OrderTopLvlCvtArgs) -> Self {
-        Self {
-            order_id: d.0,
-            owner_id: d.1,
-            create_time: d.2,
-            currency: d.3,
-            lines: d.4,
-        }
+impl TryFrom<OrderTopLvlCvtArgs> for OrderLineModelSet {
+    type Error = Vec<OlineDupError>;
+    fn try_from(d: OrderTopLvlCvtArgs) -> DefaultResult<Self, Self::Error> {
+        Self::try_from_inner(d, true)
     }
 }
 
@@ -497,7 +601,7 @@ impl TryFrom<OrderLineModelSet> for OrderCreateRespOkDto {
             .into_iter()
             .filter_map(|line| {
                 currency
-                    .to_buyer_rate(line.id_.store_id)
+                    .to_buyer_rate(line.id_.store_id())
                     .map_err(|e| errors.push(e))
                     .ok()
                     .map(|rate| line.into_paym_dto(rate))
@@ -530,7 +634,7 @@ impl OrderLineModelSet {
             .into_iter()
             .filter_map(|line| {
                 currency_m
-                    .to_buyer_rate(line.id_.store_id)
+                    .to_buyer_rate(line.id_.store_id())
                     .map_err(|e| errors.push(e))
                     .ok()
                     .map(|rate| line.into_paym_dto(rate))
@@ -572,6 +676,30 @@ impl OrderLineModelSet {
             .filter(|m| m.qty.has_unpaid())
             .collect::<Vec<_>>()
     }
+
+    fn try_from_inner(
+        d: OrderTopLvlCvtArgs,
+        update_attr_seqs: bool,
+    ) -> DefaultResult<Self, Vec<OlineDupError>> {
+        let (oid, owner, ctime, currency, mut lines) = d;
+        let dup_errs = OlineDupError::find_duplicate(&lines);
+        if !dup_errs.is_empty() {
+            return Err(dup_errs);
+        }
+        if update_attr_seqs {
+            OrderLineModel::update_attr_seqs(&mut lines);
+        }
+        Ok(Self {
+            order_id: oid,
+            owner_id: owner,
+            create_time: ctime,
+            currency,
+            lines,
+        })
+    }
+    pub(crate) fn try_from_repo(d: OrderTopLvlCvtArgs) -> DefaultResult<Self, Vec<OlineDupError>> {
+        Self::try_from_inner(d, false)
+    }
 } // end of impl OrderLineModelSet
 
 impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
@@ -579,8 +707,8 @@ impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
         let (id_, map) = (value.id_, value.qty);
         map.into_iter()
             .map(|(create_time, (qty, _refund))| OrderLineStockReturningDto {
-                seller_id: id_.store_id,
-                product_id: id_.product_id,
+                seller_id: id_.store_id(),
+                product_id: id_.product_id(),
                 create_time,
                 qty,
             })
@@ -619,7 +747,7 @@ impl OrderReturnModel {
             .iter()
             .filter_map(|d| {
                 let result = o_lines.iter().find(|oline| {
-                    d.seller_id == oline.id_.store_id && d.product_id == oline.id_.product_id
+                    d.seller_id == oline.id_.store_id() && d.product_id == oline.id_.product_id()
                 });
                 let opt = if let Some(oline) = result {
                     if oline.policy.warranty_until > time_now {
@@ -667,12 +795,12 @@ impl OrderReturnModel {
             .into_iter()
             .filter_map(|d| {
                 let result = o_returns.iter_mut().find(|ret| {
-                    d.seller_id == ret.id_.store_id && d.product_id == ret.id_.product_id
+                    d.seller_id == ret.id_.store_id() && d.product_id == ret.id_.product_id()
                 });
                 let oline = o_lines
                     .iter()
                     .find(|item| {
-                        d.seller_id == item.id_.store_id && d.product_id == item.id_.product_id
+                        d.seller_id == item.id_.store_id() && d.product_id == item.id_.product_id()
                     })
                     .unwrap();
                 let total = oline.price.unit() * d.quantity;
@@ -683,10 +811,8 @@ impl OrderReturnModel {
                     r.qty.insert(time_now, val);
                     None
                 } else {
-                    let id_ = OrderLineIdentity {
-                        store_id: d.seller_id,
-                        product_id: d.product_id,
-                    };
+                    // TODO, estimate attr-set-seq
+                    let id_ = OrderLineIdentity::from((d.seller_id, d.product_id, 0));
                     let qty = HashMap::from([(time_now, val)]);
                     Some(OrderReturnModel { id_, qty })
                 }
@@ -701,12 +827,12 @@ impl OrderReturnModel {
         currency_m: &OrderCurrencyModel,
     ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError> {
         let (pid, map) = (self.id_, self.qty);
-        let curr_ex = currency_m.to_buyer_rate(pid.store_id)?;
+        let curr_ex = currency_m.to_buyer_rate(pid.store_id())?;
         let out = map
             .into_iter()
             .map(|(ctime, (q, refund))| OrderLineReplicaRefundDto {
-                seller_id: pid.store_id,
-                product_id: pid.product_id,
+                seller_id: pid.store_id(),
+                product_id: pid.product_id(),
                 create_time: ctime.to_rfc3339(),
                 amount: refund.into_paym_dto(curr_ex.clone()),
                 qty: q,

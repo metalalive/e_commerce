@@ -8,12 +8,16 @@ use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdate
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::dto::ProdAttrValueDto;
-use order::api::web::dto::{OlineProductAttrDto, OrderLineReqDto};
+use order::api::web::dto::{
+    OlineProductAttrDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineReqDto,
+};
 use order::model::{
     CurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
-    OrderLinePriceModel, OrderLineQuantityModel, ProdAttriPriceModel, ProductPolicyModel,
-    ProductPriceModel,
+    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, ProdAttriPriceModel,
+    ProductPolicyModel, ProductPriceModel,
 };
+
+use super::currency::ut_common_order_currency;
 
 #[rustfmt::skip]
 pub(super) fn ut_setup_order_lines(
@@ -21,12 +25,13 @@ pub(super) fn ut_setup_order_lines(
         u32, u64, u32, u32, u32, u32,
         Option<DateTime<FixedOffset>>,
         DateTime<FixedOffset>,
-        DateTime<FixedOffset>
+        DateTime<FixedOffset>,
+        Option<HashMap<String, i32>>,
     )>
 ) -> Vec<OrderLineModel> {
     data.into_iter()
         .map(|d| {
-            let id_ = OrderLineIdentity {store_id: d.0, product_id: d.1};
+            let id_ = OrderLineIdentity::from((d.0, d.1, 0));
             let price= OrderLinePriceModel::from((d.2, d.3));
             let qty = OrderLineQuantityModel {
                 reserved: d.4, paid: d.5, paid_last_update: d.6,
@@ -35,7 +40,7 @@ pub(super) fn ut_setup_order_lines(
                 reserved_until: d.7, warranty_until: d.8,
             };
             let attr_lastupdate = d.7 - Duration::days(15);
-            let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+            let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, d.9));
             OrderLineModel::from((id_, price, policy, qty, attrs_charge))
         })
         .collect::<Vec<_>>()
@@ -293,8 +298,8 @@ fn convert_to_pay_dto_ok() {
     let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-04-24T13:39:41+08:00").unwrap();
     let mocked_data = vec![
-        (123u32, 124u64, 7u32, 173u32, 25u32, 4u32,
-         Some(reserved_until.clone()),  reserved_until, warranty_until,)
+        (123u32, 124u64, 7u32, 173u32, 25u32, 4u32, Some(reserved_until),
+         reserved_until, warranty_until, None)
     ];
     let oline_m = ut_setup_order_lines(mocked_data).remove(0);
     let ex_rate = CurrencyModel {
@@ -333,8 +338,8 @@ fn update_payments_ok() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until, None),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until, None)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
@@ -352,7 +357,7 @@ fn update_payments_ok() {
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[0]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let expect = match m.id().product_id {
+        let expect = match m.id().product_id() {
             812u64 => (4u32, d_charge_time[0]),
             890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
@@ -372,7 +377,7 @@ fn update_payments_ok() {
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[1]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let expect = match m.id().product_id {
+        let expect = match m.id().product_id() {
             812u64 => (5u32, d_charge_time[1]),
             890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
@@ -392,8 +397,8 @@ fn update_payments_nonexist() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until, None),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until, None)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
@@ -409,7 +414,7 @@ fn update_payments_nonexist() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 889);
     assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::NotExist));
-    assert_eq!(models[0].id().product_id, 812);
+    assert_eq!(models[0].id().product_id(), 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
 } // end of fn update_payments_nonexist
@@ -423,8 +428,8 @@ fn update_payments_invalid_quantity() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until),
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until, None),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until, None),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
@@ -440,10 +445,10 @@ fn update_payments_invalid_quantity() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 812);
     assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::InvalidQuantity));
-    assert_eq!(models[0].id().product_id, 812);
+    assert_eq!(models[0].id().product_id(), 812);
     assert_eq!(models[0].qty.paid, 0); // not modified
     assert!(models[0].qty.paid_last_update.is_none());
-    assert_eq!(models[1].id().product_id, 890);
+    assert_eq!(models[1].id().product_id(), 890);
     assert_eq!(models[1].qty.paid, 9);
     assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
 } // end of fn update_payments_invalid_quantity
@@ -457,12 +462,12 @@ fn update_payments_old_record_omitted() {
     #[rustfmt::skip]
     let mocked_data = vec![
         (
-            seller_id, 812u64, 7u32, 69u32, 10u32, 0u32,
-            Some(dt_now + Duration::minutes(8)), reserved_until, warranty_until,
+            seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, Some(dt_now + Duration::minutes(8)),
+            reserved_until, warranty_until, None,
         ),
         (
-            seller_id, 890, 10, 90, 9, 1,
-            Some(dt_now + Duration::minutes(10)), reserved_until, warranty_until,
+            seller_id, 890, 10, 90, 9, 1, Some(dt_now + Duration::minutes(10)),
+            reserved_until, warranty_until, None,
         ),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
@@ -482,17 +487,99 @@ fn update_payments_old_record_omitted() {
         errors[0].reason,
         OrderLinePayUpdateErrorReason::Omitted
     ));
-    assert_eq!(models[0].id().product_id, 812);
+    assert_eq!(models[0].id().product_id(), 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
     assert_eq!(
         models[0].qty.paid_last_update.as_ref().unwrap(),
         &d_charge_time
     );
-    assert_eq!(models[1].id().product_id, 890);
+    assert_eq!(models[1].id().product_id(), 890);
     assert_eq!(models[1].qty.paid, 1); // not modified
     assert_eq!(
         models[1].qty.paid_last_update.as_ref().unwrap(),
         &(dt_now + Duration::minutes(10))
     );
 } // end of fn update_payments_old_record_omitted
+
+#[rustfmt::skip]
+#[test]
+fn convert_to_olset_ok() {
+    let create_time = LocalTime::now().fixed_offset();
+    let reserved_t = create_time + Duration::hours(1);
+    let warranty_t = create_time + Duration::days(1);
+    let mock_usr_id = 299;
+    let mock_seller_ids = [123, 124, 125];
+    let prod_attr_set_1 = HashMap::from([
+        ("4g0t".to_string(), 1),
+        ("ejsio".to_string(), 5),
+    ]);
+    let prod_attr_set_2 = HashMap::from([("4g0t".to_string(), 1)]);
+    let prod_attr_set_3 = HashMap::from([("om3n".to_string(), 3)]);
+    let mocked_linedata = vec![
+        (mock_seller_ids[0], 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[0], 812, 13, 117, 9, 1, None, reserved_t, warranty_t, Some(prod_attr_set_1)),
+        (mock_seller_ids[0], 813, 11, 110, 10, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[1], 890, 10, 90, 9, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[1], 895, 8, 56, 7, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[2], 451, 12, 240, 20, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[2], 451, 13, 13, 1, 1, None, reserved_t, warranty_t, Some(prod_attr_set_2)),
+        (mock_seller_ids[2], 451, 15, 90, 6, 1, None, reserved_t, warranty_t, Some(prod_attr_set_3)),
+        (mock_seller_ids[2], 452, 7, 98, 14, 1, None, reserved_t, warranty_t, None),
+    ];
+    let olines = ut_setup_order_lines(mocked_linedata);
+    let order_id = "allahbomarcasm".to_string();
+    let currency = ut_common_order_currency(mock_seller_ids);
+    let args = (order_id, mock_usr_id, create_time, currency, olines);
+    let result = OrderLineModelSet::try_from(args);
+    let olset = result.unwrap();
+    assert_eq!(olset.id().as_str(), "allahbomarcasm");
+    assert_eq!(olset.owner(), mock_usr_id);
+    assert_eq!(olset.lines().len(), 9);
+} // end of fn convert_to_olset_ok
+
+#[rustfmt::skip]
+#[test]
+fn convert_to_olset_dup_error() {
+    let create_time = LocalTime::now().fixed_offset();
+    let reserved_t = create_time + Duration::hours(1);
+    let warranty_t = create_time + Duration::days(1);
+    let mock_usr_id = 299;
+    let mock_seller_ids = [123, 124, 125];
+    let prod_attr_set_1 = HashMap::from([
+        ("4g0t".to_string(), 1),
+        ("ejsio".to_string(), 5),
+    ]);
+    let prod_attr_set_2 = HashMap::from([("4g0t".to_string(), 1)]);
+    let prod_attr_set_3 = HashMap::from([("om3n".to_string(), 3)]);
+    let mocked_linedata = vec![
+        (mock_seller_ids[0], 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[0], 812, 13, 117, 9, 1, None, reserved_t, warranty_t, Some(prod_attr_set_1)),
+        (mock_seller_ids[0], 812, 7,  68, 10, 0, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[0], 813, 11, 110, 10, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[0], 814, 8, 56, 7, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[1], 890, 10, 90, 9, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[1], 895, 8, 56, 7, 1, None, reserved_t, warranty_t, None),
+        (mock_seller_ids[2], 451, 12, 240, 20, 1, None, reserved_t, warranty_t, Some(prod_attr_set_2.clone())),
+        (mock_seller_ids[2], 451, 13, 13, 1, 1, None, reserved_t, warranty_t, Some(prod_attr_set_2)),
+        (mock_seller_ids[2], 451, 15, 90, 6, 1, None, reserved_t, warranty_t, Some(prod_attr_set_3)),
+        (mock_seller_ids[2], 452, 7, 98, 14, 1, None, reserved_t, warranty_t, None),
+    ];
+    let olines = ut_setup_order_lines(mocked_linedata);
+    let order_id = "allahbomarcasm".to_string();
+    let currency = ut_common_order_currency(mock_seller_ids);
+    let args = (order_id, mock_usr_id, create_time, currency, olines);
+    let result = OrderLineModelSet::try_from(args);
+    assert!(result.is_err());
+    if let Err(es) = result {
+        assert_eq!(es.len(), 2);
+        let ds = es.into_iter().map(OrderLineCreateErrorDto::from).collect::<Vec<_>>();
+        let cond = matches!(ds[0].reason, OrderLineCreateErrorReason::DuplicateLines);
+        assert!(cond);
+        let expect: [(u32,u64); 2] = [(123, 812), (125, 451)];
+        let actual = (ds[0].seller_id, ds[0].product_id);
+        assert!(expect.contains(&actual));
+        let actual = (ds[1].seller_id, ds[1].product_id);
+        assert!(expect.contains(&actual));
+    }
+} // end of fn convert_to_olset_dup_error

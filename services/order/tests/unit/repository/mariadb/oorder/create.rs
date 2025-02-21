@@ -24,28 +24,36 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
     let result = o_repo.fetch_all_lines(oid).await;
     assert!(result.is_ok());
     let lines = result.unwrap();
-    assert_eq!(lines.len(), 4);
+    assert_eq!(lines.len(), 6);
     lines
         .into_iter()
         .map(|o| {
             let (id_, price, qty, policy) = (o.id(), o.price(), &o.qty, &o.policy);
-            let combo = (id_.store_id, id_.product_id);
+            let combo = (id_.store_id(), id_.product_id(), id_.attrs_seq_num());
             let expect = match combo {
-                (1013, 9004) => (
+                (1013, 9004, 0) => (
                     2, 0, 3, 6, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:07:30-03:00").unwrap(),
                 ),
-                (1013, 9006) => (
+                (1013, 9006, 0) => (
                     3, 0, 4, 12, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:46:43-03:00").unwrap(),
                 ),
-                (1014, 9008) => (
+                (1014, 9008, 0) => (
                     29, 0, 20, 580, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:09:30-03:00").unwrap(),
                 ),
-                (1014, 9009) => (
+                (1014, 9009, 0) => (
                     6, 0, 15, 90, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:48:43-03:00").unwrap(),
+                ),
+                (1014, 9009, 1) => (
+                    2, 0, 11, 22, true,
+                    DateTime::parse_from_rfc3339("3014-11-29T15:49:43-03:00").unwrap(),
+                ),
+                (1014, 9009, 2) => (
+                    3, 0, 14, 42, true,
+                    DateTime::parse_from_rfc3339("3014-11-29T15:50:43-03:00").unwrap(),
                 ),
                 _others => (
                     0, 0, 0, 0, true,
@@ -168,7 +176,7 @@ fn ut_fetch_lines_rsvtime_usr_cb(
         let mut actual_product_ids = mset
             .lines()
             .iter()
-            .map(|line| (line.id().product_id, line.qty.reserved))
+            .map(|line| (line.id().product_id(), line.qty.reserved))
             .collect::<Vec<_>>();
         actual_product_ids.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(mset.lines().len(), expect.0);
@@ -203,7 +211,7 @@ async fn fetch_lines_by_rsvtime_ok() {
     for (mock_oid, mock_currency_label, mock_currency_rate) in mock_misc {
         rsv_time += Duration::days(2);
         let lines = vec![
-            (mock_seller, 9012, mock_rsv_qty, 29, Some(3), rsv_time),
+            (mock_seller, 9012, mock_rsv_qty, 29, Some(("bolu",3)), rsv_time),
             (mock_seller, 9013, mock_rsv_qty + 1, 25, None, rsv_time + Duration::days(1)),
         ];
         let mut currency = ut_default_order_currency(vec![mock_seller]);
@@ -244,7 +252,7 @@ async fn fetch_toplvl_meta_ok() {
         create_time += Duration::minutes(3);
         let rsv_time = now + Duration::days(1);
         let lines = vec![(
-            mock_seller, 9014, mock_rsv_qty, 29, Some(5), rsv_time,
+            mock_seller, 9014, mock_rsv_qty, 29, Some(("bolu",5)), rsv_time,
         )];
         let currency = ut_default_order_currency(vec![mock_seller]);
         let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines);
@@ -297,9 +305,9 @@ async fn fetch_seller_currency_ok() {
     ut_setup_stock_product(o_repo.stock(), mock_sellers[1], 554, 10).await;
     ut_setup_stock_product(o_repo.stock(), mock_sellers[2], 1492, 15).await;
     let lines = vec![
-        (mock_sellers[0], 1405, 8, mock_item_price, Some(7), rsv_time),
+        (mock_sellers[0], 1405, 8, mock_item_price, Some(("bolu",7)), rsv_time),
         (mock_sellers[1], 554, 9, mock_item_price, None, rsv_time),
-        (mock_sellers[2], 1492, 8, mock_item_price, Some(8), rsv_time),
+        (mock_sellers[2], 1492, 8, mock_item_price, Some(("bolu",8)), rsv_time),
     ];
     let currency = {
         let mut c = ut_default_order_currency(mock_sellers.to_vec());

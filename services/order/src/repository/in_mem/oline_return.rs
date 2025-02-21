@@ -135,11 +135,11 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
         let _ = [
             (
                 _oline_return::InMemColIdx::SellerID,
-                id_.store_id.to_string(),
+                id_.store_id().to_string(),
             ),
             (
                 _oline_return::InMemColIdx::ProductId,
-                id_.product_id.to_string(),
+                id_.product_id().to_string(),
             ),
             (_oline_return::InMemColIdx::QtyRefund, qty_serial),
         ]
@@ -174,10 +174,7 @@ impl From<AppInMemFetchedSingleRow> for OrderReturnModel {
                 .to_owned(),
         );
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            id_: OrderLineIdentity::from((store_id, product_id, 0)),
             qty: _oline_return::inmem_col2qty(qty_serial),
         }
     }
@@ -193,7 +190,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let table_name = _oline_return::TABLE_LABEL;
         let pkeys = pids
             .into_iter()
-            .map(|p| _oline_return::inmem_pkey(oid, p.store_id, p.product_id))
+            .map(|p| _oline_return::inmem_pkey(oid, p.store_id(), p.product_id()))
             .collect();
         let info = HashMap::from([(table_name.to_string(), pkeys)]);
         let mut data = self.datastore.fetch(info).await?;
@@ -266,7 +263,8 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
             if req.qty.is_empty() {
                 let detail = format!(
                     "return-req, in-mem-repo, prod-id: {} {}",
-                    req.id_.store_id, req.id_.product_id
+                    req.id_.store_id(),
+                    req.id_.product_id()
                 );
                 Some(detail)
             } else {
@@ -283,7 +281,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let num_saved = reqs.iter().map(|r| r.qty.len()).sum();
         let mut info = vec![];
         for req in reqs {
-            let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id, req.id_.product_id);
+            let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id(), req.id_.product_id());
             // load saved `qty` inner table
             let _info = HashMap::from([(table_name.clone(), vec![pkey.clone()])]);
             let mut _data = self.datastore.fetch(_info).await?;

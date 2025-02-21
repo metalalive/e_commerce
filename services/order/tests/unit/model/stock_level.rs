@@ -255,7 +255,7 @@ fn ut_get_curr_qty(store: &StoreStockModel, req: &OrderLineModel) -> Vec<StockQu
         .products
         .iter()
         .filter_map(|p| {
-            if req.id().product_id == p.id_ {
+            if req.id().product_id() == p.id_ {
                 Some(p.quantity.clone())
             } else {
                 None
@@ -290,10 +290,7 @@ fn reserve_ok_1() {
     ]
     .into_iter()
     .map(|(store_id, product_id, unit, total, reserved)| {
-        let id_ = OrderLineIdentity {
-            store_id,
-            product_id,
-        };
+        let id_ = OrderLineIdentity::from((store_id, product_id, 0));
         let price = OrderLinePriceModel::from((unit, total));
         let policy = OrderLineAppliedPolicyModel {
             reserved_until: mock_warranty.clone(),
@@ -313,7 +310,8 @@ fn reserve_ok_1() {
         let lines = reqs;
         let owner_id = 123;
         let currency = ut_setup_order_currency(vec![1013, 1014]);
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
@@ -389,10 +387,7 @@ fn reserve_ok_2() {
     .into_iter()
     .map(|(store_id, product_id, (unit, total), reserved)| {
         let args = (
-            OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            OrderLineIdentity::from((store_id, product_id, 0)),
             OrderLinePriceModel::from((unit, total)),
             OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty.clone(),
@@ -414,7 +409,8 @@ fn reserve_ok_2() {
         let lines = reqs;
         let owner_id = 321;
         let currency = ut_setup_order_currency(vec![1013, 1014]);
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
@@ -476,10 +472,7 @@ fn reserve_shortage() {
     .iter()
     .map(|&(store_id, product_id, unit, total, reserved)| {
         OrderLineModel::from((
-            OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            OrderLineIdentity::from((store_id, product_id, 0)),
             OrderLinePriceModel::from((unit, total)),
             OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty.clone(),
@@ -500,21 +493,22 @@ fn reserve_shortage() {
         let owner_id = 123;
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
         let currency = ut_setup_order_currency(vec![1013, 1014]);
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
     {
         let (expect, actual) = (&ol_set.lines()[0], &error[0]);
-        assert_eq!(expect.id().store_id, actual.seller_id);
-        assert_eq!(expect.id().product_id, actual.product_id);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::NotEnoughToClaim
         ));
         let (expect, actual) = (&ol_set.lines()[2], &error[1]);
-        assert_eq!(expect.id().store_id, actual.seller_id);
-        assert_eq!(expect.id().product_id, actual.product_id);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::OutOfStock
@@ -541,10 +535,7 @@ fn reserve_seller_nonexist() {
     .into_iter()
     .map(|(store_id, product_id, (unit, total), reserved)| {
         OrderLineModel::from((
-            OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            OrderLineIdentity::from((store_id, product_id, 0)),
             OrderLinePriceModel::from((unit, total)),
             OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty.clone(),
@@ -566,14 +557,15 @@ fn reserve_seller_nonexist() {
         let owner_id = 321;
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
         let currency = ut_setup_order_currency(vec![1013, 1099]);
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);
     {
         let (expect, actual) = (&ol_set.lines()[1], &error[0]);
-        assert_eq!(expect.id().store_id, actual.seller_id);
-        assert_eq!(expect.id().product_id, actual.product_id);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::NotExist

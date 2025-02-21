@@ -45,9 +45,9 @@ async fn update_payment_ok() {
     ut_setup_stock_product(o_repo.stock(), 1033, 9022, 15).await;
     {
         let lines = vec![
-            (1032, 9010, 13, 99, Some(5), create_time),
+            (1032, 9010, 13, 99, Some(("bolu", 5)), create_time),
             (1031, 9003, 10, 100, None, create_time),
-            (1032, 9011, 15, 110, Some(3), create_time),
+            (1032, 9011, 15, 110, Some(("bolu", 3)), create_time),
         ];
         let currency = ut_default_order_currency(vec![1032, 1031]);
         let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, currency, lines);
@@ -104,19 +104,16 @@ async fn update_payment_ok() {
 
     let pids = vec![(1031u32, 9003u64), (1032, 9011), (1032, 9010)]
         .into_iter()
-        .map(|d| OrderLineIdentity {
-            store_id: d.0,
-            product_id: d.1,
-        })
+        .map(|d| OrderLineIdentity::from((d.0, d.1, 0)))
         .collect::<Vec<_>>();
     let result = o_repo.fetch_lines_by_pid(mock_oid, pids).await;
     assert!(result.is_ok());
     if let Ok(mut lines) = result {
         assert_eq!(lines.len(), 3);
-        lines.sort_by(|a, b| a.id().product_id.cmp(&b.id().product_id));
+        lines.sort_by(|a, b| a.id().product_id().cmp(&b.id().product_id()));
         let fn1 =
             |line: OrderLineModel, exp_product_id: u64, exp_paid: u32, exp_duration: Duration| {
-                assert_eq!(line.id().product_id, exp_product_id);
+                assert_eq!(line.id().product_id(), exp_product_id);
                 assert_eq!(line.qty.paid, exp_paid);
                 let expect = create_time.round_subsecs(1) + exp_duration;
                 let actual = line.qty.paid_last_update.unwrap().round_subsecs(1);

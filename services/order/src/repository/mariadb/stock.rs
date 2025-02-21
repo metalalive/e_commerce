@@ -363,8 +363,8 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchQtyForRsvArg<'a> {
         self.0
             .iter()
             .map(|o| {
-                out.add(o.id().store_id).unwrap();
-                out.add(o.id().product_id).unwrap();
+                out.add(o.id().store_id()).unwrap();
+                out.add(o.id().product_id()).unwrap();
             })
             .count();
         out

@@ -321,7 +321,8 @@ fn mock_reserve_usr_cb_0(
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(req.lines().len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines()[0].id().store_id, req.lines()[0].id().product_id);
+    let id_ref = req.lines()[0].id();
+    let id_combo = (id_ref.store_id(), id_ref.product_id());
     let product = match id_combo {
         (1001, 9004) | (1001, 9005) => {
             assert_eq!(saved_store.products.len(), 1);
@@ -356,7 +357,7 @@ pub(crate) fn mock_reserve_usr_cb_1(
         let result = ms
             .stores
             .iter_mut()
-            .find(|m| om.id().store_id == m.store_id);
+            .find(|m| om.id().store_id() == m.store_id);
         assert!(result.is_some());
         if let Some(s) = result {
             let result = s.try_reserve(req.id().as_str(), om);
@@ -390,11 +391,8 @@ pub(crate) async fn ut_reserve_init_setup(
     num_req: u32,
     order_id: &str,
 ) {
-    let order_req = vec![{
-        let id_ = OrderLineIdentity {
-            store_id,
-            product_id,
-        };
+    let olines_req = vec![{
+        let id_ = OrderLineIdentity::from((store_id, product_id, 0));
         let qty = OrderLineQuantityModel {
             reserved: num_req,
             paid: 0,
@@ -411,11 +409,10 @@ pub(crate) async fn ut_reserve_init_setup(
     }];
     let ol_set = {
         let order_id = order_id.to_string();
-        let lines = order_req;
-        let owner_id = 123;
         let currency = ut_setup_order_currency(vec![store_id]);
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, 123, create_time, currency, olines_req);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let result = stockrepo.try_reserve(usr_cb, &ol_set).await;
     assert!(result.is_ok());
@@ -463,22 +460,14 @@ async fn try_reserve_ok() {
 
     {
         // before reservation
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await,
-            (3 + 1 + 2, 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await,
-            (0, 0, 8)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[7]).await,
-            ((3 + 2), 8, 22)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[8]).await,
-            (0, 1, 20)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await;
+        assert_eq!(actual, (3 + 1 + 2, 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await;
+        assert_eq!(actual, (0, 0, 8));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[7]).await;
+        assert_eq!(actual, ((3 + 2), 8, 22));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[8]).await;
+        assert_eq!(actual, (0, 1, 20));
     }
 
     let order_req_data = [
@@ -489,10 +478,7 @@ async fn try_reserve_ok() {
     let order_req: Vec<_> = order_req_data
         .iter()
         .map(|&(store_id, product_id, reserved, unit, total)| {
-            let id_ = OrderLineIdentity {
-                store_id,
-                product_id,
-            };
+            let id_ = OrderLineIdentity::from((store_id, product_id, 0));
             let qty = OrderLineQuantityModel {
                 reserved,
                 paid: 0,
@@ -514,20 +500,17 @@ async fn try_reserve_ok() {
         let owner_id = 123;
         let currency = ut_setup_order_currency(vec![1001, 1002, 1003]);
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     {
         // after reservation
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await,
-            (3 + 1 + 2 + 2, 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await,
-            (1, 0, 8)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await;
+        assert_eq!(actual, (3 + 1 + 2 + 2, 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await;
+        assert_eq!(actual, (1, 0, 8));
         let mut total_rsved: u32 = 0;
         for idx in [7usize, 8, 9].into_iter() {
             let opt = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[idx]).await;
@@ -548,7 +531,7 @@ fn mock_reserve_usr_cb_2(
     let result = ms.stores[0]
         .products
         .iter_mut()
-        .find(|p| req.lines()[0].id().product_id == p.id_);
+        .find(|p| req.lines()[0].id().product_id() == p.id_);
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.num_avail();
@@ -556,11 +539,12 @@ fn mock_reserve_usr_cb_2(
         assert!(num_avail > 0);
         assert!(num_avail < req.lines()[0].qty.reserved);
         let err = OrderLineCreateErrorDto {
-            seller_id: req.lines()[0].id().store_id,
-            product_id: req.lines()[0].id().product_id,
+            seller_id: req.lines()[0].id().store_id(),
+            product_id: req.lines()[0].id().product_id(),
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
             nonexist: None,
             shortage: None,
+            attr_vals: None,
             rsv_limit: None,
         };
         out.push(err);
@@ -568,7 +552,7 @@ fn mock_reserve_usr_cb_2(
     let result = ms.stores[0]
         .products
         .iter_mut()
-        .find(|p| req.lines()[1].id().product_id == p.id_);
+        .find(|p| req.lines()[1].id().product_id() == p.id_);
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.num_avail();
@@ -576,10 +560,11 @@ fn mock_reserve_usr_cb_2(
         assert!(num_avail == 0);
         assert!(num_avail < req.lines()[1].qty.reserved);
         let err = OrderLineCreateErrorDto {
-            seller_id: req.lines()[1].id().store_id,
-            product_id: req.lines()[1].id().product_id,
+            seller_id: req.lines()[1].id().store_id(),
+            product_id: req.lines()[1].id().product_id(),
             reason: OrderLineCreateErrorReason::OutOfStock,
             nonexist: None,
+            attr_vals: None,
             shortage: None,
             rsv_limit: None,
         };
@@ -614,10 +599,7 @@ async fn try_reserve_shortage() {
     .into_iter()
     .map(|(store_id, product_id, reserved, (unit, total))| {
         OrderLineModel::from((
-            OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            OrderLineIdentity::from((store_id, product_id, 0)),
             OrderLinePriceModel::from((unit, total)),
             OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty,
@@ -638,7 +620,8 @@ async fn try_reserve_shortage() {
         let owner_id = 123;
         let currency = ut_setup_order_currency(vec![1001]);
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
     assert!(result.is_err());
@@ -697,10 +680,8 @@ async fn try_reserve_user_cb_err() {
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
     let order_req = vec![{
-        let id_ = OrderLineIdentity {
-            store_id: expect_slset.stores[0].store_id,
-            product_id: all_products[2].id_,
-        };
+        let id_ =
+            OrderLineIdentity::from((expect_slset.stores[0].store_id, all_products[2].id_, 0));
         let qty = OrderLineQuantityModel {
             reserved: 9,
             paid: 0,
@@ -720,7 +701,8 @@ async fn try_reserve_user_cb_err() {
         let owner_id = 321;
         let currency = ut_setup_order_currency(vec![expect_slset.stores[0].store_id]);
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
-        OrderLineModelSet::from((order_id, owner_id, create_time, currency, lines))
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
     assert!(result.is_err());

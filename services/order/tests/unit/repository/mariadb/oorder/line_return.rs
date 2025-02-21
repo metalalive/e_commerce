@@ -25,10 +25,7 @@ async fn fetch_request_by_id_ok() {
     }
     let pids = [(49, 195), (48, 574), (18u32, 465u64)]
         .into_iter()
-        .map(|(store_id, product_id)| OrderLineIdentity {
-            store_id,
-            product_id,
-        })
+        .map(|(store_id, product_id)| OrderLineIdentity::from((store_id, product_id, 0)))
         .collect::<Vec<_>>();
     let result = oret_repo.fetch_by_pid(mock_oid, pids.clone()).await;
     assert!(result.is_ok());
@@ -37,7 +34,7 @@ async fn fetch_request_by_id_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
+                let expect = match m.id_.store_id() {
                     48 => (3, 10, 130),
                     49 => (1, 7, 112),
                     18 => (2, 6, 90),
@@ -62,10 +59,7 @@ async fn fetch_request_by_id_ok() {
     }
     let pids = [(49, 195), (18u32, 465u64)]
         .into_iter()
-        .map(|(store_id, product_id)| OrderLineIdentity {
-            store_id,
-            product_id,
-        })
+        .map(|(store_id, product_id)| OrderLineIdentity::from((store_id, product_id, 0)))
         .collect::<Vec<_>>();
     let result = oret_repo.fetch_by_pid(mock_oid, pids.clone()).await;
     assert!(result.is_ok());
@@ -74,7 +68,7 @@ async fn fetch_request_by_id_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
+                let expect = match m.id_.store_id() {
                     49 => (2, 9, 144),
                     18 => (2, 6, 90),
                     _others => (0usize, 0u32, 0u32),

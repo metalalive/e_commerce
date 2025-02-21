@@ -56,7 +56,8 @@ async fn ut_setup_saved_order(
         let order_id = mock_oid.to_string();
         let currency = ut_setup_order_currency(mock_seller_ids);
         let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
-        OrderLineModelSet::from((order_id, mock_usr_id, create_time, currency, lines))
+        let args = (order_id, mock_usr_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let stockrepo = o_repo.stock();
     let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
@@ -108,7 +109,7 @@ fn ut_usr_cb_ok_1(
         .map(|d| {
             let result = models
                 .iter_mut()
-                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
+                .find(|m| m.id().store_id() == d.seller_id && m.id().product_id() == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -135,7 +136,7 @@ fn ut_usr_cb_ok_2(
         .map(|d| {
             let result = models
                 .iter()
-                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
+                .find(|m| m.id().store_id() == d.seller_id && m.id().product_id() == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, d.qty);
@@ -223,7 +224,7 @@ fn ut_usr_cb_err_2(
         .map(|d| {
             let result = models
                 .iter()
-                .find(|m| m.id().store_id == d.seller_id && m.id().product_id == d.product_id);
+                .find(|m| m.id().store_id() == d.seller_id && m.id().product_id() == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -300,7 +301,7 @@ fn ut_rd_oline_set_usr_cb<'a>(
         assert_eq!(ol_set.owner(), owner_id);
         let mut product_id_set: HashSet<(u32, u64)> = HashSet::from_iter(product_ids.into_iter());
         let all_items_found = ol_set.lines().iter().all(|m| {
-            let key = (m.id().store_id, m.id().product_id);
+            let key = (m.id().store_id(), m.id().product_id());
             product_id_set.remove(&key)
         });
         assert!(all_items_found);

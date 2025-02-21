@@ -14,8 +14,11 @@ pub struct OlineProductAttrDto {
     pub label_id: String,
     pub value: ProdAttrValueDto,
 }
+
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
+    // TODO, split to `OrderLineRsvReqDto` and `OrderLineReturnReqDto`
+    // for separate `reservation` and `return` use cases
     pub seller_id: u32,
     pub product_id: u64,
     pub quantity: u32,
@@ -36,8 +39,9 @@ pub enum OrderLineCreateErrorReason {
     NotExist,
     OutOfStock,
     NotEnoughToClaim,
+    DuplicateLines,
     RsvLimitViolation,
-} // TODO, rename to line-create error reason
+}
 
 #[derive(Serialize)]
 pub enum OrderLineReturnErrorReason {
@@ -61,6 +65,7 @@ pub struct OrderLineCreateErrorDto {
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>,
+    pub attr_vals: Option<Vec<String>>,
     pub rsv_limit: Option<GenericRangeErrorDto>,
 }
 

@@ -114,6 +114,12 @@ impl ProdAttriPriceModel {
                 })
         })
     }
+    pub(super) fn applied_attributes(&self) -> Vec<String> {
+        match &self.pricing {
+            Some(map) => map.keys().cloned().collect(),
+            None => Vec::new(),
+        }
+    }
     pub(crate) fn serialize_map(&self) -> DefaultResult<String, AppError> {
         serde_json::to_string(&self.pricing).map_err(|e| {
             let detail = format!("prod-attr-price-serialize-map : {:?}", e);

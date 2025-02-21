@@ -19,58 +19,38 @@ async fn in_mem_repo_ds_setup(nitems: u32) -> OrderReturnInMemRepo {
 
 #[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
-    vec![
-        OrderReturnModel {
-            id_: OrderLineIdentity { product_id: 465, store_id: 18 },
-            qty: HashMap::from([
-                (
-                    t_base - Duration::minutes(41),
-                    (1, OrderLinePriceModel::from((15, 15))),
-                ),
-                (
-                    t_base - Duration::seconds(1),
-                    (5, OrderLinePriceModel::from((15, 75))),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 48, product_id: 574 },
-            qty: HashMap::from([
-                (
-                    t_base - Duration::minutes(10),
-                    (5, OrderLinePriceModel::from((13, 65))),
-                ),
-                (
-                    t_base - Duration::seconds(55),
-                    (2, OrderLinePriceModel::from((13, 26))),
-                ),
-                (
-                    t_base - Duration::seconds(3),
-                    (3, OrderLinePriceModel::from((13, 39))),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 49, product_id: 195 },
-            qty: HashMap::from([(
-                t_base - Duration::seconds(4),
-                (7, OrderLinePriceModel::from((16, 112))),
-            )]),
-        },
+    [
+        ((18, 465, 0), vec![(-41*60, 1, (15, 15)), (-1, 5, (15, 75))]),
+        ((48, 574, 0), vec![(-10*60, 5, (13, 65)), (-55, 2, (13, 26)), (-3, 3, (13, 39))]),
+        ((49, 195, 0), vec![(-4, 7, (16, 112))]),
     ]
+    .into_iter()
+    .map(|(id_tuple, qty_data)| OrderReturnModel {
+        id_: OrderLineIdentity::from(id_tuple),
+        qty: qty_data
+            .iter()
+            .map(|&(offset_min, quantity, (unit, total))| {
+                (
+                    t_base + Duration::seconds(offset_min),
+                    (quantity, OrderLinePriceModel::from((unit, total)))
+                )
+            })
+            .collect(),
+    })
+    .collect()
 }
 #[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models_ks2(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
     vec![
         OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 48, product_id: 574 },
+            id_: OrderLineIdentity::from((48, 574, 0)),
             qty: HashMap::from([(
                 t_base + Duration::seconds(18),
                 (1, OrderLinePriceModel::from((13, 13))),
             )]),
         },
         OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 49, product_id: 195 },
+            id_: OrderLineIdentity::from((49, 195, 0)),
             qty: HashMap::from([(
                 t_base + Duration::seconds(40),
                 (2, OrderLinePriceModel::from((16, 32))),
@@ -88,7 +68,7 @@ async fn fetch_by_pid_ok() {
     let pids = reqs
         .iter()
         .filter_map(|m| {
-            if m.id_.store_id == 18 {
+            if m.id_.store_id() == 18 {
                 None
             } else {
                 Some(m.id_.clone())
@@ -107,7 +87,7 @@ async fn fetch_by_pid_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
+                let expect = match m.id_.store_id() {
                     48 => (3, 10, 130),
                     49 => (1, 7, 112),
                     _others => (0usize, 0u32, 0u32),
@@ -137,7 +117,7 @@ async fn fetch_by_pid_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
+                let expect = match m.id_.store_id() {
                     48 => (4, 11, 143),
                     49 => (2, 9, 144),
                     _others => (0usize, 0u32, 0u32),
@@ -287,7 +267,7 @@ pub(crate) async fn fetch_by_ctime_common(
         assert!(fetched.len() <= expect_data.len());
         let actual_iter = fetched.into_iter().flat_map(|(oid, m)| {
             assert!(m.qty.len() >= 1);
-            let (seller_id, prod_id) = (m.id_.store_id, m.id_.product_id);
+            let (seller_id, prod_id) = (m.id_.store_id(), m.id_.product_id());
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
                 (
                     oid.clone(),
@@ -316,7 +296,8 @@ pub(crate) async fn fetch_by_oid_ctime_common(
         assert!(fetched.len() <= expect_data.len());
         let actual_iter = fetched.into_iter().flat_map(|m| {
             assert!(m.qty.len() >= 1);
-            let (seller_id, prod_id) = (m.id_.store_id, m.id_.product_id);
+            let seller_id = m.id_.store_id();
+            let prod_id = m.id_.product_id();
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
                 (seller_id, prod_id, create_time, q, refund.total())
             })

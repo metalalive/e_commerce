@@ -160,7 +160,8 @@ fn mock_reserve_usr_cb_0(
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(req.lines().len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines()[0].id().store_id, req.lines()[0].id().product_id);
+    let item0id = req.lines()[0].id();
+    let id_combo = (item0id.store_id(), item0id.product_id());
     let product = match id_combo {
         (1013, 9006) => saved_store
             .products
@@ -236,9 +237,11 @@ async fn try_reserve_ok() {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T07:29:01.027-03:00").unwrap();
         let lines = vec![
             (1013, 9004, 2, 3, None, mock_warranty + Duration::minutes(1)),
-            (1013, 9006, 3, 4, Some(1), mock_rsved_end + Duration::minutes(2)),
+            (1013, 9006, 3, 4, Some(("bolu",1)), mock_rsved_end + Duration::minutes(2)),
             (1014, 9008, 29, 20, None, mock_warranty + Duration::minutes(3)),
-            (1014, 9009, 6, 15, Some(4), mock_rsved_end + Duration::minutes(4)),
+            (1014, 9009, 6, 15, Some(("bolu",4)), mock_rsved_end + Duration::minutes(4)),
+            (1014, 9009, 2, 11, None, mock_rsved_end + Duration::minutes(5)),
+            (1014, 9009, 3, 14, Some(("peri",3)), mock_rsved_end + Duration::minutes(6)),
         ];
         let currency = ut_default_order_currency(vec![1013, 1014]);
         ut_oline_init_setup("800eff40", 123, create_time, currency, lines)
@@ -255,7 +258,7 @@ async fn try_reserve_ok() {
         let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
         assert_eq!(actual, (29, 1, 37));
         let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
-        assert_eq!(actual, ((3 + 1 + 6), 1, 46));
+        assert_eq!(actual, ((3 + 1 + 6 + 2 + 3), 1, 46));
     }
     // verify order lines and top-level metadata
     ut_verify_fetch_all_olines_ok(&o_repo).await;
@@ -284,18 +287,20 @@ fn mock_reserve_usr_cb_2(
         .count();
     let errors = vec![
         OrderLineCreateErrorDto {
-            seller_id: req.lines()[0].id().store_id,
-            product_id: req.lines()[0].id().product_id,
+            seller_id: req.lines()[0].id().store_id(),
+            product_id: req.lines()[0].id().product_id(),
             nonexist: None,
             rsv_limit: None,
+            attr_vals: None,
             shortage: Some(2),
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
         },
         OrderLineCreateErrorDto {
-            seller_id: req.lines()[1].id().store_id,
-            product_id: req.lines()[1].id().product_id,
+            seller_id: req.lines()[1].id().store_id(),
+            product_id: req.lines()[1].id().product_id(),
             nonexist: None,
             rsv_limit: None,
+            attr_vals: None,
             shortage: Some(1),
             reason: OrderLineCreateErrorReason::OutOfStock,
         },
@@ -395,7 +400,7 @@ fn mock_reserve_usr_cb_3(
         .iter()
         .map(|line| {
             let mut line_rsv_req = line.qty.reserved;
-            match line.id().product_id {
+            match line.id().product_id() {
                 9006 => inner_try_reserve!(9006, 120, 14, store.products, oid, line_rsv_req),
                 9008 => inner_try_reserve!(9008, 49, 37, store.products, oid, line_rsv_req),
                 _others => {
@@ -471,7 +476,7 @@ async fn try_return_ok() {
         let mock_warranty = create_time + Duration::days(7);
         let lines = vec![
             (mock_seller, 9006, 123, 4, None, mock_warranty + Duration::hours(1)),
-            (mock_seller, 9008, 50, 20, Some(2), mock_warranty + Duration::hours(10)),
+            (mock_seller, 9008, 50, 20, Some(("bolu",2)), mock_warranty + Duration::hours(10)),
         ];
         let currency = ut_default_order_currency(vec![mock_seller]);
         ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines)
