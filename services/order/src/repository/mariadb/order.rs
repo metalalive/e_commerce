@@ -675,11 +675,13 @@ impl AbsOrderRepo for OrderMariaDbRepo {
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
         let oid = data.oid.clone();
         let oid_b = OidBytes::try_from(oid.as_str())?;
-        let attr_seq_dummy = 0u16; // TODO, finish implementation
         let pids = data
             .lines
             .iter()
-            .map(|d| OrderLineIdentity::from((d.seller_id, d.product_id, attr_seq_dummy)))
+            .map(|d| {
+                let args = (d.seller_id, d.product_id, d.attr_set_seq);
+                OrderLineIdentity::from(args)
+            })
             .collect::<Vec<_>>();
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;

@@ -134,16 +134,16 @@ fn order_to_web_resp_dto_ok() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let mock_olines_data = vec![
         // seller uses INR
-        (mock_seller_ids[2], 66049, 35, 140, 4, 0, None,
+        ((mock_seller_ids[2], 66049, 0), (35, 140), 4, 0, None,
          mock_ctime + Duration::hours(2), mock_ctime + Duration::days(14), None),
         // seller uses IDR
-        (mock_seller_ids[1], 1082, 57000, 114000, 2, 0, None,
+        ((mock_seller_ids[1], 1082, 0), (57000, 114000), 2, 0, None,
          mock_ctime + Duration::hours(1), mock_ctime + Duration::days(1), None),
         // seller uses TWD
-        (mock_seller_ids[0], 1617, 215, 1075, 5, 0, None,
+        ((mock_seller_ids[0], 1617, 0), (215, 1075), 5, 0, None,
          mock_ctime + Duration::hours(4), mock_ctime + Duration::days(180), None),
         // seller uses INR
-        (mock_seller_ids[2], 50129, 426, 2656, 6, 0, None,
+        ((mock_seller_ids[2], 50129, 0), (426, 2656), 6, 0, None,
          mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16), None),
     ];
     let model = {

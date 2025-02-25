@@ -846,7 +846,7 @@ fn itest_verify_order_billing(
     actual: JsnVal,
     expect_oid: &str,
     expect_usr_id: u32,
-    expect_lines: Vec<(u32, u64, u32)>,
+    expect_lines: Vec<(u32, u64, u16, u32)>,
 ) {
     let actual = actual.as_object().unwrap();
     let oid = actual.get("oid").unwrap().as_str().unwrap();
@@ -869,7 +869,10 @@ fn itest_verify_order_billing(
                         u32::try_from(s).unwrap()
                     };
                     let product_id = map.get("product_id").unwrap().as_u64().unwrap();
-                    let cond = (store_id == expect.0) && (product_id == expect.1);
+                    let attr_seq = map.get("attr_set_seq").unwrap().as_u64().unwrap();
+                    let cond = (store_id == expect.0)
+                        && (product_id == expect.1)
+                        && (attr_seq as u16 == expect.2);
                     if cond {
                         Some(map)
                     } else {
@@ -881,7 +884,7 @@ fn itest_verify_order_billing(
                 let q = actual_line.get("quantity").unwrap().as_u64().unwrap();
                 u32::try_from(q).unwrap()
             };
-            assert_eq!(qty, expect.2);
+            assert_eq!(qty, expect.3);
             // this test case simply ensures the fields exist without inspecting the
             // precise amount and its decimal value
             {
@@ -896,7 +899,7 @@ async fn itest_update_payment_status(
     shrstate: AppSharedState,
     oid: String,
     charge_time: DateTime<FixedOffset>,
-    last_paid: Vec<(u32, u64, u32)>,
+    last_paid: Vec<(u32, u64, u16, u32)>,
 ) {
     const FPATH_UPDATE_PAYMENT_TEMPLATE: &str =
         "/tests/integration/examples/update_payment_template.json";
@@ -921,7 +924,8 @@ async fn itest_update_payment_status(
                 let mut info = Map::new();
                 info.insert("seller_id".to_string(), JsnVal::Number(item.0.into()));
                 info.insert("product_id".to_string(), JsnVal::Number(item.1.into()));
-                info.insert("qty".to_string(), JsnVal::Number(item.2.into()));
+                info.insert("attr_set_seq".to_string(), JsnVal::Number(item.2.into()));
+                info.insert("qty".to_string(), JsnVal::Number(item.3.into()));
                 lines.push(JsnVal::Object(info));
             })
             .count();
@@ -974,27 +978,31 @@ async fn replica_update_order_payment() -> DefaultResult<(), AppError> {
         resp_body,
         oid.as_str(),
         mock_authed_usr,
-        vec![(mock_seller, 20094, 19), (mock_seller, 20092, 13)],
+        vec![
+            (mock_seller, 20094, 0, 19),
+            (mock_seller, 20094, 1, 2),
+            (mock_seller, 20092, 0, 13),
+        ],
     );
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
         time_now + Duration::seconds(5),
-        vec![(mock_seller, 20094, 1), (mock_seller, 20092, 1)],
+        vec![(mock_seller, 20094, 0, 1), (mock_seller, 20092, 0, 1)],
     )
     .await;
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
         time_now + Duration::seconds(11),
-        vec![(mock_seller, 20092, 7)],
+        vec![(mock_seller, 20092, 0, 7)],
     )
     .await;
     itest_update_payment_status(
         shrstate,
         oid,
         time_now + Duration::seconds(12),
-        vec![(mock_seller, 20094, 5)],
+        vec![(mock_seller, 20094, 0, 5), (mock_seller, 20094, 1, 1)],
     )
     .await;
     Ok(())
@@ -1103,9 +1111,9 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         oid.clone(),
         time_now + Duration::seconds(2),
         vec![
-            (mock_seller, 20097, 11),
-            (mock_seller, 20095, 16),
-            (mock_seller, 20096, 14),
+            (mock_seller, 20097, 0, 11),
+            (mock_seller, 20095, 0, 16),
+            (mock_seller, 20096, 0, 14),
         ],
     )
     .await;

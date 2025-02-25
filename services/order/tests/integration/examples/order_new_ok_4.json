@@ -9,6 +9,12 @@
       "seller_id": 543,
       "product_id": 20094,
       "quantity": 19
+    },
+    {
+      "seller_id": 543,
+      "product_id": 20094,
+      "quantity": 2,
+      "applied_attr": [{"label_id": "busproto", "value": "AMBA6"}]
     }
   ],
   "currency": "INR",

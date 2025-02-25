@@ -813,7 +813,9 @@ impl AbsOrderRepo for OrderInMemRepo {
             let pids = data
                 .lines
                 .iter()
-                .map(|d| _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_id, 0))
+                .map(|d| {
+                    _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_id, d.attr_set_seq)
+                })
                 .collect();
             let info = HashMap::from([(table_name.to_string(), pids)]);
             let (mut rawdata, lock) = self.datastore.fetch_acquire(info).await?;

@@ -118,7 +118,7 @@ pub struct OrderCreateReqData {
 pub struct OrderCreateRespOkDto {
     pub order_id: String,
     pub usr_id: u32,
-    pub time: u64,
+    pub time: u64, // TODO, to RFC3339 formatted string
     pub currency: OrderCurrencySnapshotDto,
     pub reserved_lines: Vec<OrderLinePayDto>,
 }

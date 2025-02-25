@@ -73,23 +73,21 @@ async fn ut_setup_saved_order(
 } // end of fn ut_setup_saved_order
 
 fn ut_setup_oline_new_payment(sellers_id: [u32; 2]) -> Vec<OrderLinePaidUpdateDto> {
-    vec![
-        OrderLinePaidUpdateDto {
-            seller_id: sellers_id[1],
-            product_id: 192,
-            qty: 1,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id: sellers_id[0],
-            product_id: 193,
-            qty: 1,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id: sellers_id[0],
-            product_id: 190,
-            qty: 2,
-        },
+    [
+        (sellers_id[1], 192, 0, 1),
+        (sellers_id[0], 193, 0, 1),
+        (sellers_id[0], 190, 0, 2),
     ]
+    .into_iter()
+    .map(
+        |(seller_id, product_id, attr_set_seq, qty)| OrderLinePaidUpdateDto {
+            seller_id,
+            product_id,
+            attr_set_seq,
+            qty,
+        },
+    )
+    .collect::<Vec<_>>()
 }
 
 fn ut_usr_cb_ok_1(
@@ -209,6 +207,7 @@ fn ut_usr_cb_err_1(
         .map(|d| OrderLinePayUpdateErrorDto {
             seller_id: d.seller_id,
             product_id: d.product_id,
+            attr_set_seq: d.attr_set_seq,
             reason: err_reasons.remove(0),
         })
         .collect()

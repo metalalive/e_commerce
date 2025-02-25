@@ -242,6 +242,9 @@ impl OrderLineIdentity {
     pub fn attrs_seq_num(&self) -> u16 {
         self._attr_set_req
     }
+    fn compare_raw(&self, d: (u32, u64, u16)) -> bool {
+        (self.store_id() == d.0) && (self.product_id() == d.1) && (self.attrs_seq_num() == d.2)
+    }
 }
 
 impl OrderLineQuantityModel {
@@ -423,7 +426,8 @@ impl OrderLineModel {
         data.into_iter()
             .filter_map(|d| {
                 let result = models.iter_mut().find(|m| {
-                    (m.id_.store_id() == d.seller_id) && (m.id_.product_id() == d.product_id)
+                    let args = (d.seller_id, d.product_id, d.attr_set_seq);
+                    m.id().compare_raw(args)
                 });
                 let possible_error = if let Some(m) = result {
                     let new_paid_qty = m.qty.paid + d.qty;
@@ -450,6 +454,7 @@ impl OrderLineModel {
                 possible_error.map(|reason| OrderLinePayUpdateErrorDto {
                     seller_id: d.seller_id,
                     product_id: d.product_id,
+                    attr_set_seq: d.attr_set_seq,
                     reason,
                 })
             })
@@ -473,7 +478,7 @@ impl OrderLineModel {
         &self.attrs_charge
     }
 
-    pub fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
+    fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
         let Self {
             id_,
             price,
@@ -484,6 +489,7 @@ impl OrderLineModel {
         OrderLinePayDto {
             seller_id: id_.store_id(),
             product_id: id_.product_id(),
+            attr_set_seq: id_.attrs_seq_num(),
             quantity: qty.reserved,
             reserved_until: policy.reserved_until.to_rfc3339(),
             amount: price.into_paym_dto(curr_m),
@@ -833,6 +839,7 @@ impl OrderReturnModel {
             .map(|(ctime, (q, refund))| OrderLineReplicaRefundDto {
                 seller_id: pid.store_id(),
                 product_id: pid.product_id(),
+                attr_set_seq: pid.attrs_seq_num(),
                 create_time: ctime.to_rfc3339(),
                 amount: refund.into_paym_dto(curr_ex.clone()),
                 qty: q,

@@ -10,7 +10,11 @@
       },
 	  {"price": 59, "start_after": "2021-05-31T09:30:35+07:30",
 	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20094,
-       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[
+           {"label_id": "elecadap", "value": true, "price": 2},
+           {"label_id": "Mhz", "value": 1454, "price": 3},
+           {"label_id": "busproto", "value": "AMBA6", "price": 4}
+       ]}
       }
       ]
      },
