@@ -1,17 +1,5 @@
 [
-    {
-      "seller_id": 543,
-      "product_id": 20095,
-      "quantity": 4
-    },
-    {
-      "seller_id": 543,
-      "product_id": 20096,
-      "quantity": 2
-    },
-    {
-      "seller_id": 543,
-      "product_id": 20097,
-      "quantity": 3
-    }
+    {"seller_id": 543, "product_id": 20095, "attr_set_seq": 0, "quantity": 4},
+    {"seller_id": 543, "product_id": 20096, "attr_set_seq": 0, "quantity": 2},
+    {"seller_id": 543, "product_id": 20097, "attr_set_seq": 0, "quantity": 3}
 ]

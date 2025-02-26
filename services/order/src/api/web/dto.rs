@@ -16,17 +16,22 @@ pub struct OlineProductAttrDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct OrderLineReqDto {
-    // TODO, split to `OrderLineRsvReqDto` and `OrderLineReturnReqDto`
-    // for separate `reservation` and `return` use cases
+pub struct OrderLineRsvReqDto {
     pub seller_id: u32,
     pub product_id: u64,
     pub quantity: u32,
     pub applied_attr: Option<Vec<OlineProductAttrDto>>,
 }
+#[derive(Deserialize, Serialize)]
+pub struct OrderLineReturnReqDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    pub attr_set_seq: u16,
+    pub quantity: u32,
+}
 
 // TODO , extra field to indicate whether to discard specific line
-pub type CartLineDto = OrderLineReqDto;
+pub type CartLineDto = OrderLineRsvReqDto;
 
 #[derive(Deserialize, Serialize)]
 pub struct CartDto {
@@ -73,6 +78,7 @@ pub struct OrderLineCreateErrorDto {
 pub struct OrderLineReturnErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub reason: OrderLineReturnErrorReason,
 }
 
@@ -105,7 +111,7 @@ pub struct ShippingErrorDto {
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateReqData {
-    pub order_lines: Vec<OrderLineReqDto>,
+    pub order_lines: Vec<OrderLineRsvReqDto>,
     pub currency: CurrencyDto, // currency in buyer's local region
     // Note the rate is determined at the time of placing an order, in this
     // project this API endpoint does not allow front-end clients to insert

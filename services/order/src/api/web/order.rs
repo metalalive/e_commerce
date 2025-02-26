@@ -11,7 +11,7 @@ use serde_json;
 
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
-use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
+use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReturnReqDto};
 use crate::constant as AppConst;
 use crate::repository::{
     app_repo_currency, app_repo_order, app_repo_order_return, app_repo_product_policy,
@@ -120,7 +120,7 @@ pub(super) async fn return_lines_request_handler(
     ExtractPath(oid): ExtractPath<String>,
     authed_claim: AppAuthedClaim,
     ExtractState(_app_state): ExtractState<AppSharedState>,
-    ExtractJson(req_body): ExtractJson<Vec<OrderLineReqDto>>,
+    ExtractJson(req_body): ExtractJson<Vec<OrderLineReturnReqDto>>,
 ) -> impl IntoResponse {
     let logctx = _app_state.log_context().clone();
     let usr_prof_id = authed_claim.profile;

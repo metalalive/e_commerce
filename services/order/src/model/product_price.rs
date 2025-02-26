@@ -10,7 +10,7 @@ use ecommerce_common::error::AppErrorCode;
 
 use crate::api::dto::ProdAttrValueDto;
 use crate::api::rpc::dto::{ProdAttrPriceSetDto, ProductPriceEditDto};
-use crate::api::web::dto::OrderLineReqDto;
+use crate::api::web::dto::OrderLineRsvReqDto;
 use crate::error::AppError;
 
 type ProdAttrPricingMap = Option<HashMap<String, i32>>;
@@ -212,7 +212,7 @@ impl ProductPriceModel {
         (l_add, l_modify)
     }
 
-    fn find_product(&self, d: &OrderLineReqDto) -> bool {
+    fn find_product(&self, d: &OrderLineRsvReqDto) -> bool {
         // TODO, validate expiry of the pricing rule
         let id_match = self.product_id() == d.product_id;
         let chosen_attr_match = d.applied_attr.as_ref().map_or(true, |chosen| {
@@ -232,7 +232,7 @@ impl ProductPriceModel {
 
     pub(super) fn extract_attributes(
         &self,
-        d: &OrderLineReqDto,
+        d: &OrderLineRsvReqDto,
     ) -> DefaultResult<ProdAttriPriceModel, AppError> {
         let newmap = if let Some(chosen) = d.applied_attr.as_ref() {
             if chosen.is_empty() {
@@ -328,7 +328,7 @@ impl ProductPriceModelSet {
         }
     } // end of fn update
 
-    pub(crate) fn find_product(&self, d: &OrderLineReqDto) -> Option<&ProductPriceModel> {
+    pub(crate) fn find_product(&self, d: &OrderLineRsvReqDto) -> Option<&ProductPriceModel> {
         if self.store_id == d.seller_id {
             self.items.iter().find(|m| m.find_product(d))
         } else {

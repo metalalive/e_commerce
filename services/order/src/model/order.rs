@@ -20,9 +20,9 @@ use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, OrderLineStockReservingDto, OrderLineStockReturningDto,
 };
 use crate::api::web::dto::{
-    OrderCreateRespOkDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineReqDto,
-    OrderLineReturnErrorDto, OrderLineReturnErrorReason, ShipOptionSellerErrorReason,
-    ShippingErrorDto, ShippingOptionErrorDto,
+    OrderCreateRespOkDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
+    OrderLineReturnErrorDto, OrderLineReturnErrorReason, OrderLineReturnReqDto, OrderLineRsvReqDto,
+    ShipOptionSellerErrorReason, ShippingErrorDto, ShippingOptionErrorDto,
 };
 
 use crate::constant::hard_limit;
@@ -210,9 +210,9 @@ impl TryFrom<ShippingDto> for ShippingModel {
     } // end of try_from
 } // end of impl ShippingModel
 
-impl From<&OrderLineReqDto> for OrderLineIdentity {
-    fn from(d: &OrderLineReqDto) -> Self {
-        let args = (d.seller_id, d.product_id, 0);
+impl From<&OrderLineReturnReqDto> for OrderLineIdentity {
+    fn from(d: &OrderLineReturnReqDto) -> Self {
+        let args = (d.seller_id, d.product_id, d.attr_set_seq);
         Self::from(args)
     }
 }
@@ -261,7 +261,7 @@ impl From<(u32, u32)> for OrderLinePriceModel {
 
 impl OrderLinePriceModel {
     fn finalize_price(
-        data: &OrderLineReqDto,
+        data: &OrderLineRsvReqDto,
         pricem: &ProductPriceModel,
     ) -> DefaultResult<(Self, ProdAttriPriceModel), AppError> {
         let attrprice = pricem.extract_attributes(data)?;
@@ -323,28 +323,24 @@ impl From<OLineModelCvtArgs> for OrderLineModel {
 
 impl OrderLineModel {
     fn validate_id_match(
-        data: &OrderLineReqDto,
+        data: &OrderLineRsvReqDto,
         policym: &ProductPolicyModel,
         pricem: &ProductPriceModel,
     ) -> DefaultResult<(), AppError> {
-        let id_mismatch = if data.product_id != policym.product_id {
-            Some("product-policy, id")
+        let result = if data.product_id != policym.product_id {
+            Err("product-policy, id")
         } else if data.product_id != pricem.product_id() {
-            Some("product-price, id")
-        } else {
-            None
-        };
-        if let Some(msg) = id_mismatch {
-            Err(AppError {
-                code: AppErrorCode::DataCorruption,
-                detail: Some(msg.to_string()),
-            })
+            Err("product-price, id")
         } else {
             Ok(())
-        }
+        };
+        result.map_err(|msg| AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(msg.to_string()),
+        })
     }
     fn validate_rsv_limit(
-        data: &OrderLineReqDto,
+        data: &OrderLineRsvReqDto,
         policym: &ProductPolicyModel,
     ) -> DefaultResult<(), AppError> {
         let max_rsv = policym.max_num_rsv as u32;
@@ -381,7 +377,7 @@ impl OrderLineModel {
     }
 
     pub fn try_from(
-        data: OrderLineReqDto,
+        data: OrderLineRsvReqDto,
         policym: &ProductPolicyModel,
         pricem: &ProductPriceModel,
     ) -> DefaultResult<Self, AppError> {
@@ -742,10 +738,10 @@ impl OrderReturnModel {
     }
 
     pub fn filter_requests(
-        data: Vec<OrderLineReqDto>,
+        data: Vec<OrderLineReturnReqDto>,
         o_lines: Vec<OrderLineModel>,
-        mut o_returns: Vec<OrderReturnModel>,
-    ) -> DefaultResult<Vec<OrderReturnModel>, Vec<OrderLineReturnErrorDto>> {
+        mut o_returns: Vec<Self>,
+    ) -> DefaultResult<Vec<Self>, Vec<OrderLineReturnErrorDto>> {
         let time_now = LocalTime::now().fixed_offset();
         let time_now =
             Self::dtime_round_secs(&time_now, hard_limit::MIN_SECS_INTVL_REQ as i64).unwrap();
@@ -753,7 +749,8 @@ impl OrderReturnModel {
             .iter()
             .filter_map(|d| {
                 let result = o_lines.iter().find(|oline| {
-                    d.seller_id == oline.id_.store_id() && d.product_id == oline.id_.product_id()
+                    let args = (d.seller_id, d.product_id, d.attr_set_seq);
+                    oline.id_.compare_raw(args)
                 });
                 let opt = if let Some(oline) = result {
                     if oline.policy.warranty_until > time_now {
@@ -786,6 +783,7 @@ impl OrderReturnModel {
                         seller_id: d.seller_id,
                         reason,
                         product_id: d.product_id,
+                        attr_set_seq: d.attr_set_seq,
                     };
                     Some(e)
                 } else {
@@ -800,14 +798,13 @@ impl OrderReturnModel {
         let new_returns = data
             .into_iter()
             .filter_map(|d| {
-                let result = o_returns.iter_mut().find(|ret| {
-                    d.seller_id == ret.id_.store_id() && d.product_id == ret.id_.product_id()
-                });
+                let req_id_combo = (d.seller_id, d.product_id, d.attr_set_seq);
+                let result = o_returns
+                    .iter_mut()
+                    .find(|ret| ret.id_.compare_raw(req_id_combo));
                 let oline = o_lines
                     .iter()
-                    .find(|item| {
-                        d.seller_id == item.id_.store_id() && d.product_id == item.id_.product_id()
-                    })
+                    .find(|item| item.id_.compare_raw(req_id_combo))
                     .unwrap();
                 let total = oline.price.unit() * d.quantity;
                 let refund = OrderLinePriceModel::from((oline.price.unit(), total));
@@ -817,10 +814,9 @@ impl OrderReturnModel {
                     r.qty.insert(time_now, val);
                     None
                 } else {
-                    // TODO, estimate attr-set-seq
-                    let id_ = OrderLineIdentity::from((d.seller_id, d.product_id, 0));
+                    let id_ = OrderLineIdentity::from(req_id_combo);
                     let qty = HashMap::from([(time_now, val)]);
-                    Some(OrderReturnModel { id_, qty })
+                    Some(Self { id_, qty })
                 }
             })
             .collect::<Vec<_>>();

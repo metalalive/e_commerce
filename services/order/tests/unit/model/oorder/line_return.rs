@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
 
-use order::api::web::dto::{OrderLineReqDto, OrderLineReturnErrorReason};
+use order::api::web::dto::{OrderLineReturnErrorReason, OrderLineReturnReqDto};
 use order::constant::hard_limit;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
@@ -14,18 +14,20 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
     let paid_last_update = dt_now - Duration::days(3);
     let reserved_until = dt_now + Duration::hours(2);
     let warranty_until = dt_now + Duration::hours(8);
-    let attr_lastupdate = dt_now - Duration::days(1);
+    let attr_lastupdate = dt_now - Duration::days(10);
     [
-        (812, (7, 70), 10, 0, None),
-        (890, (11, 99), 9, 7, Some(paid_last_update)),
-        (574, (5, 80), 16, 12, Some(paid_last_update)),
-        (257, (13, 130), 10, 10, Some(paid_last_update)),
+        ((812, 0), (7, 70), 10, 0, None),
+        ((890, 0), (11, 99), 9, 7, Some(paid_last_update)),
+        ((574, 0), (5, 80), 16, 12, Some(paid_last_update)),
+        ((574, 1), (8, 56),  7, 7, Some(paid_last_update)),
+        ((574, 2), (8, 56),  7, 3, Some(paid_last_update)),
+        ((257, 0), (13, 130), 10, 10, Some(paid_last_update)),
     ]
     .into_iter()
     .map(
-        |(product_id, (unit, total), reserved, paid, paid_last_update)| {
+        |((product_id, attr_seq), (unit, total), reserved, paid, paid_last_update)| {
             let args = (
-                OrderLineIdentity::from((store_id, product_id, 0)),
+                OrderLineIdentity::from((store_id, product_id, attr_seq)),
                 OrderLinePriceModel::from((unit, total)),
                 OrderLineAppliedPolicyModel {
                     reserved_until, warranty_until,
@@ -89,29 +91,31 @@ fn filter_request_ok() {
         assert_eq!(num_returned, 1u32);
         objs
     };
-    let data = [(890, 4), (574, 1), (257, 3)]
+    let data = [(890, 0, 4), (574, 1, 4), (574, 0, 1), (257, 0, 3)]
         .into_iter()
-        .map(|(product_id, quantity)| OrderLineReqDto {
+        .map(|(product_id, attr_seq, quantity)| OrderLineReturnReqDto {
             seller_id,
             product_id,
             quantity,
-            applied_attr: None,
+            attr_set_seq: attr_seq,
         })
         .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_ok());
     if let Ok(modified) = result {
-        assert_eq!(modified.len(), 3);
+        assert_eq!(modified.len(), 4);
         modified
             .iter()
             .map(|m| {
                 let num_returned = m.qty.values().map(|d| d.0).sum::<u32>();
                 let actual = (m.qty.len(), num_returned);
-                let expect = match m.id_.product_id() {
-                    890u64 => (1usize, 4u32),
-                    574 => (1, 1),
-                    257 => (1, 3),
-                    _others => (0, 0),
+                let combo = (m.id_.product_id(), m.id_.attrs_seq_num());
+                let expect = match combo {
+                    (890u64, 0u16) => (1usize, 4u32),
+                    (574, 0) => (1, 1),
+                    (574, 1) => (1, 4),
+                    (257, 0) => (1, 3),
+                    _others => (9999, 9999),
                 };
                 assert_eq!(actual, expect);
             })
@@ -125,20 +129,21 @@ fn filter_request_err_nonexist() {
     let dt_now = Local::now().fixed_offset();
     let o_lines = ut_saved_orderline_setup(dt_now.clone(), seller_id);
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-    let data = [(890, 4), (574, 1), (1888, 666)]
+    let data = [(890, 0, 4), (574, 0, 1), (574, 5, 666)]
         .into_iter()
-        .map(|(product_id, quantity)| OrderLineReqDto {
+        .map(|(product_id, attr_seq, quantity)| OrderLineReturnReqDto {
             seller_id,
             product_id,
             quantity,
-            applied_attr: None,
+            attr_set_seq: attr_seq,
         })
         .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
     assert!(result.is_err());
     if let Err(es) = result {
         assert_eq!(es.len(), 1);
-        assert_eq!(es[0].product_id, 1888);
+        assert_eq!(es[0].product_id, 574);
+        assert_eq!(es[0].attr_set_seq, 5);
         assert!(matches!(es[0].reason, OrderLineReturnErrorReason::NotExist));
     }
 }
@@ -160,11 +165,11 @@ fn filter_request_warranty_expired() {
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
     let data = [(890, 1), (574, 1), (257, 2)]
         .into_iter()
-        .map(|(product_id, quantity)| OrderLineReqDto {
+        .map(|(product_id, quantity)| OrderLineReturnReqDto {
             seller_id,
             product_id,
             quantity,
-            applied_attr: None,
+            attr_set_seq: 0,
         })
         .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
@@ -187,11 +192,11 @@ fn filter_request_invalid_qty() {
     let o_returns = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
     let data = [(9999, 1), (890, 3), (574, 16), (257, 2)]
         .into_iter()
-        .map(|(product_id, quantity)| OrderLineReqDto {
+        .map(|(product_id, quantity)| OrderLineReturnReqDto {
             seller_id,
             product_id,
             quantity,
-            applied_attr: None,
+            attr_set_seq: 0,
         })
         .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);
@@ -228,11 +233,11 @@ fn filter_request_err_duplicate() {
     }; // assume the record is already added to the return model
     let data = [(890, 3), (574, 1), (257, 1)]
         .into_iter()
-        .map(|(product_id, quantity)| OrderLineReqDto {
+        .map(|(product_id, quantity)| OrderLineReturnReqDto {
             seller_id,
             product_id,
             quantity,
-            applied_attr: None,
+            attr_set_seq: 0,
         })
         .collect::<Vec<_>>();
     let result = OrderReturnModel::filter_requests(data, o_lines, o_returns);

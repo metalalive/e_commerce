@@ -23,7 +23,8 @@ use crate::api::rpc::dto::{
 use crate::api::web::dto::{
     BillingReqDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
     OrderLineCreateErrNonExistDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
-    OrderLineReqDto, OrderLineReturnErrorDto, ShippingErrorDto, ShippingReqDto,
+    OrderLineReturnErrorDto, OrderLineReturnReqDto, OrderLineRsvReqDto, ShippingErrorDto,
+    ShippingReqDto,
 };
 
 use ecommerce_common::error::AppErrorCode;
@@ -233,7 +234,7 @@ impl CreateOrderUseCase {
 
     async fn load_product_properties(
         &self,
-        data: &[OrderLineReqDto],
+        data: &[OrderLineRsvReqDto],
     ) -> DefaultResult<(ProductPolicyModelSet, Vec<ProductPriceModelSet>), CreateOrderUsKsErr> {
         let req_ids_policy = data.iter().map(|d| d.product_id).collect::<Vec<u64>>();
         let req_ids_price = data
@@ -297,7 +298,7 @@ impl CreateOrderUseCase {
     pub fn validate_orderline(
         ms_policy: ProductPolicyModelSet,
         ms_price: Vec<ProductPriceModelSet>,
-        data: Vec<OrderLineReqDto>,
+        data: Vec<OrderLineRsvReqDto>,
     ) -> DefaultResult<Vec<OrderLineModel>, CreateOrderUsKsErr> {
         let (mut client_errors, mut server_errors) = (vec![], vec![]);
         let lines = data
@@ -672,7 +673,7 @@ impl ReturnLinesReqUseCase {
     pub async fn execute(
         self,
         oid: String,
-        data: Vec<OrderLineReqDto>,
+        data: Vec<OrderLineReturnReqDto>,
     ) -> DefaultResult<ReturnLinesReqUcOutput, AppError> {
         if !self
             .authed_claim

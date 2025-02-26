@@ -9,7 +9,7 @@ use ecommerce_common::error::AppErrorCode;
 use order::api::dto::ProdAttrValueDto;
 use order::api::web::dto::{
     OlineProductAttrDto, OrderCreateRespOkDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
-    OrderLineReqDto,
+    OrderLineRsvReqDto,
 };
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
@@ -64,7 +64,7 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
         let ts = [start_after, end_before, attr_lastupdate];
         ProductPriceModel::from((product_id, 1015, ts, None))
     };
-    let data = OrderLineReqDto {
+    let data = OrderLineRsvReqDto {
         seller_id,
         product_id,
         quantity: 26,
@@ -98,7 +98,7 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
         let ts = [start_after, end_before, attr_lastupdate];
         ProductPriceModel::from((product_id, 987, ts, None))
     };
-    let data = OrderLineReqDto {
+    let data = OrderLineRsvReqDto {
         seller_id,
         product_id,
         quantity: 9,
@@ -129,7 +129,7 @@ fn convert_from_req_dto_violate_rsv_limit() {
         let ts = [start_after, end_before, attr_lastupdate];
         ProductPriceModel::from((product_id, 987, ts, None))
     };
-    let data = OrderLineReqDto {
+    let data = OrderLineRsvReqDto {
         seller_id,
         product_id,
         quantity: 11,
@@ -182,7 +182,7 @@ fn convert_from_req_with_attributes_ok() {
                 value: ProdAttrValueDto::Int(v.1),
             })
             .collect::<Vec<_>>();
-        let data = OrderLineReqDto {
+        let data = OrderLineRsvReqDto {
             seller_id,
             product_id,
             quantity: 11,
@@ -246,7 +246,7 @@ fn convert_from_req_with_attributes_error() {
                 value: ProdAttrValueDto::Int(v.1),
             })
             .collect::<Vec<_>>();
-        let data = OrderLineReqDto {
+        let data = OrderLineRsvReqDto {
             seller_id,
             product_id,
             quantity: 11,
@@ -279,7 +279,7 @@ fn convert_from_req_dto_product_id_mismatch() {
         let ts = [start_after, end_before, attr_lastupdate];
         ProductPriceModel::from((1466, 60, ts, None))
     };
-    let data = OrderLineReqDto {
+    let data = OrderLineRsvReqDto {
         seller_id,
         product_id,
         quantity: 2,

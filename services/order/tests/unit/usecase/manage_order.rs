@@ -15,7 +15,7 @@ use order::api::dto::ProdAttrValueDto;
 use order::api::rpc::dto::{
     OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, StockReturnErrorDto,
 };
-use order::api::web::dto::{OlineProductAttrDto, OrderLineReqDto};
+use order::api::web::dto::{OlineProductAttrDto, OrderLineReturnReqDto, OrderLineRsvReqDto};
 use order::constant::app_meta;
 use order::error::AppError;
 use order::model::{
@@ -146,7 +146,7 @@ fn validate_orderline_ok() {
             label_id: d.3.to_string(),
             value: d.4,
         };
-        OrderLineReqDto {
+        OrderLineRsvReqDto {
             seller_id: d.0,
             product_id: d.1,
             quantity: d.2,
@@ -194,7 +194,7 @@ fn validate_orderline_client_errors() {
                 value: c.1,
             }]
         });
-        OrderLineReqDto {
+        OrderLineRsvReqDto {
             seller_id: d.0,
             product_id: d.1,
             quantity: d.2,
@@ -509,11 +509,11 @@ async fn return_lines_request_common(
     );
     let or_repo = ut_oreturn_setup_repository_2(fetched_returns, Ok(vec![]), save_result);
     let mock_order_id = "SomebodyOrderedThis".to_string();
-    let mock_return_req = vec![OrderLineReqDto {
+    let mock_return_req = vec![OrderLineReturnReqDto {
         seller_id: 800,
         product_id: 191,
         quantity: 2,
-        applied_attr: None,
+        attr_set_seq: 0,
     }];
     let authed_claim = AppAuthedClaim {
         profile: req_usr_id,
