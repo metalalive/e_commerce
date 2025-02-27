@@ -125,6 +125,7 @@ pub struct BillingDto {
 pub struct OrderLinePayDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub reserved_until: String, // date-time formatted in RFC3339 spec
     // TODO, add warranty time
     pub quantity: u32,
