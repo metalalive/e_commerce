@@ -60,7 +60,9 @@ fn ut_default_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
 }
 
 #[rustfmt::skip]
-type UtestOlineInitScalar<'a> = (u32, u64, u32, u32, Option<(&'a str, i32)>, DateTime<FixedOffset>);
+type UtestOlineInitScalar<'a> = (
+    (u32, u64), u32, u32, Option<(&'a str, i32)>, DateTime<FixedOffset>
+);
 
 fn ut_oline_init_setup(
     oid: &str,
@@ -72,19 +74,20 @@ fn ut_oline_init_setup(
     let olines_req = lines_raw
         .into_iter()
         .map(|d| {
-            let id_ = OrderLineIdentity::from((d.0, d.1, 0));
+            // attr-seq will be updated later in `OrderLineModelSet::try_from`
+            let id_ = OrderLineIdentity::from((d.0 .0, d.0 .1, 0));
             let qty = OrderLineQuantityModel {
-                reserved: d.2,
+                reserved: d.1,
                 paid: 0,
                 paid_last_update: None,
             };
+            let price = OrderLinePriceModel::from((d.2, d.2 * d.1));
             let policy = OrderLineAppliedPolicyModel {
-                reserved_until: d.5 + Duration::minutes(2),
-                warranty_until: d.5 + Duration::minutes(4),
+                reserved_until: d.4 + Duration::minutes(2),
+                warranty_until: d.4 + Duration::minutes(4),
             };
-            let price = OrderLinePriceModel::from((d.3, d.3 * d.2));
-            let att_lastupdate = d.5 - Duration::minutes(35);
-            let attr_price = d.4.map(|v| HashMap::from([(v.0.to_string(), v.1)]));
+            let att_lastupdate = d.4 - Duration::minutes(35);
+            let attr_price = d.3.map(|v| HashMap::from([(v.0.to_string(), v.1)]));
             let attr_chg = ProdAttriPriceModel::from((att_lastupdate, attr_price));
             OrderLineModel::from((id_, price, policy, qty, attr_chg))
         })

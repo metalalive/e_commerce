@@ -363,7 +363,7 @@ impl OrderLineModel {
         }
     }
 
-    fn update_attr_seqs(lines: &mut Vec<Self>) {
+    fn update_attr_seqs(lines: &mut [Self]) {
         let mut grps: HashMap<BaseProductIdentity, u16> = HashMap::new();
         lines
             .iter_mut()
@@ -415,7 +415,7 @@ impl OrderLineModel {
             .join("")
     }
     pub fn update_payments(
-        models: &mut Vec<OrderLineModel>,
+        models: &mut [OrderLineModel],
         data: Vec<OrderLinePaidUpdateDto>,
         charge_time: DateTime<FixedOffset>,
     ) -> Vec<OrderLinePayUpdateErrorDto> {
@@ -669,6 +669,7 @@ impl OrderLineModelSet {
     pub fn lines(&self) -> &[OrderLineModel] {
         &self.lines
     }
+    #[cfg(feature = "mariadb")]
     pub(crate) fn append_lines(&mut self, new: Vec<OrderLineModel>) {
         self.lines.extend(new);
     }

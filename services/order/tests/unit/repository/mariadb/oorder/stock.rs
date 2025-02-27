@@ -236,12 +236,13 @@ async fn try_reserve_ok() {
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T07:29:01.027-03:00").unwrap();
         let lines = vec![
-            (1013, 9004, 2, 3, None, mock_warranty + Duration::minutes(1)),
-            (1013, 9006, 3, 4, Some(("bolu",1)), mock_rsved_end + Duration::minutes(2)),
-            (1014, 9008, 29, 20, None, mock_warranty + Duration::minutes(3)),
-            (1014, 9009, 6, 15, Some(("bolu",4)), mock_rsved_end + Duration::minutes(4)),
-            (1014, 9009, 2, 11, None, mock_rsved_end + Duration::minutes(5)),
-            (1014, 9009, 3, 14, Some(("peri",3)), mock_rsved_end + Duration::minutes(6)),
+            ((1013, 9004), 2, 3, None, mock_warranty + Duration::minutes(1)),
+            ((1013, 9006), 3, 4, Some(("bolu",1)), mock_rsved_end + Duration::minutes(2)),
+            ((1014, 9008), 28, 20, None, mock_warranty + Duration::minutes(3)),
+            ((1014, 9008), 1, 21, Some(("sora",2)), mock_warranty + Duration::minutes(3)),
+            ((1014, 9009), 6, 15, Some(("bolu",4)), mock_rsved_end + Duration::minutes(4)),
+            ((1014, 9009), 2, 11, None, mock_rsved_end + Duration::minutes(5)),
+            ((1014, 9009), 3, 14, Some(("peri",3)), mock_rsved_end + Duration::minutes(6)),
         ];
         let currency = ut_default_order_currency(vec![1013, 1014]);
         ut_oline_init_setup("800eff40", 123, create_time, currency, lines)
@@ -256,7 +257,7 @@ async fn try_reserve_ok() {
         let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await;
         assert_eq!(actual, (17 + 7 + 4, 3, 120));
         let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
-        assert_eq!(actual, (29, 1, 37));
+        assert_eq!(actual, ((28 + 1), 1, 37));
         let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
         assert_eq!(actual, ((3 + 1 + 6 + 2 + 3), 1, 46));
     }
@@ -335,8 +336,8 @@ async fn try_reserve_shortage() {
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T06:35:00.519-02:00").unwrap();
         let lines = vec![
-            (1015, 9003, 12, 3, None, mock_warranty),
-            (1015, 9002, 6, 4, None, mock_warranty),
+            ((1015, 9003), 12, 3, None, mock_warranty),
+            ((1015, 9002), 6, 4, None, mock_warranty),
         ];
         let currency = ut_default_order_currency(vec![1015]);
         ut_oline_init_setup("8100ffe0", 123, create_time, currency, lines)
@@ -475,8 +476,8 @@ async fn try_return_ok() {
         let create_time = Local::now().fixed_offset();
         let mock_warranty = create_time + Duration::days(7);
         let lines = vec![
-            (mock_seller, 9006, 123, 4, None, mock_warranty + Duration::hours(1)),
-            (mock_seller, 9008, 50, 20, Some(("bolu",2)), mock_warranty + Duration::hours(10)),
+            ((mock_seller, 9006), 123, 4, None, mock_warranty + Duration::hours(1)),
+            ((mock_seller, 9008), 50, 20, Some(("bolu",2)), mock_warranty + Duration::hours(10)),
         ];
         let currency = ut_default_order_currency(vec![mock_seller]);
         ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines)

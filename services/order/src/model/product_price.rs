@@ -189,15 +189,18 @@ impl ProductPriceModel {
     pub fn product_id(&self) -> u64 {
         self.product_id
     }
+    #[cfg(feature = "mariadb")]
     pub(crate) fn start_after(&self) -> DateTime<FixedOffset> {
         self.start_after
     }
+    #[cfg(feature = "mariadb")]
     pub(crate) fn end_before(&self) -> DateTime<FixedOffset> {
         self.end_before
     }
     pub(crate) fn attrs_charge(&self) -> &ProdAttriPriceModel {
         &self.attributes
     }
+    #[cfg(feature = "mariadb")]
     pub(crate) fn split_by_update_state(ms: Vec<Self>) -> (Vec<Self>, Vec<Self>) {
         let (mut l_add, mut l_modify) = (vec![], vec![]);
         ms.into_iter()

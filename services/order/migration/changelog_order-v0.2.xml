@@ -147,8 +147,20 @@
             ALTER TABLE `order_line_detail` DROP COLUMN `attr_seq`;
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.2.3" author="T.H.">
         <tagDatabase tag="0.2.3" />
+    </changeSet>
+    <changeSet id="add_attrset_seqnum__olinereturn" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_return_req` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_return_req` DROP COLUMN `attr_seq`;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.2.4" author="T.H.">
+        <tagDatabase tag="0.2.4" />
     </changeSet>
 </databaseChangeLog>

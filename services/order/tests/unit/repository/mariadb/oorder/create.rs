@@ -24,7 +24,7 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
     let result = o_repo.fetch_all_lines(oid).await;
     assert!(result.is_ok());
     let lines = result.unwrap();
-    assert_eq!(lines.len(), 6);
+    assert_eq!(lines.len(), 7);
     lines
         .into_iter()
         .map(|o| {
@@ -40,7 +40,11 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
                     DateTime::parse_from_rfc3339("3014-11-29T15:46:43-03:00").unwrap(),
                 ),
                 (1014, 9008, 0) => (
-                    29, 0, 20, 580, true,
+                    28, 0, 20, 560, true,
+                    DateTime::parse_from_rfc3339("3015-11-29T15:09:30-03:00").unwrap(),
+                ),
+                (1014, 9008, 1) => (
+                    1, 0, 21, 21, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:09:30-03:00").unwrap(),
                 ),
                 (1014, 9009, 0) => (
@@ -211,8 +215,8 @@ async fn fetch_lines_by_rsvtime_ok() {
     for (mock_oid, mock_currency_label, mock_currency_rate) in mock_misc {
         rsv_time += Duration::days(2);
         let lines = vec![
-            (mock_seller, 9012, mock_rsv_qty, 29, Some(("bolu",3)), rsv_time),
-            (mock_seller, 9013, mock_rsv_qty + 1, 25, None, rsv_time + Duration::days(1)),
+            ((mock_seller, 9012), mock_rsv_qty, 29, Some(("bolu",3)), rsv_time),
+            ((mock_seller, 9013), mock_rsv_qty + 1, 25, None, rsv_time + Duration::days(1)),
         ];
         let mut currency = ut_default_order_currency(vec![mock_seller]);
         currency.sellers.get_mut(&mock_seller)
@@ -252,7 +256,7 @@ async fn fetch_toplvl_meta_ok() {
         create_time += Duration::minutes(3);
         let rsv_time = now + Duration::days(1);
         let lines = vec![(
-            mock_seller, 9014, mock_rsv_qty, 29, Some(("bolu",5)), rsv_time,
+            (mock_seller, 9014), mock_rsv_qty, 29, Some(("bolu",5)), rsv_time,
         )];
         let currency = ut_default_order_currency(vec![mock_seller]);
         let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines);
@@ -305,9 +309,9 @@ async fn fetch_seller_currency_ok() {
     ut_setup_stock_product(o_repo.stock(), mock_sellers[1], 554, 10).await;
     ut_setup_stock_product(o_repo.stock(), mock_sellers[2], 1492, 15).await;
     let lines = vec![
-        (mock_sellers[0], 1405, 8, mock_item_price, Some(("bolu",7)), rsv_time),
-        (mock_sellers[1], 554, 9, mock_item_price, None, rsv_time),
-        (mock_sellers[2], 1492, 8, mock_item_price, Some(("bolu",8)), rsv_time),
+        ((mock_sellers[0], 1405), 8, mock_item_price, Some(("bolu",7)), rsv_time),
+        ((mock_sellers[1], 554), 9, mock_item_price, None, rsv_time),
+        ((mock_sellers[2], 1492), 8, mock_item_price, Some(("bolu",8)), rsv_time),
     ];
     let currency = {
         let mut c = ut_default_order_currency(mock_sellers.to_vec());

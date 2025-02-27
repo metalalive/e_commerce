@@ -45,9 +45,9 @@ async fn update_payment_ok() {
     ut_setup_stock_product(o_repo.stock(), 1033, 9022, 15).await;
     {
         let lines = vec![
-            (1032, 9010, 13, 99, Some(("bolu", 5)), create_time),
-            (1031, 9003, 10, 100, None, create_time),
-            (1032, 9011, 15, 110, Some(("bolu", 3)), create_time),
+            ((1032, 9010), 13, 99, Some(("bolu", 5)), create_time),
+            ((1031, 9003), 10, 100, None, create_time),
+            ((1032, 9011), 15, 110, Some(("bolu", 3)), create_time),
         ];
         let currency = ut_default_order_currency(vec![1032, 1031]);
         let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, currency, lines);
@@ -63,6 +63,7 @@ async fn update_payment_ok() {
             .map(|d| OrderLinePaidUpdateDto {
                 seller_id: d.0,
                 product_id: d.1,
+                attr_set_seq: 0,
                 qty: d.2,
             })
             .collect::<Vec<_>>();
@@ -85,6 +86,7 @@ async fn update_payment_ok() {
             .map(|d| OrderLinePaidUpdateDto {
                 seller_id: d.0,
                 product_id: d.1,
+                attr_set_seq: 0, // TODO, verify
                 qty: d.2,
             })
             .collect::<Vec<_>>();
