@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order-Processing RPC API
-  version: 1.2.0
+  version: 1.3.0
   description: |-
     RPC API endpoints for order-processing service
 
@@ -375,6 +375,58 @@ components:
       format: uint32
       example: 18830
 
+    AttrSetSequenceNum:
+      type: integer
+      format: uint16
+      example: 2
+
+    ProdAttrValueDto:
+      oneOf:
+        - type: integer
+          format: int32
+          example: 42
+        - type: string
+          example: "example_value"
+        - type: boolean
+          example: true
+      description: Possible attribute values as integer, string, or boolean.
+
+    ProductAttrPriceDto:
+      type: object
+      properties:
+        label_id:
+          type: string
+          description: The ID of the attribute label.
+          example: "attr123"
+        value:
+          $ref: '#/components/schemas/ProdAttrValueDto'
+        price:
+          type: integer
+          format: int32
+          description: Extra amount to charge based on attribute.
+          example: 150
+      required:
+        - label_id
+        - value
+        - price
+
+    ProdAttrPriceSetDto:
+      type: object
+      properties:
+        extra_charge:
+          type: array
+          description: List of extra charges for product attributes.
+          items:
+            $ref: '#/components/schemas/ProductAttrPriceDto'
+        last_update:
+          type: string
+          format: date-time
+          description: Timestamp of the last update.
+          example: "2024-06-15T14:30:00Z"
+      required:
+        - extra_charge
+        - last_update
+
     ProductPriceEditDto:
       type: object
       properties:
@@ -391,6 +443,13 @@ components:
         product_id:
           type: integer
           format: uint64
+        attributes:
+          $ref: '#/components/schemas/ProdAttrPriceSetDto'
+      required:
+        - price
+        - product_id
+        - attributes
+
     ProductPriceDeleteDto:
       type: object
       properties:
@@ -682,6 +741,8 @@ components:
         product_id:
           type: integer
           format: uint64
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
         create_time:
           type: string
           format: date-time
@@ -699,6 +760,8 @@ components:
         product_id:
           type: integer
           format: uint64
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
         time:
           type: string
           format: date-time
@@ -720,6 +783,8 @@ components:
         product_id:
           type: integer
           format: uint64
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
         reason:
           $ref: '#/components/schemas/OrderLinePayUpdateErrorReason'
 

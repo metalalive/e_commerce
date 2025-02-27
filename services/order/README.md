@@ -1,6 +1,7 @@
 # Order Processing service
 ## Features
 - saleable products policy, e.g. reservation expiry, warranty, max number of items reserved ... etc.
+- support custom product-attribute pricing plan
 - multi-currency support
 - place orders
 - order-line returns
