@@ -34,6 +34,7 @@ fn ut_setup_olines_refund_dto(time_base: DateTime<Utc>) -> Vec<OrderLineReplicaR
     .map(|d| OrderLineReplicaRefundDto {
         seller_id: d.0,
         product_id: d.1,
+        attr_set_seq: 0,
         create_time: (time_base - Duration::minutes(d.2)).to_rfc3339(),
         amount: PayAmountDto {
             unit: Decimal::new(d.3, 1).to_string(),

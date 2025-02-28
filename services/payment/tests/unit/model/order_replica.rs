@@ -33,16 +33,19 @@ pub(super) fn ut_setup_order_replica(
     reserved_until: DateTime<FixedOffset>,
 ) -> OrderLineModelSet {
     let mock_lines = [
-        (140,  1005, 20, "17.15", "343", Duration::minutes(6)),
-        (141,  1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (142,  1007, 25, "22.09", "552.25", Duration::minutes(10)),
-        (143,  1008, 18, "10.0", "180.0", Duration::minutes(9)),
+        (140, 1005, 0, 20, "17.15", "343", Duration::minutes(6)),
+        (141, 1006, 0, 11, "21.0", "231.0", Duration::minutes(4)),
+        (142, 1007, 0, 25, "22.09", "552.25", Duration::minutes(10)),
+        (142, 1007, 1, 15, "22.56", "338.40", Duration::minutes(10)),
+        (143, 1008, 0, 18, "10.0", "180.0", Duration::minutes(9)),
+        (143, 1008, 1, 3,  "10.29", "30.87", Duration::minutes(9)),
+        (143, 1008, 2, 4,  "10.60", "42.40", Duration::minutes(9)),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.1, quantity: d.2,
-        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
-        reserved_until: (reserved_until + d.5).to_rfc3339(),
+        seller_id: d.0, product_id: d.1, attr_set_seq: d.2, quantity: d.3,
+        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        reserved_until: (reserved_until + d.6).to_rfc3339(),
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = {
@@ -57,9 +60,8 @@ pub(super) fn ut_setup_order_replica(
         cs.snapshot.push(second_currency);
         cs
     };
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
+    let args = (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot);
+    let result = OrderLineModelSet::try_from(args);
     assert!(result.is_ok());
     if let Ok(v) = &result {
         v.currency_snapshot.iter().map(|(usr_id, cm)| {
@@ -83,7 +85,7 @@ fn convert_ok() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
     let out = ut_setup_order_replica(mock_usr_id, mock_oid, reserved_until);
-    assert_eq!(out.lines.len(), 4);
+    assert_eq!(out.lines.len(), 7);
 }
 
 #[test]
@@ -106,19 +108,20 @@ fn convert_qty_zero() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
     let mock_lines = [
-        (140, 1005, 0, "17", "85"),
-        (141, 1006, 11, "21", "231"),
-        (142, 1007, 10, "23", "230"),
+        (140, 1005, 1, 0, "17", "85"),
+        (141, 1006, 0, 11, "21", "231"),
+        (142, 1007, 0, 10, "23", "230"),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
         seller_id: d.0,
         product_id: d.1,
+        attr_set_seq: d.2,
         reserved_until: reserved_until.to_rfc3339(),
-        quantity: d.2,
+        quantity: d.3,
         amount: PayAmountDto {
-            unit: d.3.to_string(),
-            total: d.4.to_string(),
+            unit: d.4.to_string(),
+            total: d.5.to_string(),
         },
     })
     .collect::<Vec<_>>();
@@ -128,9 +131,10 @@ fn convert_qty_zero() {
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.len(), 1);
-        if let OrderModelError::ZeroQuantity(pid) = &e[0] {
+        if let OrderModelError::ZeroQuantity(pid, attrseq) = &e[0] {
             assert_eq!(pid.store_id, 140);
             assert_eq!(pid.product_id, 1005);
+            assert_eq!(*attrseq, 1u16);
         } else {
             assert!(false);
         }
@@ -150,6 +154,7 @@ fn convert_line_expired() {
     .map(|d| OrderLinePayDto {
         seller_id: d.0,
         product_id: d.1,
+        attr_set_seq: 0,
         quantity: d.2,
         reserved_until: (now + Duration::seconds(d.5)).to_rfc3339(),
         amount: PayAmountDto {
@@ -164,9 +169,10 @@ fn convert_line_expired() {
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.len(), 1);
-        if let Some(OrderModelError::RsvExpired(pid)) = e.first() {
+        if let Some(OrderModelError::RsvExpired(pid, attrseq)) = e.first() {
             assert_eq!(pid.store_id, 142);
             assert_eq!(pid.product_id, 1007);
+            assert_eq!(attrseq, &0u16);
         } else {
             assert!(false);
         }
@@ -185,7 +191,7 @@ fn convert_missing_currency_1() {
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.1, quantity: d.2,
+        seller_id: d.0, product_id: d.1, attr_set_seq: 0, quantity: d.2,
         reserved_until: (now + d.5).to_rfc3339(),
         amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
     })
@@ -224,6 +230,7 @@ fn convert_missing_currency_2() {
     .map(|d| OrderLinePayDto {
         seller_id: d.0,
         product_id: d.1,
+        attr_set_seq: 0,
         quantity: d.2,
         reserved_until: (now + Duration::minutes(d.5)).to_rfc3339(),
         amount: PayAmountDto {
@@ -258,7 +265,7 @@ fn convert_corrupted_currency_rate() {
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.1, quantity: d.2,
+        seller_id: d.0, product_id: d.1, attr_set_seq: 0, quantity: d.2,
         reserved_until: (now + d.5).to_rfc3339(),
         amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
     })
@@ -289,17 +296,17 @@ fn convert_invalid_amount() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
     let mock_lines = [
-        (140, 1005, 5, "L7", "85"),
-        (141, 1006, 11, "24", "261"),
-        (142, 1007, 10, "23", "230s"),
-        (143, 1011, u32::MAX, "1230045600789001230045600", "2900"),
-        (144, 1027, 4, "200.013", "800.052"),
+        (140, 1005, 0, 5, "L7", "85"),
+        (140, 1005, 1, 11, "24", "261"),
+        (140, 1007, 0, 10, "23", "230s"),
+        (143, 1011, 0, u32::MAX, "1230045600789001230045600", "2900"),
+        (143, 1027, 0, 4, "200.013", "800.052"),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.1, quantity: d.2,
+        seller_id: d.0, product_id: d.1, attr_set_seq: d.2, quantity: d.3,
         reserved_until: reserved_until.to_rfc3339(),
-        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
+        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142, 143, 144]);
@@ -308,38 +315,38 @@ fn convert_invalid_amount() {
     assert!(result.is_err());
     if let Err(es) = result {
         assert_eq!(es.len(), 5);
-        es.into_iter().map(|e| match e {
-            OrderModelError::InvalidAmount(pid, pe) => {
+        es.into_iter().map(|e| {
+            print!("[DEBUG] error: {:?}\n", e);
+            if let OrderModelError::InvalidAmount(pid, attrseq, pe) = e {
                 let BaseProductIdentity { store_id, product_id } = pid;
-                match (store_id, product_id) {
-                    (141, 1006) =>
+                match (store_id, product_id, attrseq) {
+                    (140, 1005, 1) =>
                         if let PayLineAmountError::Mismatch(amount, qty) = pe {
                             assert_eq!(amount.unit.as_str(), "24");
                             assert_eq!(amount.total.as_str(), "261");
                             assert_eq!(qty, 11u32);
                         } else { assert!(false); },
-                    (140, 1005) =>
+                    (140, 1005, 0) =>
                         if let PayLineAmountError::ParseUnit(value, _reason) = pe {
                             assert_eq!(value.as_str(), "L7");
                         } else { assert!(false); },
-                    (142, 1007) =>
+                    (140, 1007, 0) =>
                         if let PayLineAmountError::ParseTotal(value, _reason) = pe {
                             assert_eq!(value.as_str(), "230s");
                         } else { assert!(false); },
-                    (143, 1011) =>
+                    (143, 1011, 0) =>
                         if let PayLineAmountError::Overflow(amt_unit, qty) = pe {
                             assert_eq!(qty, u32::MAX);
                             assert_eq!(amt_unit.as_str(), "1230045600789001230045600");
                         } else { assert!(false); },
-                    (144, 1027) =>
+                    (143, 1027, 0) =>
                         if let PayLineAmountError::PrecisionUnit(amt_unit, scale) = pe {
                             assert_eq!(amt_unit.as_str(), "200.013");
                             assert_eq!(scale, (2, 3));
                         } else { assert!(false); },
                     _others => { assert!(false); },
                 }
-            },
-            _others => { assert!(false); },
+            } else { assert!(false); }
         }).count();
     }
 } // end of fn convert_invalid_amount

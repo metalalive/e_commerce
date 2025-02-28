@@ -59,13 +59,15 @@ pub enum BuyerPayInState {
 }
 
 pub struct ChargeLineBuyerModel {
-    pub pid: BaseProductIdentity, // product ID
+    pub(super) pid: BaseProductIdentity, // product ID
+    attr_set_seq: u16,
     // the amount to charge in buyer's currency,
     amount_orig: PayLineAmountModel,
     amount_refunded: PayLineAmountModel,
     num_rejected: u32, // num of rejected items without reasons
 }
 
+// TODO, add `attr-set-seq` u16 as part of the key
 type ChargeRefundLineMap = HashMap<BaseProductIdentity, (PayLineAmountModel, u32)>;
 
 #[derive(Default)]
@@ -234,10 +236,10 @@ impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
     #[rustfmt::skip]
     fn from(value: ChargeLineBuyerModel) -> Self {
         let ChargeLineBuyerModel {
-            pid, amount_orig, amount_refunded: _, num_rejected: _
+            pid, attr_set_seq, amount_orig, amount_refunded: _, num_rejected: _
         } = value;
         let BaseProductIdentity { store_id, product_id } = pid;
-        Self { seller_id: store_id, product_id, qty: amount_orig.qty }
+        Self { seller_id: store_id, product_id, attr_set_seq, qty: amount_orig.qty }
     }
 }
 
@@ -549,15 +551,12 @@ impl
     ) -> Result<Self, Self::Error> {
         let (valid_olines, rl, currency_label, now) = value;
         let ChargeAmountOlineDto {
-            seller_id, product_id, quantity: qty_req, amount: amount_dto,
+            seller_id, product_id, attr_set_seq,
+            quantity: qty_req, amount: amount_dto,
         } = rl;
         let mut e = ChargeOlineErrorDto {
-            seller_id,
-            product_id,
-            quantity: None,
-            amount: None,
-            expired: None,
-            not_exist: false,
+            seller_id, product_id, attr_set_seq, quantity: None,
+            amount: None, expired: None, not_exist: false,
         };
         let amount_dto_bak = amount_dto.clone();
         let amount_orig = match PayLineAmountModel::try_from((qty_req, amount_dto, currency_label))
@@ -573,10 +572,15 @@ impl
                 return Err(e);
             }, // TODO, improve error detail
         };
-        let pid_req = BaseProductIdentity { store_id: seller_id,  product_id };
-        let result = valid_olines.iter().find(|v| v.pid == pid_req);
+        let result = {
+            let args = (seller_id,  product_id, attr_set_seq);
+            OrderLineModel::find(valid_olines, args)
+        };
         if let Some(v) = result {
-            let qty_avail = v.rsv_total.qty - v.paid_total.qty;
+            if let Err(re) = v.check_qty_avail(qty_req) {
+                e.quantity = Some(re);
+                return Err(e);
+            }
             if now > (v.reserved_until - Duration::seconds(SECONDS_ORDERLINE_DISCARD_MARGIN as i64))
             {
                 e.expired = Some(true);
@@ -584,16 +588,13 @@ impl
             } else if amount_orig.unit != v.rsv_total.unit {
                 e.amount = Some(amount_dto_bak);
                 Err(e)
-            } else if qty_avail < qty_req {
-                e.quantity = Some(GenericRangeErrorDto {
-                    max_: u16::try_from(qty_avail).unwrap_or(u16::MAX),
-                    given: qty_req,
-                    min_: 1,
-                });
-                Err(e)
             } else {
+                let pid_req = BaseProductIdentity { store_id: seller_id,  product_id };
                 let amount_refunded = PayLineAmountModel::default();
-                Ok(Self {pid: pid_req, amount_orig, amount_refunded, num_rejected: 0})
+                Ok(Self {
+                    pid: pid_req, amount_orig, attr_set_seq,
+                    amount_refunded, num_rejected: 0
+                })
             }
         } else {
             e.not_exist = true;
@@ -603,22 +604,25 @@ impl
 } // end of impl TryFrom for ChargeLineBuyerModel
 
 #[rustfmt::skip]
-type ChargeLineBuyerArgs = (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel, u32);
+type ChargeLineBuyerArgs = (BaseProductIdentity, u16, PayLineAmountModel, PayLineAmountModel, u32);
 
 #[rustfmt::skip]
 impl From<ChargeLineBuyerArgs> for ChargeLineBuyerModel
 {
     fn from(value: ChargeLineBuyerArgs) -> Self {
-        let (pid, amount_orig, mut amount_refunded, num_rejected) = value;
+        let (pid, attr_set_seq, amount_orig, mut amount_refunded, num_rejected) = value;
         assert!(amount_orig.unit > Decimal::ZERO);
         assert!(amount_orig.total > Decimal::ZERO);
         assert!(amount_orig.qty > 0u32);
         amount_refunded.unit = amount_orig.unit;
-        Self { pid, amount_orig, amount_refunded, num_rejected }
+        Self { pid, attr_set_seq, amount_orig, amount_refunded, num_rejected }
     }
 }
 
 impl ChargeLineBuyerModel {
+    pub fn id(&self) -> (u32, u64, u16) {
+        (self.pid.store_id, self.pid.product_id, self.attr_set_seq)
+    }
     pub fn amount_orig(&self) -> &PayLineAmountModel {
         &self.amount_orig
     }
@@ -644,7 +648,7 @@ impl ChargeLineBuyerModel {
     }
     #[rustfmt::skip]
     pub fn into_parts(self) -> ChargeLineBuyerArgs {
-        let Self { pid, amount_orig, amount_refunded, num_rejected } = self;
-        (pid, amount_orig, amount_refunded, num_rejected)
+        let Self { pid, attr_set_seq, amount_orig, amount_refunded, num_rejected } = self;
+        (pid, attr_set_seq, amount_orig, amount_refunded, num_rejected)
     }
 } // end of impl ChargeLineBuyerModel

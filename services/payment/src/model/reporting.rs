@@ -19,6 +19,8 @@ pub enum ReportModelError {
 
 #[derive(Hash, Eq, PartialEq)]
 struct ReportChargeLineKey {
+    // note, is it necessary to add extra field for chosen product attributes
+    // in order line
     product_id: u64,
     currency: CurrencyDto, // currency applied by merchant at that time
 }
@@ -88,7 +90,7 @@ impl MerchantReportChargeModel {
             .into_iter()
             .filter_map(|cl| {
                 // skip refund info at here
-                let (pid, amt_orig, _, _) = cl.into_parts();
+                let (pid, _, amt_orig, _, _) = cl.into_parts();
                 if pid.store_id != self.id {
                     let e = ReportModelError::MerchantNotConsistent(self.id, pid.store_id);
                     errors.push(e);

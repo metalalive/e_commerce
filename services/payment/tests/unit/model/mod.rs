@@ -90,8 +90,9 @@ pub(crate) fn ut_setup_buyer_charge_lines(
                 qty: dl.7,
             };
             let num_rejected = dl.8;
-            let arg = (pid, amount_orig, amount_refunded, num_rejected);
-            ChargeLineBuyerModel::from(arg)
+            let attr_set_seq_dummy = 0; // TODO, WIP
+            let args = (pid, attr_set_seq_dummy, amount_orig, amount_refunded, num_rejected);
+            ChargeLineBuyerModel::from(args)
         })
         .collect()
 }

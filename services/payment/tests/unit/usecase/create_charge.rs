@@ -50,6 +50,7 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
             store_id: mock_seller_id,
             product_id: 6741,
         },
+        attr_set_seq: 0,
         rsv_total: PayLineAmountModel {
             unit: Decimal::new(30001, 2),
             total: Decimal::new(180006, 2),
@@ -95,6 +96,7 @@ fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
             lines: vec![ChargeAmountOlineDto {
                 seller_id: 379,
                 product_id: 6741,
+                attr_set_seq: 0,
                 quantity: 6,
                 amount: PayAmountDto {
                     unit: "300.01".to_string(),
@@ -124,6 +126,7 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
         lines: vec![OrderLinePayDto {
             seller_id: mock_seller_id,
             product_id: 6741,
+            attr_set_seq: 0,
             reserved_until,
             quantity: 6,
             amount: PayAmountDto {

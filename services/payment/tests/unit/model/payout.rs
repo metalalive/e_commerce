@@ -142,11 +142,11 @@ fn create_after_refund_ok() {
             .map(|line| {
                 let mut arg = line.into_parts();
                 if arg.0.store_id == orig_store_id {
-                    arg.2.unit = arg.1.unit; // simulate amount refunded
-                    arg.2.total = arg.2.unit;
-                    arg.2.qty = 1;
+                    arg.3.unit = arg.2.unit; // simulate amount refunded
+                    arg.3.total = arg.3.unit;
+                    arg.3.qty = 1;
                     if arg.0.product_id == 8454u64 {
-                        arg.3 = 2;
+                        arg.4 = 2;
                     } // simulate number of rejected items
                 }
                 ChargeLineBuyerModel::from(arg)

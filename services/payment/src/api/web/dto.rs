@@ -31,6 +31,7 @@ pub enum PaymentMethodReqDto {
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub quantity: u32,
     pub amount: PayAmountDto,
     // TODO, tax and discount
@@ -91,6 +92,7 @@ pub enum PaymentMethodErrorReason {
 pub struct ChargeOlineErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub quantity: Option<GenericRangeErrorDto>,
     // to indicate mismatch,  this backend app returns the estimated amount
     pub amount: Option<PayAmountDto>,

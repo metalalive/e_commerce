@@ -119,7 +119,7 @@ fn ut_setup_order_refund_model(
 ) -> OrderRefundModel {
     let rfnd_dtos = d_lines.into_iter()
         .map(|d| OrderLineReplicaRefundDto {
-            seller_id: merchant_id, product_id: d.0,
+            seller_id: merchant_id, product_id: d.0, attr_set_seq: 0,
             create_time: (time_base - Duration::minutes(d.1)).to_rfc3339() ,
             amount: PayAmountDto {
                 unit: Decimal::new(d.2.0, d.2.1).to_string(),

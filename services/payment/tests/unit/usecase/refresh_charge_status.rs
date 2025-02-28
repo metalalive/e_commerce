@@ -544,8 +544,7 @@ async fn error_rpc_reply_sync_orderapp() {
     let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_reply = {
         let e = vec![OrderLinePayUpdateErrorDto {
-            seller_id: 8298,
-            product_id: 471,
+            seller_id: 8298, product_id: 471, attr_set_seq: 0,
             reason: OrderLinePayUpdateErrorReason::InvalidQuantity,
         }];
         AppRpcReply {
