@@ -82,7 +82,7 @@ impl TryFrom<(OrderLinePayDto, CurrencyDto)> for OrderLineModel {
 } // end of impl TryFrom for OrderLineModel
 
 impl OrderLineModel {
-    pub(super) fn find(ms: &[Self], d: (u32, u64, u16)) -> Option<&Self> {
+    pub fn find(ms: &[Self], d: (u32, u64, u16)) -> Option<&Self> {
         ms.iter().find(|v| {
             (v.pid.store_id == d.0) && (v.pid.product_id == d.1) && (v.attr_set_seq == d.2)
         })

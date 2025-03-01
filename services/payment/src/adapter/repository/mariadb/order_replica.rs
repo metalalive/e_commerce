@@ -17,7 +17,7 @@ const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
 
 #[rustfmt::skip]
 pub(super) type OrderlineRowType = (
-    u32, u64, Decimal, Decimal, Decimal, u32, u32, mysql_async::Value,
+    u32, u64, u16, Decimal, Decimal, Decimal, u32, u32, mysql_async::Value,
 );
 
 #[rustfmt::skip]
@@ -63,6 +63,7 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderLineArgs
                     oid_b.as_column().into(),
                     line.pid.store_id.into(),
                     line.pid.product_id.into(),
+                    line.attr_set_seq.into(),
                     line.rsv_total.unit.into(),
                     line.rsv_total.total.into(),
                     line.rsv_total.qty.into(),
@@ -75,9 +76,9 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderLineArgs
                 Params::Positional(arg)
             })
             .collect::<Vec<_>>();
-        let stmt = "INSERT INTO `order_line_detail`(`o_id`,`store_id`, \
-           `product_id`,`amt_unit`,`amt_total_rsved`,`qty_rsved`,`rsved_until`) \
-            VALUES (?,?,?,?, ?,?,?)";
+        let stmt = "INSERT INTO `order_line_detail`(`o_id`,`store_id`,`product_id`, \
+           `attr_seq`,`amt_unit`,`amt_total_rsved`,`qty_rsved`,`rsved_until`) \
+            VALUES (?,?,?,?, ?,?,?,?)";
         Self(stmt.to_string(), params)
     } // end of fn from
 } // end of impl InsertOrderLineArgs
@@ -260,17 +261,17 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
              WHERE `o_id`=? AND `buyer_id`=?",
             // estimate quantity and amount of paid items, by aggregating charge
             // lines which have been completed successfully
-            "SELECT   `a1`.`store_id`, `a1`.`product_id`, `a1`.`amt_unit`, `a1`.`amt_total_rsved`, \
-             COALESCE(`a2`.`amt_orig_total`, 0), `a1`.`qty_rsved`, COALESCE(`a2`.`qty_orig`, 0), \
-             `a1`.`rsved_until`  FROM `order_line_detail` AS `a1` LEFT JOIN (\
-            SELECT  `b`.`order_id` AS `order-id`, `c`.`store_id` AS `store`,\
-            `c`.`product_id` AS `prod-id`, SUM(`c`.`amt_orig_total`) AS `amt_orig_total`,\
+            "SELECT   `a1`.`store_id`, `a1`.`product_id`, `a1`.`attr_seq`, `a1`.`amt_unit`, \
+            `a1`.`amt_total_rsved`, COALESCE(`a2`.`amt_orig_total`, 0), `a1`.`qty_rsved`, \
+            COALESCE(`a2`.`qty_orig`, 0), `a1`.`rsved_until`  FROM `order_line_detail` AS `a1` LEFT JOIN (\
+            SELECT  `b`.`order_id` AS `order-id`, `c`.`store_id` AS `store`, `c`.`product_id` AS `prod-id`,\
+            `c`.`attr_seq` AS `attr-seq`, SUM(`c`.`amt_orig_total`) AS `amt_orig_total`,\
             SUM(`c`.`qty_orig`) AS `qty_orig`  FROM `charge_buyer_toplvl` AS `b`  INNER JOIN `charge_line` AS `c`\
             ON (`b`.`usr_id`=`c`.`buyer_id` AND `b`.`create_time`=`c`.`create_time`)\
             WHERE `b`.`usr_id`=? AND `b`.`order_id`=? AND `b`.`state`='OrderAppSynced' \
-            GROUP BY  `c`.`store_id`, `c`.`product_id`)   AS `a2`  ON \
+            GROUP BY  `c`.`store_id`, `c`.`product_id`, `c`.`attr_seq`)   AS `a2`  ON \
             (`a1`.`o_id`=`a2`.`order-id` AND `a1`.`store_id`=`a2`.`store` AND \
-            `a1`.`product_id`=`a2`.`prod-id`) \
+            `a1`.`product_id`=`a2`.`prod-id` AND `a1`.`attr_seq`=`a2`.`attr-seq`) \
             WHERE `a1`.`o_id`=? AND `a1`.`qty_rsved` > COALESCE(`a2`.`qty_orig`, 0)",
         ]
         .into_iter()
@@ -331,7 +332,7 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
     #[rustfmt::skip]
     fn try_from(value: OrderlineRowType) -> Result<Self, Self::Error> {
         let (
-            store_id, product_id, amount_unit, amount_total_rsved,
+            store_id, product_id, attr_set_seq, amount_unit, amount_total_rsved,
             amount_total_paid, qty_rsved, qty_paid, rsved_until,
         ) = value;
         let reserved_until =
@@ -346,6 +347,6 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
             unit: amount_unit, total: amount_total_paid, qty: qty_paid,
         };
         let pid = BaseProductIdentity { store_id, product_id };
-        Ok(Self { pid, rsv_total, paid_total, reserved_until })
+        Ok(Self {pid, rsv_total, paid_total, reserved_until, attr_set_seq})
     } // end of fn try-from
 } // end of impl OrderLineModel

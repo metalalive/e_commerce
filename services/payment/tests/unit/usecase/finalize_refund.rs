@@ -81,10 +81,10 @@ fn ut_setup_buyer_charge_inner(
 ) -> ChargeBuyerModel {
     let buyer_usr_id = 960u32;
     let charge_dlines: Vec<UTestChargeLineRawData> = vec![
-        (merchant_id, 8299, (325, 1), (3250, 1), 10, (0, 0), (0, 0), 0, 0),
-        (merchant_id, 8454, (909, 1), (9090, 1), 10, (0, 0), (0, 0), 0, 0),
-        (merchant_id, 9913, (189, 1), (1890, 1), 10, (0, 0), (0, 0), 0, 0),
-        (7788, 9914, (8392, 2), (83920, 2), 10, (0, 0), (0, 0), 0, 0),
+        ((merchant_id, 8299, 0), ((325, 1), (3250, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((merchant_id, 8454, 0), ((909, 1), (9090, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((merchant_id, 9913, 0), ((189, 1), (1890, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((7788, 9914, 0), ((8392, 2), (83920, 2), 10), ((0, 0), (0, 0), 0), 0),
     ];
     let paymethod = {
         let mut mthd = ut_default_charge_method_stripe(&charge_ctime);

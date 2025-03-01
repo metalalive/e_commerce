@@ -47,12 +47,13 @@ pub(crate) fn ut_default_charge_method_stripe(t0: &DateTime<Utc>) -> Charge3part
     Charge3partyModel::Stripe(sess)
 }
 
-#[rustfmt::skip]
 pub(crate) type UTestChargeLineRawData = (
-    u32, u64, (i64, u32), (i64, u32), u32, (i64, u32), (i64, u32), u32, u32
+    (u32, u64, u16),               // id-of-charge-line
+    ((i64, u32), (i64, u32), u32), // amount-paid
+    ((i64, u32), (i64, u32), u32), // amount-refunded
+    u32,                           // num-rejected-for-refund
 );
 
-#[rustfmt::skip]
 pub(crate) fn ut_setup_buyer_charge(
     owner: u32,
     create_time: DateTime<Utc>,
@@ -66,7 +67,11 @@ pub(crate) fn ut_setup_buyer_charge(
     let mut meta = ChargeBuyerMetaModel::from((oid, owner, create_time));
     meta.update_progress(&state);
     meta.update_3party(method);
-    ChargeBuyerModel {meta, lines, currency_snapshot}
+    ChargeBuyerModel {
+        meta,
+        lines,
+        currency_snapshot,
+    }
 }
 
 #[rustfmt::skip]
@@ -77,21 +82,21 @@ pub(crate) fn ut_setup_buyer_charge_lines(
         .into_iter()
         .map(|dl| {
             let pid = BaseProductIdentity {
-                store_id: dl.0,  product_id: dl.1,
+                store_id: dl.0.0,  product_id: dl.0.1,
             };
+            let attr_set_seq = dl.0.2;
             let amount_orig = PayLineAmountModel {
-                unit: Decimal::new(dl.2.0, dl.2.1),
-                total: Decimal::new(dl.3.0, dl.3.1),
-                qty: dl.4,
+                unit: Decimal::new(dl.1.0.0, dl.1.0.1),
+                total: Decimal::new(dl.1.1.0, dl.1.1.1),
+                qty: dl.1.2,
             };
             let amount_refunded = PayLineAmountModel {
-                unit: Decimal::new(dl.5.0, dl.5.1),
-                total: Decimal::new(dl.6.0, dl.6.1),
-                qty: dl.7,
+                unit: Decimal::new(dl.2.0.0, dl.2.0.1),
+                total: Decimal::new(dl.2.1.0, dl.2.1.1),
+                qty: dl.2.2,
             };
-            let num_rejected = dl.8;
-            let attr_set_seq_dummy = 0; // TODO, WIP
-            let args = (pid, attr_set_seq_dummy, amount_orig, amount_refunded, num_rejected);
+            let num_rejected = dl.3;
+            let args = (pid, attr_set_seq, amount_orig, amount_refunded, num_rejected);
             ChargeLineBuyerModel::from(args)
         })
         .collect()

@@ -51,8 +51,41 @@
             ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.1.1" author="Haam">
         <tagDatabase tag="0.1.1" />
+    </changeSet>
+    <changeSet id="add_attrseq__oline_detail" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` DROP PRIMARY KEY;
+            ALTER TABLE `order_line_detail` ADD COLUMN  `attr_seq` SMALLINT UNSIGNED NOT NULL;
+            ALTER TABLE `order_line_detail` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`,`attr_seq`);
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` DROP PRIMARY KEY;
+            ALTER TABLE `order_line_detail` DROP COLUMN  `attr_seq`;
+            ALTER TABLE `order_line_detail` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`);
+        </rollback>
+    </changeSet>
+    <changeSet id="add_attrseq__charge_line" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` DROP FOREIGN KEY `c_fk_charge_buyer_toplvl_id_0`;
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`,`attr_seq`);
+            ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` DROP FOREIGN KEY `c_fk_charge_buyer_toplvl_id_0`;
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` DROP COLUMN `attr_seq`;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`);
+            ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.2" author="Haam">
+        <tagDatabase tag="0.1.2" />
     </changeSet>
 </databaseChangeLog>

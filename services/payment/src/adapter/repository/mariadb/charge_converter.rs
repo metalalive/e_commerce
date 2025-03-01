@@ -53,7 +53,7 @@ pub(super) type ChargeMetaRowType = (
 
 #[rustfmt::skip]
 pub(super) type ChargeLineRowType = (
-    u32, u64, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
+    u32, u64, u16, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
 );
 
 pub(super) type ChargeIdRowType = (u32, mysql_async::Value);
@@ -190,13 +190,16 @@ impl From<(u32, String, Vec<ChargeLineBuyerModel>)> for InsertChargeLinesArgs {
         let (buyer_id, ctime, lines) = value;
         let params = lines.into_iter()
             .map(|line| {
-                let (pid, amount_orig, amount_refunded, num_rejected) = line.into_parts();
+                let ( // WIP
+                    pid, attr_set_seq, amount_orig, amount_refunded, num_rejected
+                ) = line.into_parts();
                 let BaseProductIdentity {store_id, product_id} = pid;
                 let arg = vec![
                     buyer_id.into(),
                     ctime.as_str().into(),
                     store_id.into(),
                     product_id.into(),
+                    attr_set_seq.into(),
                     amount_orig.unit.into(),
                     amount_orig.total.into(),
                     amount_orig.qty.into(),
@@ -209,9 +212,9 @@ impl From<(u32, String, Vec<ChargeLineBuyerModel>)> for InsertChargeLinesArgs {
             })
             .collect();
         let stmt = "INSERT INTO `charge_line`(`buyer_id`,`create_time`,`store_id`,\
-                    `product_id`,`amt_orig_unit`,`amt_orig_total`,`qty_orig`,\
+                    `product_id`,`attr_seq`,`amt_orig_unit`,`amt_orig_total`,`qty_orig`,\
                     `qty_rej`,`qty_rfnd`,`amt_rfnd_unit`,`amt_rfnd_total`) \
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
         Self(stmt.to_string(), params)
     } // end of fn from
 } // end of impl InsertChargeLinesArgs
@@ -380,9 +383,9 @@ inner_into_parts!(UpdateChargeMetaArgs);
 
 impl From<(u32, DateTime<Utc>, Option<u32>)> for FetchChargeLineArgs {
     fn from(value: (u32, DateTime<Utc>, Option<u32>)) -> Self {
-        let mut stmt = "SELECT `store_id`,`product_id`,`amt_orig_unit`,`amt_orig_total`,\
-                   `qty_orig`,`amt_rfnd_unit`,`amt_rfnd_total`,`qty_rfnd`,`qty_rej` \
-                    FROM `charge_line` WHERE `buyer_id`=?  AND `create_time`=?"
+        let mut stmt = "SELECT `store_id`,`product_id`,`attr_seq`,`amt_orig_unit`,`amt_orig_total`,\
+                   `qty_orig`,`amt_rfnd_unit`,`amt_rfnd_total`,`qty_rfnd`,`qty_rej` FROM `charge_line` \
+                    WHERE `buyer_id`=?  AND `create_time`=?"
             .to_string();
         let mut args = vec![
             value.0.into(),
@@ -403,7 +406,7 @@ impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
     #[rustfmt::skip]
     fn try_from(value: ChargeLineRowType) -> Result<Self, Self::Error> {
         let (
-            store_id, product_id, amt_orig_unit, amt_orig_total, qty_orig,
+            store_id, product_id, attr_set_seq, amt_orig_unit, amt_orig_total, qty_orig,
             amt_rfnd_unit, amt_rfnd_total, qty_rfnd, num_rejected,
         ) = value;
         let pid = BaseProductIdentity { store_id, product_id };
@@ -413,14 +416,15 @@ impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
         let amount_refunded = PayLineAmountModel {
             unit: amt_rfnd_unit, total: amt_rfnd_total, qty: qty_rfnd,
         };
-        let out = Self::from((pid, amount_orig, amount_refunded, num_rejected));
-        Ok(out)
+        let args = (pid, attr_set_seq, amount_orig, amount_refunded, num_rejected);
+        Ok(Self::from(args))
     }
 }
 
 #[rustfmt::skip]
 impl From<ChargeRefundMap> for UpdateChargeLineRefundArgs {
     fn from(value: ChargeRefundMap) -> Self {
+        let attr_set_seq_dummy = 0u16; // TODO, WIP
         let params = value.into_inner().into_iter()
             .flat_map(|((buyer_id, charge_ctime), inner_map)| {
                 inner_map.into_iter()
@@ -435,13 +439,14 @@ impl From<ChargeRefundMap> for UpdateChargeLineRefundArgs {
                             charge_ctime.format(DATETIME_FMT_P0F).to_string().into(),
                             store_id.into(),
                             product_id.into(),
+                            attr_set_seq_dummy.into(),
                         ];
                         Params::Positional(param)
                     })
             }).collect::<Vec<_>>() ;
         let stmt = "UPDATE `charge_line` SET `amt_rfnd_unit`=?, `amt_rfnd_total`=?, `qty_rfnd`=?,\
                     `qty_rej`=? WHERE `buyer_id`=? AND `create_time`=? AND `store_id`=? AND \
-                    `product_id`=?";
+                    `product_id`=? AND `attr_seq`=?";
         Self(stmt.to_string(), params)
     }
 } // end of impl UpdateChargeLineRefundArgs

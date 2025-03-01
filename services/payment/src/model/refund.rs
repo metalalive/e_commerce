@@ -181,7 +181,7 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
     #[allow(clippy::field_reassign_with_default)]
     fn try_from(value: OrderLineReplicaRefundDto) -> Result<Self, Self::Error> {
         let OrderLineReplicaRefundDto {
-            seller_id, product_id, create_time, amount, qty
+            seller_id, product_id, create_time, amount, qty, ..
         } = value;
         let pid = BaseProductIdentity { store_id: seller_id, product_id };
         let time_req = DateTime::parse_from_rfc3339(create_time.as_str())
