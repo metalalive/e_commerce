@@ -15,7 +15,7 @@ use crate::api::web::dto::StoreOnboardReqDto;
 
 pub use self::charge::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    ChargeLineBuyerModel, ChargeRefundMap, ChargeToken,
+    ChargeLineBuyerModel, ChargeRefundLineMap, ChargeRefundMap, ChargeToken,
 };
 pub use self::external_processor::{
     Charge3partyStripeModel, Merchant3partyStripeModel, Payout3partyStripeModel,

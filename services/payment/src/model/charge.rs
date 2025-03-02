@@ -59,7 +59,7 @@ pub enum BuyerPayInState {
 }
 
 pub struct ChargeLineBuyerModel {
-    pub(super) pid: BaseProductIdentity, // product ID
+    pid: BaseProductIdentity,
     attr_set_seq: u16,
     // the amount to charge in buyer's currency,
     amount_orig: PayLineAmountModel,
@@ -68,7 +68,8 @@ pub struct ChargeLineBuyerModel {
 }
 
 // TODO, add `attr-set-seq` u16 as part of the key
-type ChargeRefundLineMap = HashMap<BaseProductIdentity, (PayLineAmountModel, u32)>;
+#[derive(Default)]
+pub struct ChargeRefundLineMap(HashMap<(BaseProductIdentity, u16), (PayLineAmountModel, u32)>);
 
 #[derive(Default)]
 pub struct ChargeRefundMap(HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap>);
@@ -356,8 +357,13 @@ impl ChargeBuyerModel {
 } // end of impl ChargeBuyerModel
 
 impl ChargeRefundMap {
-    pub fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
+    pub(crate) fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
         self.0
+    }
+
+    pub fn get(&self, buyer_id: u32, create_time: DateTime<Utc>) -> Option<&ChargeRefundLineMap> {
+        let key = (buyer_id, create_time);
+        self.0.get(&key)
     }
 
     pub fn build(rfd_rslv_ms: &[RefundReqResolutionModel]) -> Self {
@@ -380,8 +386,9 @@ impl ChargeRefundMap {
         rlines
             .iter()
             .map(|rline| {
-                let k = rline.pid();
-                if !inner_map.contains_key(k) {
+                let k = rline.id();
+                let k = (k.0.clone(), k.1);
+                if !inner_map.0.contains_key(&k) {
                     let prev_rounds = rline.amount().accumulated();
                     let v_amt = PayLineAmountModel {
                         unit: prev_rounds.0.unit,
@@ -389,9 +396,9 @@ impl ChargeRefundMap {
                         qty: prev_rounds.0.qty,
                     };
                     let v = (v_amt, prev_rounds.1);
-                    let _old = inner_map.insert(k.clone(), v);
-                }
-                let entry = inner_map.get_mut(k).unwrap();
+                    let _old = inner_map.0.insert(k.clone(), v);
+                } // TODO, move the code to ChargeRefundLineMap
+                let entry = inner_map.0.get_mut(&k).unwrap();
                 let curr_round = rline.amount().curr_round();
                 entry.0.total += curr_round.total;
                 entry.0.qty += curr_round.qty;
@@ -400,6 +407,30 @@ impl ChargeRefundMap {
             .count()
     }
 } // end of impl ChargeRefundMap
+
+impl ChargeRefundLineMap {
+    pub(crate) fn into_inner(
+        self,
+    ) -> HashMap<(BaseProductIdentity, u16), (PayLineAmountModel, u32)> {
+        self.0
+    }
+    pub fn get(
+        &self,
+        merchant_id: u32,
+        product_id: u64,
+        attr_seq: u16,
+    ) -> Option<&(PayLineAmountModel, u32)> {
+        let pid = BaseProductIdentity {
+            store_id: merchant_id,
+            product_id,
+        };
+        let key = (pid, attr_seq);
+        self.0.get(&key)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+} // end of impl ChargeRefundLineMap
 
 impl TryFrom<Vec<u8>> for ChargeToken {
     type Error = (AppErrorCode, String);

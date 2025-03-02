@@ -212,6 +212,7 @@ pub struct RefundCompletionReqDto {
 #[derive(Deserialize)]
 pub struct RefundCompletionOlineReqDto {
     pub product_id: u64,
+    pub attr_set_seq: u16,
     // the time when customer issued the refund request,
     // not when this completion DTO is sent to server
     pub time_issued: DateTime<Utc>,
@@ -266,6 +267,7 @@ pub struct RefundCompletionRespDto {
 #[derive(Serialize)]
 pub struct RefundCompletionOlineRespDto {
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub time_issued: DateTime<Utc>,
     pub reject: RefundLineRejectDto,
     pub approval: RefundLineApprovalDto,
