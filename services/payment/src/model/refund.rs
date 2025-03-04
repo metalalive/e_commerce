@@ -53,8 +53,8 @@ pub struct RefundLineQtyRejectModel(RefundLineRejectDto);
 
 pub struct RefundLineResolveAmountModel {
     // accumulated qty / amount against single line
-    accumulated_paid: PayLineAmountModel,
-    accumulated_rejected: u32, // rejected so far in previous rounds
+    accumulated_paid: PayLineAmountModel, //  TODO, rename to prev_accu_paid
+    accumulated_rejected: u32, // rejected so far in previous rounds, TODO, rename to prev_accu_rejected
     curr_round: PayLineAmountModel,
 }
 pub(super) struct RefundLineReqResolutionModel {
@@ -119,7 +119,7 @@ impl<'a> From<&'a RefundLineRejectDto> for RefundLineQtyRejectModel {
     fn from(value: &'a RefundLineRejectDto) -> Self {
         Self(value.clone())
     }
-}
+} // TODO, remove this trait implementation
 impl Default for RefundLineQtyRejectModel {
     fn default() -> Self {
         let iter = [
@@ -133,6 +133,23 @@ impl Default for RefundLineQtyRejectModel {
     }
 }
 impl RefundLineQtyRejectModel {
+    fn build_and_reduce(req: &RefundLineRejectDto, mut tot_num_reduce: u32) -> Self {
+        let mut obj = Self::from(req);
+        let keys = [
+            RefundRejectReasonDto::Damaged,
+            RefundRejectReasonDto::Fraudulent,
+        ];
+        for key in keys {
+            obj.0.get_mut(&key).map(|num| {
+                if num > &mut 0u32 {
+                    let num_reduce = min(*num, tot_num_reduce);
+                    *num -= num_reduce;
+                    tot_num_reduce -= num_reduce;
+                }
+            });
+        }
+        obj
+    }
     fn total_qty(&self) -> u32 {
         self.0.values().sum()
     }
@@ -157,13 +174,11 @@ impl RefundLineResolveAmountModel {
     }
     pub fn accumulated(&self) -> (&PayLineAmountModel, u32) {
         (&self.accumulated_paid, self.accumulated_rejected)
-    }
+    } // TODO, rename to last-round
     fn accumulate(&self, dst: &mut PayLineAmountModel) {
         assert_eq!(dst.unit, self.accumulated_paid.unit);
-        let tot_qty = self.accumulated_paid.qty + self.curr_round.qty;
-        let tot_amt = self.accumulated_paid.total + self.curr_round.total;
-        dst.qty = tot_qty;
-        dst.total = tot_amt;
+        dst.qty += self.curr_round.qty;
+        dst.total += self.curr_round.total;
     } // end of fn accumulate
 } // end of impl RefundLineResolveAmountModel
 
@@ -461,18 +476,23 @@ impl RefundLineReqResolutionModel {
             })
             .map(|r| {
                 let amt_tot_req = Decimal::from_str(r.approval.amount_total.as_str()).unwrap();
-                let qty_fetched = min(amt_remain.qty, r.approval.quantity);
-                let tot_amt_fetched = min(amt_remain.total, amt_tot_req);
-                if qty_fetched > 0 {
-                    amt_remain.qty -= qty_fetched;
-                    amt_remain.total -= tot_amt_fetched;
+                let qty4aprv = min(amt_remain.qty, r.approval.quantity);
+                let tot_amt_4aprv = min(amt_remain.total, amt_tot_req);
+                if qty4aprv > 0 {
+                    amt_remain.qty -= qty4aprv;
+                    amt_remain.total -= tot_amt_4aprv;
                 }
-                let arg = (
+                let args_rslv_amt = (
                     amt_prev_refunded,
                     num_prev_rejected,
-                    qty_fetched,
-                    tot_amt_fetched,
+                    qty4aprv,
+                    tot_amt_4aprv,
                 );
+                let qty4rejreq = r.total_qty_rejected();
+                let qty4rej = min(amt_remain.qty, qty4rejreq);
+                if qty4rej > 0 {
+                    amt_remain.qty -= qty4rej;
+                }
                 Self {
                     pid: BaseProductIdentity {
                         store_id: orig_charge_id_raw.0,
@@ -480,8 +500,11 @@ impl RefundLineReqResolutionModel {
                     },
                     attr_set_seq: orig_charge_id_raw.2,
                     time_req: r.time_issued,
-                    qty_reject: RefundLineQtyRejectModel::from(&r.reject),
-                    amount: RefundLineResolveAmountModel::from(arg),
+                    qty_reject: RefundLineQtyRejectModel::build_and_reduce(
+                        &r.reject,
+                        qty4rejreq - qty4rej,
+                    ),
+                    amount: RefundLineResolveAmountModel::from(args_rslv_amt),
                 }
             })
             .filter(|m| m.total_qty_curr_round() > 0)
@@ -574,7 +597,7 @@ impl RefundReqRslvInnerModel {
                 && v.pid.product_id == product_id
                 && v.attr_set_seq == attr_seq
                 && time_req.trunc_subsecs(0) == v.time_req.trunc_subsecs(0))
-            .map(|v| (&v.qty_reject, &v.amount))
+            .map(|v| (&v.qty_reject, v.amount()))
     }
 } // end of impl RefundReqRslvInnerModel
 

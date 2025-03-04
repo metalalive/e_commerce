@@ -285,6 +285,10 @@ fn create_resolution_model_ok() {
             ((1982, 1), 544, 1675, 1, 0, 1),
             ((1982, 1), 199, 5250, 3, 4, 5),
             ((1982, 2), 199, 1675, 1, 0, 0),
+            ((1982, 2), 129, 3350, 2, 19, 5),
+            ((1982, 3), 113, 1675, 1, 98, 97),
+            ((1982, 3), 129, 0, 0, 99, 101),
+            ((1982, 12), 199, 1675, 1, 0, 0),
             ((983, 0),  87, 1650, 1, 2, 0),
             ((983, 0), 106, 3300, 2, 0, 5),
             ((985, 0),  35, 2500, 1, 0, 10), // completion request will be omitted
@@ -297,6 +301,9 @@ fn create_resolution_model_ok() {
     let charge_rawlines = vec![
         ((mock_merchant_id, 1982, 0), ((1671, 1), (28407, 1), 17), ((0, 0), (0, 0), 0), 5),
         ((mock_merchant_id, 1982, 1), ((1675, 1), (5025, 0), 30), ((1675, 1), (1675, 1), 1), 2),
+        ((mock_merchant_id, 1982, 2), ((1675, 1), (3350, 0), 20), ((1675, 1), (3350, 1), 2), 1),
+        ((mock_merchant_id, 1982, 3), ((1675, 1), (10050, 1), 6), ((1675, 1), (3350, 1), 2), 0),
+        ((mock_merchant_id, 1982, 4), ((1689, 1), (1689, 0), 10), ((0, 0), (0, 0), 0), 5),
         ((mock_merchant_id, 983, 0), ((1650, 1), (29700, 1), 18), ((0, 0), (0, 0), 0), 0),
         ((mock_merchant_id, 999, 0), ((1900, 1), (11400, 1), 6), ((1900, 1), (3800, 1), 2), 1),
         ((mock_merchant_id, 603, 0), ((990, 1), (2990, 1), 3), ((0, 0), (0, 0), 0), 1),
@@ -310,16 +317,16 @@ fn create_resolution_model_ok() {
     if let Ok(rfnd_rslv_m) = result {
         [
             (1982, 0, 41, 8355, 5, 0, 0),
-            (1982, 0, 87, 11697, 7, 1, 2),
-            (1982, 0, 138, 0, 0, 1, 0),
-            (1982, 0, 113, 0, 0, 0, 1),
+            (1982, 0, 87, 11697, 7, 0, 0),
             (1982, 1, 101, 1675, 1, 1, 0),
             (1982, 1, 544, 1675, 1, 0, 1),
             (1982, 1, 199, 5250, 3, 4, 5),
+            (1982, 2, 199, 1675, 1, 0, 0),
+            (1982, 2, 129, 3350, 2, 9, 5),
+            (1982, 3, 113, 1675, 1, 0, 3),
             (983,  0,  87, 1650, 1, 2, 0),
             (983,  0, 106, 3300, 2, 0, 5),
-            (999,  0,  43, 5700, 3, 1, 1),
-            (999,  0, 144, 0, 0, 7, 0),
+            (999,  0,  43, 5700, 3, 0, 0),
         ].into_iter().map(|d| {
             let t_req = time_now - Duration::minutes(d.2);
             let (reject_rslv, amt_rslv) =
@@ -336,13 +343,10 @@ fn create_resolution_model_ok() {
             assert_eq!(num_fraud, d.6);
         }).count();
         [ // the completion requests  below should be omitted
-            (1982, 0, 129),
-            (985,  0, 35),
-            (999,  0, 49),
+            (1982, 0, 129), (1982, 0, 138), (1982, 0, 113),
+            (985,  0, 35), (999,  0, 49), (999,  0, 144),
             // non-exist requests
-            (1982, 0, 9876),
-            (1982, 1, 9876),
-            (1982, 2, 199),
+            (1982, 0, 9876), (1982, 1, 9876), (1982, 12, 199), (1982, 3, 129),
             (1982, 2, 9876),
         ].into_iter().map(|d| {
             let t_req = time_now - Duration::minutes(d.2);
@@ -428,8 +432,8 @@ fn update_refund_req_ok() {
             ((982,  0), 87, 16500, 10, 0, 0),
             ((1982, 0), 87, 33420, 20, 0, 0),
             ((1982, 0), 113, 1671, 1, 0, 0),
-            ((1982, 1), 544, 1675, 1, 0, 0), // FIXME, expect ((1982, 1), 544, 5025, 3, 0, 0),
-            ((1982, 1), 199, 6700, 4, 0, 0), // FIXME, expect ((1982, 1), 199, 10050, 6, 0, 0),
+            ((1982, 1), 544, 5025, 3, 0, 0),
+            ((1982, 1), 199, 10050, 6, 0, 0),
             ((999,  0), 144, 3800, 2, 0, 0),
             ((1999, 0), 62, 33330, 10, 0, 0),
             ((603,  0), 51, 1980, 2, 0, 0),
@@ -440,27 +444,25 @@ fn update_refund_req_ok() {
     assert!(result.is_ok());
     let mock_cmplt_req = {
         let lines = vec![
-            ((1982, 1), 544, 0, 0, 0, 1), // FIXME, expect ((1982, 1), 544, 0, 0, 2, 1),
-            ((1982, 1), 199, 0, 0, 2, 2), // FIXME, expcet ((1982, 1), 199, 0, 0, 3, 3),
+            ((1982, 1), 544, 0, 0, 2, 1),
+            ((1982, 1), 199, 0, 0, 3, 3),
         ];
         ut_setup_refund_cmplt_dto(time_now, lines)
     };
     let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
-    if let Err(es) = &result {
-        print!("[DEBUG] refund-validate-failure {:?}", es);
-    }
     assert!(result.is_ok());
     let mock_cmplt_req = {
         let lines = vec![
             ((1982, 0), 113, 1671, 1, 1, 0),
-            ((1982, 1), 544, 1675, 2, 0, 0),
-            //((1982, 1), 199, 1675, 19, 0, 1),
+            ((1982, 1), 544, 3350, 2, 0, 2),
+            ((999,  0), 144, 36100, 19, 0, 0),
         ];
         ut_setup_refund_cmplt_dto(time_now, lines)
     };
     let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
     assert!(result.is_err());
     if let Err(es) = result {
+        print!("[DEBUG] refund-validate-failure {:?}", es);
         es.into_iter()
             .map(|e| match e {
                 RefundModelError::QtyInsufficient {pid, attr_set_seq, num_avail, num_req} => {
@@ -468,6 +470,7 @@ fn update_refund_req_ok() {
                     let expect = match (pid.product_id, attr_set_seq) {
                         (1982u64, 0u16) => (0u32, 1u32),
                         (1982, 1) => (1, 2),
+                        (999, 0) => (2, 19),
                         _ => (9999, 9999),
                     };
                     assert_eq!(num_avail, expect.0);
@@ -482,6 +485,7 @@ fn update_refund_req_ok() {
     };
     let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
     assert!(result.is_err());
+    // TODO, update then validate again
 } // end of fn update_refund_req_ok
 
 #[rustfmt::skip]
@@ -494,16 +498,19 @@ fn reduce_cmplt_req_dto_ok() {
         let lines = vec![
             ((1982, 0), 41, 8355, 5, 0, 0),
             ((1982, 0), 113, 18381, 11, 0, 1),
+            ((1982, 1), 125, 8275, 5, 2, 1),
+            ((1982, 1), 225, 3310, 2, 111, 8),
+            ((1982, 2), 125, 8275, 5, 2, 1),
+            ((1982, 2), 225, 3310, 2, 4, 0),
             ((999,  0), 144, 0, 0, 3, 0),
             ((1999, 0), 62, 29997, 9, 0, 0),
         ];
         ut_setup_refund_cmplt_dto(time_now, lines)
     };
     let charge_rawlines = vec![
-        (
-            (mock_merchant_id, 1982u64, 0u16), ((1671i64, 1u32), (20052i64, 1u32), 12u32),
-            ((0i64, 0u32), (0i64, 0u32), 0u32), 0u32,
-        ),
+        ((mock_merchant_id, 1982, 0), ((1671, 1), (20052, 1), 12), ((0, 0), (0, 0), 0), 0),
+        ((mock_merchant_id, 1982, 1), ((1655, 1), (41375, 1), 25), ((1655, 1), (11585, 1), 7), 4),
+        ((mock_merchant_id, 1982, 2), ((1655, 1), (41375, 1), 25), ((1655, 1), (11585, 1), 7), 4),
         ((mock_merchant_id, 983, 0), ((1650, 1), (29700, 1), 18), ((0, 0), (0, 0), 0), 0),
         ((mock_merchant_id, 999, 0), ((1900, 1), (9500, 1), 5), ((0, 0), (0, 0), 0), 0),
         ((mock_merchant_id, 603, 0), ((990, 1), (2990, 1), 3), ((0, 0), (0, 0), 0), 0),
@@ -513,21 +520,23 @@ fn reduce_cmplt_req_dto_ok() {
         ut_setup_buyer_charge_inner(time_now, mock_merchant_id, mock_buyer_id, charge_rawlines);
     let arg = (mock_merchant_id, &mock_charge_m, &mock_cmplt_req);
     let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
-    let mock_cmplt_req = resolve_m.reduce_resolved(mock_merchant_id, mock_cmplt_req);
-    assert_eq!(mock_cmplt_req.lines.len(), 2);
+    let reduced_req = resolve_m.reduce_resolved(mock_merchant_id, mock_cmplt_req);
+    assert_eq!(reduced_req.lines.len(), 3);
     [
-        (1982, 113, 4, "668.4"),
-        (1999, 62, 7, "2333.1"),
+        (1982, 0, 113, 4, "668.4", 0u32, 1u32),
+        (1982, 1, 225, 0, "0.0", 111, 4),
+        (1999, 0, 62, 7, "2333.1", 0, 0),
     ].into_iter()
     .map(|d| {
-        let t_req = time_now - Duration::minutes(d.1);
-        let result = mock_cmplt_req.lines.iter()
-            .find(|v| v.product_id == d.0 && v.time_issued == t_req);
+        let t_req = time_now - Duration::minutes(d.2);
+        let result = reduced_req.lines.iter()
+            .find(|v| v.product_id == d.0 && v.attr_set_seq == d.1
+                && v.time_issued == t_req);
         let rline = result.unwrap();
-        assert_eq!(rline.approval.quantity, d.2);
-        assert_eq!(rline.approval.amount_total.as_str(), d.3);
-        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Damaged).unwrap_or(&0u32), &0u32);
-        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Fraudulent).unwrap_or(&0u32), &0u32);
+        assert_eq!(rline.approval.quantity, d.3);
+        assert_eq!(rline.approval.amount_total.as_str(), d.4);
+        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Damaged).unwrap_or(&0u32), &d.5);
+        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Fraudulent).unwrap_or(&0u32), &d.6);
     })
     .count();
 } // end of fn reduce_cmplt_req_dto_ok
@@ -543,6 +552,7 @@ fn resolution_to_charge_map() {
         ((mock_merchant_id, 1982, 0), ((1671, 1), (20052, 1), 12), ((0, 0), (0, 0), 0), 0),
         ((mock_merchant_id, 983, 0), ((1650, 1), (29700, 1), 18), ((1650, 1), (4950, 1), 3), 4),
         ((mock_merchant_id, 918, 0), ((5566, 1), (5566, 1), 1), ((0, 0), (0, 0), 0), 0),
+        ((mock_merchant_id, 918, 1), ((558, 0), (11160, 0), 20), ((558, 0), (1116, 0), 2), 5),
     ];
     let charge1_rawlines = vec![
         ((mock_merchant_id, 1982, 0), ((1671, 1), (16710, 1), 10), ((1671, 1), (3342, 1), 2), 0),
@@ -565,6 +575,9 @@ fn resolution_to_charge_map() {
             ((1982, 0), 113, 5013, 3, 0, 0),
             ((983, 0), 144, 0, 0, 1, 3),
             ((983, 0), 62, 3300, 2, 0, 1),
+            ((918, 1), 659, 5580, 1, 0, 1),
+            ((918, 1), 759, 5580, 1, 1, 0),
+            ((918, 1), 859, 0, 0, 1, 2),
         ];
         ut_setup_refund_cmplt_dto(time_now - Duration::minutes(20), lines)
     };
@@ -586,19 +599,20 @@ fn resolution_to_charge_map() {
     let rfd_rslv_ms = [resolve_m0, resolve_m1];
     let actual_map = ChargeRefundMap::build(&rfd_rslv_ms);
     [
-        (0, 2, 1982, 7, "167.1", "1169.7", 0),
-        (0, 2, 983,  5, "165.0", "825.0", 9),
-        (1, 2, 1982, 5, "167.1", "835.5", 4),
-        (1, 2, 983,  6, "165.0", "990.0", 2),
+        (0, 3, 1982, 0, 7, "167.1", "1169.7", 0),
+        (0, 3, 983,  0, 5, "165.0", "825.0", 9),
+        (0, 3, 918,  1, 4, "558", "2232.0", 10),
+        (1, 2, 1982, 0, 5, "167.1", "835.5", 4),
+        (1, 2, 983,  0, 6, "165.0", "990.0", 2),
     ].into_iter()
         .map(|d| {
             let inner_map = actual_map.get(mock_buyer_id, *mock_charge_ms[d.0].meta.create_time()).unwrap();
             assert_eq!(inner_map.len(), d.1);
-            let entry = inner_map.get(mock_merchant_id, d.2, 0).unwrap();
-            assert_eq!(entry.0.qty, d.3);
-            assert_eq!(entry.0.unit.to_string().as_str(), d.4);
-            assert_eq!(entry.0.total.to_string().as_str(), d.5);
-            assert_eq!(entry.1, d.6); // num rejrected so far
+            let entry = inner_map.get(mock_merchant_id, d.2, d.3).unwrap();
+            assert_eq!(entry.0.qty, d.4);
+            assert_eq!(entry.0.unit.to_string().as_str(), d.5);
+            assert_eq!(entry.0.total.to_string().as_str(), d.6);
+            assert_eq!(entry.1, d.7); // num rejrected so far
         })
         .count();
 } // end of fn resolution_to_charge_map
