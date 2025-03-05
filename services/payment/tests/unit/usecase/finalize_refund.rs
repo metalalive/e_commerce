@@ -82,6 +82,9 @@ fn ut_setup_buyer_charge_inner(
     let buyer_usr_id = 960u32;
     let charge_dlines: Vec<UTestChargeLineRawData> = vec![
         ((merchant_id, 8299, 0), ((325, 1), (3250, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((merchant_id, 8299, 1), ((331, 1), (3310, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((merchant_id, 8299, 2), ((336, 1), (3360, 1), 10), ((0, 0), (0, 0), 0), 0),
+        ((merchant_id, 8299, 3), ((348, 1), (3480, 1), 10), ((0, 0), (0, 0), 0), 0),
         ((merchant_id, 8454, 0), ((909, 1), (9090, 1), 10), ((0, 0), (0, 0), 0), 0),
         ((merchant_id, 9913, 0), ((189, 1), (1890, 1), 10), ((0, 0), (0, 0), 0), 0),
         ((7788, 9914, 0), ((8392, 2), (83920, 2), 10), ((0, 0), (0, 0), 0), 0),
@@ -115,11 +118,11 @@ fn ut_setup_buyer_charge_inner(
 #[rustfmt::skip]
 fn ut_setup_order_refund_model(
     oid: &str, merchant_id: u32, time_base: DateTime<Utc>,
-    d_lines: Vec<(u64, i64, (i64,u32), (i64,u32), u32)>,
+    d_lines: Vec<((u64, u16), i64, (i64,u32), (i64,u32), u32)>,
 ) -> OrderRefundModel {
     let rfnd_dtos = d_lines.into_iter()
         .map(|d| OrderLineReplicaRefundDto {
-            seller_id: merchant_id, product_id: d.0, attr_set_seq: 0,
+            seller_id: merchant_id, product_id: d.0.0, attr_set_seq: d.0.1,
             create_time: (time_base - Duration::minutes(d.1)).to_rfc3339() ,
             amount: PayAmountDto {
                 unit: Decimal::new(d.2.0, d.2.1).to_string(),
@@ -135,13 +138,15 @@ fn ut_setup_order_refund_model(
 fn ut_verify_cmplt_resp(
     time_base: DateTime<Utc>,
     rline: RefundCompletionOlineRespDto,
-    expect_data_selector: fn(u64, i64) -> (i64, u32, u32, u32),
+    expect_data_selector: fn(u64, u16, i64) -> (i64, u32, u32, u32),
 ) {
-    let RefundCompletionOlineRespDto {product_id, time_issued, mut reject, approval} = rline;
+    let RefundCompletionOlineRespDto {
+        product_id, attr_set_seq, time_issued, mut reject, approval
+    } = rline;
     let expect = {
         let t_diff = (time_base - time_issued).num_minutes();
         let (amt_tot, qty_aprv, qty_rej_damage, qty_rej_fraud) =
-            expect_data_selector(product_id, t_diff);
+            expect_data_selector(product_id, attr_set_seq, t_diff);
         let amt_tot = Decimal::new(amt_tot, 1);
         (amt_tot, qty_aprv, qty_rej_damage, qty_rej_fraud)
     };
@@ -180,19 +185,25 @@ async fn cmplt_req_done_all() {
     let mock_rfnd_req_m = ut_setup_order_refund_model(
         mock_oid, mock_merchant_id, time_base,
         vec![
-            (8299, 19, (325, 1), (325, 1), 1),
-            (8299, 29, (325, 1), (1950, 1), 6),
-            (8454, 39, (909, 1), (6363, 1), 7),
-            (8454, 49, (909, 1), (7272, 1), 8),
+            ((8299, 0), 19, (325, 1), (325, 1), 1),
+            ((8299, 0), 29, (325, 1), (1950, 1), 6),
+            ((8299, 1), 19, (331, 1), (1324, 1), 4),
+            ((8299, 2), 90, (336, 1), (672, 1), 2),
+            ((8299, 2), 80, (336, 1), (672, 1), 2),
+            ((8454, 0), 39, (909, 1), (6363, 1), 7),
+            ((8454, 0), 49, (909, 1), (7272, 1), 8),
         ],
     );
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base,
         vec![
-            (8299, 19, 0,    0, 1, 0),
-            (8299, 29, 650,  2, 0, 4),
-            (8454, 39, 6363, 7, 0, 0),
-            (8454, 49, 4545, 5, 2, 1),
+            ((8299, 0), 19, 0,    0, 1, 0),
+            ((8299, 0), 29, 650,  2, 0, 4),
+            ((8299, 1), 19, 331,  1, 2, 1),
+            ((8299, 2), 90, 336,  1, 0, 1),
+            ((8299, 2), 80, 0,    0, 1, 1),
+            ((8454, 0), 39, 6363, 7, 0, 0),
+            ((8454, 0), 49, 4545, 5, 2, 1),
         ]
     );
     let repo_ch = ut_setup_repo_charge(Some(mock_charge_ms), Some(Ok(())));
@@ -205,18 +216,21 @@ async fn cmplt_req_done_all() {
         mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
-    let data_selector = |prod_id:u64, t_diff:i64| -> (i64,u32,u32,u32) {
-        match (prod_id, t_diff) {
-            (8299, 19) => (0  ,  0, 1, 0),
-            (8299, 29) => (650,  2, 0, 4),
-            (8454, 39) => (6363, 7, 0, 0),
-            (8454, 49) => (4545, 5, 2, 1),
+    let data_selector = |prod_id:u64, attr_seq:u16, t_diff:i64| -> (i64,u32,u32,u32) {
+        match (prod_id, attr_seq, t_diff) {
+            (8299, 0, 19) => (0  ,  0, 1, 0),
+            (8299, 0, 29) => (650,  2, 0, 4),
+            (8299, 1, 19) => (331 , 1, 2, 1),
+            (8299, 2, 90) => (336,  1, 0, 1),
+            (8299, 2, 80) => (0,    0, 1, 1),
+            (8454, 0, 39) => (6363, 7, 0, 0),
+            (8454, 0, 49) => (4545, 5, 2, 1),
             _others => (-9999, 9999, 9999, 9999),
         }
     };
     if let Ok((cmplt_resp, errs3pty)) = result {
         assert!(errs3pty.is_empty());
-        assert_eq!(cmplt_resp.lines.len(), 4);
+        assert_eq!(cmplt_resp.lines.len(), 7);
         cmplt_resp.lines.into_iter()
             .map(|rline| ut_verify_cmplt_resp(time_base, rline, data_selector))
             .count();
@@ -252,19 +266,21 @@ async fn cmplt_req_done_partial() {
     let mock_rfnd_req_m = ut_setup_order_refund_model(
         mock_oid, mock_merchant_id, time_base,
         vec![
-            (8299, 19, (325, 1), (2925, 1), 9),
-            (8299, 29, (325, 1), (2600, 1), 8),
-            (8454, 39, (909, 1), (6363, 1), 7),
-            (8454, 49, (909, 1), (1818, 1), 2),
+            ((8299, 0), 19, (325, 1), (2925, 1), 9),
+            ((8299, 0), 29, (325, 1), (2600, 1), 8),
+            ((8299, 1), 19, (331, 1), (1324, 1), 4),
+            ((8454, 0), 39, (909, 1), (6363, 1), 7),
+            ((8454, 0), 49, (909, 1), (1818, 1), 2),
         ],
     );
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base,
         vec![
-            (8299, 19, 325,   1, 4, 2),
-            (8299, 29, 1625,  5, 0, 1),
-            (8454, 39, 0,     0, 2, 3),
-            (8454, 49, 1818,  2, 0, 0),
+            ((8299, 0), 19, 325,  1, 4, 2),
+            ((8299, 0), 29, 1625, 5, 0, 1),
+            ((8299, 1), 19, 331,  1, 1, 1),
+            ((8454, 0), 39, 0,    0, 2, 3),
+            ((8454, 0), 49, 1818, 2, 0, 0),
         ]
     );
     let repo_ch = ut_setup_repo_charge(Some(mock_charge_ms), Some(Ok(())));
@@ -277,18 +293,19 @@ async fn cmplt_req_done_partial() {
         mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
-    let data_selector = |prod_id:u64, t_diff:i64| -> (i64,u32,u32,u32) {
-        match (prod_id, t_diff) {
-            (8299, 19) => (325,   1, 4, 2),
-            (8299, 29) => (1625,  5, 0, 1),
-            (8454, 39) => (0,     0, 2, 3),
-            (8454, 49) => (1818,  2, 0, 0),
-            _others => (-9999, 9999, 9999, 9999),
+    let data_selector = |prod_id:u64, attr_seq:u16, t_diff:i64| -> (i64,u32,u32,u32) {
+        match (prod_id, attr_seq, t_diff) {
+            (8299, 0, 19) => (325,  1, 4, 2),
+            (8299, 0, 29) => (1625, 5, 0, 1),
+            (8299, 1, 19) => (331 , 1, 1, 1),
+            (8454, 0, 39) => (0,    0, 2, 3),
+            (8454, 0, 49) => (1818, 2, 0, 0),
+            _ => (-9999, 9999, 9999, 9999),
         }
     };
     if let Ok((cmplt_resp, errs3pty)) = result {
         assert!(errs3pty.is_empty());
-        assert_eq!(cmplt_resp.lines.len(), 4);
+        assert_eq!(cmplt_resp.lines.len(), 5);
         cmplt_resp.lines.into_iter()
             .map(|rline| ut_verify_cmplt_resp(time_base, rline, data_selector))
             .count();
@@ -321,21 +338,23 @@ async fn cmplt_req_done_with_processor_error() {
     let mock_rfnd_req_m = ut_setup_order_refund_model(
         mock_oid, mock_merchant_id, time_base,
         vec![
-            (8299, 19, (325, 1), (3900, 1), 12),
-            (8299, 29, (325, 1), (650,  1), 2),
-            (8299, 39, (325, 1), (1300, 1), 4),
-            (8454, 49, (909, 1), (6363, 1), 7),
-            (8454, 59, (909, 1), (7272, 1), 8),
+            ((8299, 0), 19, (325, 1), (3900, 1), 12),
+            ((8299, 0), 29, (325, 1), (650,  1), 2),
+            ((8299, 0), 39, (325, 1), (1300, 1), 4),
+            ((8299, 1), 19, (331, 1), (1324, 1), 4),
+            ((8454, 0), 49, (909, 1), (6363, 1), 7),
+            ((8454, 0), 59, (909, 1), (7272, 1), 8),
         ],
     );
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base,
         vec![
-            (8299, 19, 3575, 11, 1, 0),
-            (8299, 29,  650,  2, 0, 0),
-            (8299, 39,  975,  3, 0, 1),
-            (8454, 49, 5454,  6, 1, 0),
-            (8454, 59, 6363,  7, 0, 1),
+            ((8299, 0), 19, 3575, 11, 1, 0),
+            ((8299, 0), 29,  650,  2, 0, 0),
+            ((8299, 0), 39,  975,  3, 0, 1),
+            ((8299, 1), 19,  662,  2, 1, 1),
+            ((8454, 0), 49, 5454,  6, 1, 0),
+            ((8454, 0), 59, 6363,  7, 0, 1),
         ]
     );
     let repo_ch = ut_setup_repo_charge(Some(mock_charge_ms), Some(Ok(())));
@@ -348,12 +367,12 @@ async fn cmplt_req_done_with_processor_error() {
         mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
-    let data_selector = |prod_id:u64, t_diff:i64| -> (i64,u32,u32,u32) {
-        match (prod_id, t_diff) {
-            (8299, 19) => (3250, 10, 1, 0),
-            (8299, 39) => (0,     0, 0, 1),
-            (8454, 49) => (5454,  6, 1, 0),
-            (8454, 59) => (3636,  4, 0, 1),
+    let data_selector = |prod_id:u64, attr_seq:u16, t_diff:i64| -> (i64,u32,u32,u32) {
+        match (prod_id, attr_seq, t_diff) {
+            (8299, 0, 19) => (3250, 10, 0, 0),
+            (8299, 1, 19) => (662,  2, 1, 1),
+            (8454, 0, 49) => (5454,  6, 1, 0),
+            (8454, 0, 59) => (3636,  3, 0, 0),
             _others => (-9999, 9999, 9999, 9999),
         } // this is another partial completion case due to 3rd-party error
     };
@@ -423,11 +442,11 @@ async fn resolve_failure_repo_refund() {
         )];
     let mock_rfnd_req_m = ut_setup_order_refund_model(
         mock_oid, mock_merchant_id, time_base,
-        vec![(8299, 19, (325, 1), (650,  1), 2)],
+        vec![((8299, 0), 19, (325, 1), (650,  1), 2)],
     );
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base,
-        vec![(8299, 19, 3250, 10, 0, 0)]
+        vec![((8299, 0), 19, 3250, 10, 0, 0)]
     );
     let repo_ch = ut_setup_repo_charge(Some(mock_charge_ms), None);
     let repo_mc = ut_setup_repo_merchant(Some(mock_merchant_profile));
@@ -444,9 +463,10 @@ async fn resolve_failure_repo_refund() {
         if let AppRepoErrorDetail::RefundResolution(mut mes) = e.detail {
             assert_eq!(mes.len(), 1);
             let me = mes.remove(0);
-            if let RefundModelError::QtyInsufficient { pid, num_avail, num_req } = me {
+            if let RefundModelError::QtyInsufficient { pid, attr_set_seq, num_avail, num_req } = me {
                 assert_eq!(pid.store_id, mock_merchant_id);
                 assert_eq!(pid.product_id, 8299);
+                assert_eq!(attr_set_seq, 0);
                 assert_eq!(num_req, 10);
                 assert_eq!(num_avail, 2);
             } else {
@@ -484,11 +504,11 @@ async fn update_failure_chargeline() {
     };
     let mock_rfnd_req_m = ut_setup_order_refund_model(
         mock_oid, mock_merchant_id, time_base,
-        vec![(8299, 19, (325, 1), (1625,  1), 5)],
+        vec![((8299, 0), 19, (325, 1), (1625,  1), 5)],
     );
     let mock_cmplt_req = ut_setup_refund_cmplt_dto(
         time_base,
-        vec![(8299, 19, 1300, 4, 1, 0)]
+        vec![((8299, 0), 19, 1300, 4, 1, 0)]
     );
     let repo_ch = ut_setup_repo_charge(Some(mock_charge_ms), Some(Err(mock_repo_err)));
     let repo_mc = ut_setup_repo_merchant(Some(mock_merchant_profile));
