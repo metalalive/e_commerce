@@ -69,7 +69,7 @@ jobs:
     - name: install headless firefox driver for mocking client
       working-directory: services/payment
       run: |
-          cargo  install  geckodriver
+          cargo  install --version 0.35.0 geckodriver
           ~/.cargo/bin/geckodriver &
           echo "[debug] gecko driver started"
 

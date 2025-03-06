@@ -49,28 +49,28 @@ impl<'a> UtestWebForm<'a> {
 fn ut_setup_chargebuyer_stripe(
     owner: u32,
     order_id: &str,
-    mock_lines: Vec<(u32, u64, (i64, u32), (i64, u32), u32)>,
+    mock_lines: Vec<((u32, u64, u16), (i64, u32), (i64, u32), u32)>,
 ) -> ChargeBuyerModel {
     let ctime = Utc::now();
-    let mut usr_ids = mock_lines.iter().map(|dl| dl.0).collect::<Vec<_>>();
+    let mut usr_ids = mock_lines.iter().map(|dl| dl.0 .0).collect::<Vec<_>>();
     usr_ids.push(owner);
     let currency_snapshot = ut_default_currency_snapshot(usr_ids);
     let lines = mock_lines
         .into_iter()
         .map(|d| {
             let pid = BaseProductIdentity {
-                store_id: d.0,
-                product_id: d.1,
+                store_id: d.0 .0,
+                product_id: d.0 .1,
             };
+            let attr_seq = d.0 .2;
             let amt_orig = PayLineAmountModel {
-                unit: Decimal::new(d.2 .0, d.2 .1),
-                total: Decimal::new(d.3 .0, d.3 .1),
-                qty: d.4,
+                unit: Decimal::new(d.1 .0, d.1 .1),
+                total: Decimal::new(d.2 .0, d.2 .1),
+                qty: d.3,
             };
             let amt_refuned = PayLineAmountModel::default();
             let num_rejected = 0u32;
-            let attr_set_seq_dummy = 0;
-            let args = (pid, attr_set_seq_dummy, amt_orig, amt_refuned, num_rejected);
+            let args = (pid, attr_seq, amt_orig, amt_refuned, num_rejected);
             ChargeLineBuyerModel::from(args)
         })
         .collect();
@@ -202,9 +202,10 @@ async fn charge_flow_completed() {
     // for TWD, Stripe allows only 2 decimal places in the fractional part of amount
     #[rustfmt::skip]
     let mock_lines = vec![
-        (26u32, 2603u64, (791i64, 1u32), (3955i64, 1u32), 5u32),
-        (12, 1227, (48, 0), (432, 0), 9),
-        (12, 8454, (502, 1), (6024, 1), 12),
+        ((26u32, 2603u64, 0u16), (791i64, 1u32), (3955i64, 1u32), 5u32),
+        ((12, 1227, 0), (48, 0), (432, 0), 9),
+        ((12, 8454, 0), (502, 1), (6024, 1), 12),
+        ((12, 8454, 1), (515, 1), (3605, 1), 7),
     ];
     let pay_mthd_req = ut_default_method_stripe_request();
     let mut charge_buyer = ut_setup_chargebuyer_stripe(mock_usr_id, mock_order_id, mock_lines);
@@ -242,8 +243,8 @@ async fn charge_declined_invalid_card() {
     let shr_state = ut_setup_sharestate();
     let proc_ctx = shr_state.processor_context();
     let mock_lines = vec![
-        (26u32, 23u64, (96i64, 0u32), (480i64, 0u32), 5u32),
-        (12, 12721, (48, 0), (432, 0), 9),
+        ((26u32, 23u64, 0u16), (96i64, 0u32), (480i64, 0u32), 5u32),
+        ((12, 12721, 0), (48, 0), (432, 0), 9),
     ];
     let pay_mthd_req = ut_default_method_stripe_request();
     let mut charge_buyer = ut_setup_chargebuyer_stripe(mock_usr_id, mock_order_id, mock_lines);
