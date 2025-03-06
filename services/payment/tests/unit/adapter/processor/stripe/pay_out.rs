@@ -108,8 +108,7 @@ async fn err_invalid_account() {
         let currency_snapshot = ut_default_currency_snapshot(usr_ids);
         let time_now = Local::now().to_utc();
         let charge_lines = vec![
-            (mock_merchant_id, 91038u64, (300i64, 0u32), (900i64, 0u32), 3u32,
-             (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
+            ((mock_merchant_id, 91038, 0), ((300, 0), (900, 0), 3), ((0, 0), (0, 0), 0), 0),
         ];
         let paymethod = ut_default_charge_method_stripe(&time_now);
         ut_setup_buyer_charge(

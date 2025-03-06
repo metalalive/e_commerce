@@ -92,8 +92,8 @@ fn ut_common_mock_data() -> (
     let charge_id = "007a396f1f7131705e".to_string();
     let order_id = "shout-out".to_string();
     let d = vec![
-        (8298, 471, (9028, 2), (36112, 2), 4, (0,0), (0,0), 0, 0),
-        (2369, 380, (551, 1), (1102, 1), 2, (0,0), (0,0), 0, 0),
+        ((8298, 471, 0), ((9028, 2), (36112, 2), 4), ((0,0), (0,0), 0), 0),
+        ((2369, 380, 0), ((551, 1), (1102, 1), 2), ((0,0), (0,0), 0), 0),
     ];
     (
         usr_id, charge_time, charge_id, order_id.clone(),
@@ -544,8 +544,7 @@ async fn error_rpc_reply_sync_orderapp() {
     let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_reply = {
         let e = vec![OrderLinePayUpdateErrorDto {
-            seller_id: 8298,
-            product_id: 471,
+            seller_id: 8298, product_id: 471, attr_set_seq: 0,
             reason: OrderLinePayUpdateErrorReason::InvalidQuantity,
         }];
         AppRpcReply {

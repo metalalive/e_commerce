@@ -65,7 +65,7 @@ async fn ut_setup_order_replica(
 ) { // to ensure currency snapshot data is ready
     let (amt_buyer, [currency_buyer, currency_seller]) = ut_setup_currency_snapshot(); 
     let mock_olines_data = vec![
-        (merchant_id, 89u64, amt_buyer, amt_buyer, 1, Duration::minutes(219))
+        (merchant_id, 89u64, 0u16, amt_buyer, amt_buyer, 1, Duration::minutes(219))
     ];
     let mock_currency_snapshot = {
         let list = [

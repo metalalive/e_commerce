@@ -25,7 +25,7 @@ pub struct AppRouteTable {
 impl AppRouteTable {
     pub fn get(ver_req: &str) -> Self {
         let (version, entries) = match ver_req {
-            "0.1.0" => (format!("v{ver_req}"), Self::v0_1_0_entries()),
+            "0.1.0" | "0.1.1" => (format!("v{ver_req}"), Self::v0_1_0_entries()),
             _others => (String::new(), HashMap::new()),
         };
         Self { version, entries }

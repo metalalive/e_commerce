@@ -67,8 +67,24 @@
             ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`);
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.1.1" author="T.H." labels="payment">
         <tagDatabase tag="0.1.1" />
+    </changeSet>
+    <changeSet id="add_attrseq__charge_line" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`,`attr_seq`);
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` DROP PRIMARY KEY;
+            ALTER TABLE `charge_line` DROP COLUMN `attr_seq`;
+            ALTER TABLE `charge_line` ADD PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_id`);
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.2" author="T.H." labels="payment">
+        <tagDatabase tag="0.1.2" />
     </changeSet>
 </databaseChangeLog>

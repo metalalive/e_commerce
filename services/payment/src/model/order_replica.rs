@@ -6,8 +6,8 @@ use chrono::{DateTime, Local, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{
-    CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
-    OrderSellerCurrencyDto,
+    CurrencyDto, CurrencySnapshotDto, GenericRangeErrorDto, OrderCurrencySnapshotDto,
+    OrderLinePayDto, OrderSellerCurrencyDto,
 };
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -16,21 +16,22 @@ use super::{PayLineAmountError, PayLineAmountModel};
 #[derive(Debug)]
 pub enum OrderModelError {
     EmptyLine,
-    ZeroQuantity(BaseProductIdentity),
-    RsvExpired(BaseProductIdentity),
-    RsvError(BaseProductIdentity, String),
-    InvalidAmount(BaseProductIdentity, PayLineAmountError),
+    ZeroQuantity(BaseProductIdentity, u16),
+    RsvExpired(BaseProductIdentity, u16),
+    RsvError(BaseProductIdentity, u16, String),
+    InvalidAmount(BaseProductIdentity, u16, PayLineAmountError),
     MissingActorsCurrency(Vec<u32>),
     MissingExRate(CurrencyDto),
     CorruptedExRate(CurrencyDto, String),
 }
 
 pub struct OrderLineModel {
-    pub pid: BaseProductIdentity, // product ID
+    pub pid: BaseProductIdentity,
+    pub attr_set_seq: u16,
     pub rsv_total: PayLineAmountModel,
     pub paid_total: PayLineAmountModel,
     pub reserved_until: DateTime<Utc>,
-}
+} //TODO, make all fields private
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrderCurrencySnapshot {
@@ -57,27 +58,56 @@ impl TryFrom<(OrderLinePayDto, CurrencyDto)> for OrderLineModel {
     {
         let (oline, currency_label) = value;
         let OrderLinePayDto {
-            seller_id, product_id, reserved_until, quantity, amount: amount_dto,
+            seller_id, product_id, reserved_until, quantity,
+            amount: amount_dto, attr_set_seq,
         } = oline;
         let pid = BaseProductIdentity {store_id: seller_id, product_id};
         let rsv_parse_result = DateTime::parse_from_rfc3339(reserved_until.as_str());
         let now = Local::now().fixed_offset();
 
         if quantity == 0 {
-            Err(Self::Error::ZeroQuantity(pid))
+            Err(Self::Error::ZeroQuantity(pid, attr_set_seq))
         } else if let Err(e) = rsv_parse_result.as_ref() {
-            Err(Self::Error::RsvError(pid, e.to_string()))
+            Err(Self::Error::RsvError(pid, attr_set_seq, e.to_string()))
         } else if &now >= rsv_parse_result.as_ref().unwrap() {
-            Err(Self::Error::RsvExpired(pid))
+            Err(Self::Error::RsvExpired(pid, attr_set_seq))
         } else {
             let reserved_until = rsv_parse_result.unwrap().to_utc();
             let rsv_total = PayLineAmountModel::try_from((quantity, amount_dto, currency_label))
-                .map_err(|e| Self::Error::InvalidAmount(pid.clone(), e)) ?;
+                .map_err(|e| Self::Error::InvalidAmount(pid.clone(), attr_set_seq, e)) ?;
             let paid_total = PayLineAmountModel::default();
-            Ok(Self {pid, paid_total, rsv_total, reserved_until})
+            Ok(Self {pid, attr_set_seq, paid_total, rsv_total, reserved_until})
         }
     } // end of fn try-from
 } // end of impl TryFrom for OrderLineModel
+
+impl OrderLineModel {
+    pub fn find(ms: &[Self], d: (u32, u64, u16)) -> Option<&Self> {
+        ms.iter().find(|v| {
+            (v.pid.store_id == d.0) && (v.pid.product_id == d.1) && (v.attr_set_seq == d.2)
+        })
+    }
+    pub(super) fn check_qty_avail(&self, qty_req: u32) -> Result<u32, GenericRangeErrorDto> {
+        let q_avail =
+            self.rsv_total
+                .qty
+                .checked_sub(self.paid_total.qty)
+                .ok_or(GenericRangeErrorDto {
+                    max_: u16::try_from(self.rsv_total.qty).unwrap_or(u16::MAX),
+                    given: self.paid_total.qty,
+                    min_: 0,
+                })?;
+        if q_avail >= qty_req {
+            Ok(q_avail)
+        } else {
+            Err(GenericRangeErrorDto {
+                max_: u16::try_from(q_avail).unwrap_or(u16::MAX),
+                given: qty_req,
+                min_: 1,
+            })
+        }
+    }
+} // end of impl OrderLineModel
 
 impl TryFrom<(CurrencyDto, &Vec<CurrencySnapshotDto>)> for OrderCurrencySnapshot {
     type Error = OrderModelError;

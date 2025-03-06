@@ -277,7 +277,7 @@ impl CreateCheckoutSessionPriceData {
         .unwrap(); // TODO, overflow error handling
         CreateCheckoutSessionPriceData {
             product_data: CreateCheckoutSessionProductData {
-                name: format!("{:?}", cline.pid),
+                name: format!("{:?}", cline.id()),
             }, // TODO, load product name, save the product ID in metadata
             currency: currency_label,
             // the unit-amount field has to contain smallest unit

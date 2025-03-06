@@ -1,16 +1,22 @@
 {
   "lines": [
     {
-      "product_id": 204,
+      "product_id": 204, "attr_set_seq": 0,
       "time_issued": "2024-09-05T14:48:01.499+03:35",
       "reject": {"Fraudulent": 2, "Damaged": 3},
       "approval": {"quantity": 3, "amount_total": "54.3"}
     },
     {
-      "product_id": 206,
+      "product_id": 206, "attr_set_seq": 0,
       "time_issued": "2024-09-05T14:01:53.499+03:35",
       "reject": {},
       "approval": {"quantity": 5, "amount_total": "77.2"}
+    },
+    {
+      "product_id": 206, "attr_set_seq": 2,
+      "time_issued": "2024-09-05T14:48:01.495+03:35",
+      "reject": {"Fraudulent": 1, "Damaged": 1},
+      "approval": {"quantity": 1, "amount_total": "16.6"}
     }
   ]
 }

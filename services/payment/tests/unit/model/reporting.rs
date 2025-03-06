@@ -13,7 +13,7 @@ use payment::model::{
 use super::{ut_default_charge_method_stripe, ut_setup_buyer_charge};
 
 #[rustfmt::skip]
-type UTestReportChargeLineRaw = (u64, (i64, u32), (i64, u32), u32);
+type UTestReportChargeLineRaw = (u64, u16, (i64, u32), (i64, u32), u32);
 
 #[rustfmt::skip]
 fn ut_setup_buyer_charge_inner(
@@ -47,8 +47,8 @@ fn ut_setup_buyer_charge_inner(
     };
     let charge_dlines = d_lines
         .into_iter()
-        .map(|d| (merchant_id, d.0, d.1, d.2, d.3,
-                  (0i64, 0u32), (0i64, 0u32), 0u32, 0u32))
+        .map(|d| ((merchant_id, d.0, d.1), (d.2, d.3, d.4),
+                  ((0i64, 0u32), (0i64, 0u32), 0u32), 0u32))
         .collect::< Vec<_>>() ;
     ut_setup_buyer_charge(
         buyer_usr_id,
@@ -79,7 +79,7 @@ fn merge_charges_empty() {
         mock_merchant_id,
         false,
         (CurrencyDto::TWD, (3184, 2)),
-        vec![(463, (201, 1), (1608, 1), 8)],
+        vec![(463, 0, (201, 1), (1608, 1), 8)],
     )];
     let result = report_m.try_merge(charge_ms);
     assert!(result.is_ok());
@@ -105,8 +105,8 @@ fn merge_charges_ok() {
             true,
             (CurrencyDto::TWD, (3184, 2)),
             vec![
-                (463, (201, 1), (1809, 1), 9),
-                (83, (8312, 2), (16624, 2), 2),
+                (463, 0, (201, 1), (1809, 1), 9),
+                (83, 0, (8312, 2), (16624, 2), 2),
             ],
         ),
         ut_setup_buyer_charge_inner(
@@ -116,7 +116,10 @@ fn merge_charges_ok() {
             mock_merchant_id,
             true,
             (CurrencyDto::TWD, (3179, 2)),
-            vec![(463, (203, 1), (609, 1), 3), (83, (8348, 2), (8348, 2), 1)],
+            vec![
+                (463, 0, (203, 1), (609, 1), 3),
+                (83, 0, (8348, 2), (8348, 2), 1),
+            ],
         ),
         // in rare case, merchant might change currency type to receive
         // TODO, reconsider whether this case could really happen in real world
@@ -128,8 +131,8 @@ fn merge_charges_ok() {
             true,
             (CurrencyDto::INR, (8964, 2)),
             vec![
-                (463, (203, 1), (609, 1), 3),
-                (83, (8348, 2), (83480, 2), 10),
+                (463, 0, (203, 1), (609, 1), 3),
+                (83, 0, (8348, 2), (83480, 2), 10),
             ],
         ),
         ut_setup_buyer_charge_inner(
@@ -139,7 +142,10 @@ fn merge_charges_ok() {
             mock_merchant_id,
             true,
             (CurrencyDto::INR, (6464, 2)),
-            vec![(463, (202, 1), (1010, 1), 5), (83, (8341, 2), (8341, 2), 1)],
+            vec![
+                (463, 0, (202, 1), (1010, 1), 5),
+                (83, 0, (8341, 2), (8341, 2), 1),
+            ],
         ),
     ]; // end of charge_ms
 
@@ -184,7 +190,7 @@ fn merge_charges_err_missing_currency() {
             mock_merchant_id,
             true,
             (CurrencyDto::TWD, (3176, 2)),
-            vec![(83, (8312, 2), (16624, 2), 2)],
+            vec![(83, 0, (8312, 2), (16624, 2), 2)],
         );
         let _discarded = m.currency_snapshot.remove(&mock_merchant_id);
         vec![m]
@@ -222,7 +228,7 @@ fn merge_charges_err_amount_overflow() {
             mock_merchant_id,
             true,
             (CurrencyDto::TWD, (i64::MAX - 1, 2)),
-            vec![(230, (9911, 0), (i64::MAX - 2, 0), 10000)],
+            vec![(230, 0, (9911, 0), (i64::MAX - 2, 0), 10000)],
         );
         vec![m]
     };
@@ -260,7 +266,10 @@ fn merge_charges_err_merchant_inconsistent() {
             mock_another_merchant_id,
             true,
             (CurrencyDto::TWD, (3168, 2)),
-            vec![(83, (8312, 2), (16624, 2), 2), (99, (515, 1), (3605, 1), 7)],
+            vec![
+                (83, 0, (8312, 2), (16624, 2), 2),
+                (99, 0, (515, 1), (3605, 1), 7),
+            ],
         );
         let snapshot = OrderCurrencySnapshot {
             label: CurrencyDto::IDR,

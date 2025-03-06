@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.1.0
+  version: 0.1.1
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.1.0
+  - url: https://doc.site.not.ready/api/v0.1.1
 tags:
   - name: configuration
     description: |
@@ -268,6 +268,10 @@ components:
     ProductId:
       type: integer
       format: uint64
+
+    AttrSetSeq:
+      type: integer
+      format: uint16
     
     Quantity:
       type: integer
@@ -310,6 +314,8 @@ components:
           $ref: '#/components/schemas/ProductId'
         seller_id:
           $ref: '#/components/schemas/SellerId'
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSeq'
     
     PayAmountDto:
       type: object
@@ -336,6 +342,7 @@ components:
       required:
         - product_id
         - seller_id
+        - attr_set_seq
         - quantity
         - amount
         
@@ -434,6 +441,7 @@ components:
       required:
         - seller_id
         - product_id
+        - attr_set_seq
     
     ChargeRespErrorDto:
       type: object
@@ -576,6 +584,8 @@ components:
       properties:
         product_id:
           $ref: '#/components/schemas/ProductId'
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSeq'
         time_issued:
           type: string
           format: date-time
@@ -585,6 +595,7 @@ components:
           $ref: '#/components/schemas/RefundLineApprovalDto'
       required:
       - product_id
+      - attr_set_seq
       - time_issued
       - reject
       - approval

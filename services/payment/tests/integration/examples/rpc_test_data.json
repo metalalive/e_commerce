@@ -2,60 +2,61 @@
     "rpc.order.order_reserved_replica_payment": {
         "2234": [
             {
-                "oid": "7931649be98f24", 
-		"usr_id": 2234,
-		"lines": [
-		    {
-                        "seller_id": 983,
-			"product_id": 204,
-			"reserved_until": "2038-12-25T22:59:38.008+02:00",
-			"quantity": 150,
-			"amount": {"unit": "18.1", "total": "2715.0"}
-		    },
-		    {
-                        "seller_id": 983,
-			"product_id": 206,
-			"reserved_until": "2038-12-31T02:19:44.408+02:00",
-			"quantity": 18,
-			"amount": {"unit": "15.44", "total": "277.92"}
-		    },
-		    {
-                        "seller_id": 127,
-			"product_id": 3805,
-			"reserved_until": "2038-11-30T06:00:25.223+02:00",
-			"quantity": 15,
-			"amount": {"unit": "20.4", "total": "306.0"}
-		    },
-		    {
-                        "seller_id": 983,
-			"product_id": 3037,
-			"reserved_until": "2047-12-25T03:19:02.008+05:00",
-			"quantity": 9,
-			"amount": {"unit": "8.0", "total": "72.0"}
-		    }
-		],
-		"currency": {
-			"snapshot": [
-			    {"name":"IDR", "rate":"16288.53"},
-			    {"name":"USD", "rate":"1.00"},
-			    {"name":"THB", "rate":"37.502"}
-			],
-			"sellers": [
-			    {"currency":"THB", "seller_id":983},
-			    {"currency":"IDR", "seller_id":127}
-			],
-			"buyer": "USD"
-		},
-		"billing": {
-		    "contact": {
-		        "first_name": "Vonjutstes",
-			"last_name": "Don",
-			"emails": ["carry@outperform.org"],
-			"phones": [
-			    {"nation": 886, "number": "22940913"}
-			]
-		    }
-		}
+                "oid": "7931649be98f24", "usr_id": 2234,
+            "lines": [
+                {
+                "seller_id": 983, "product_id": 204, "attr_set_seq": 0,
+                "reserved_until": "2038-12-25T22:59:38.008+02:00",
+                "quantity": 150, "amount": {"unit": "18.1", "total": "2715.0"}
+                },
+                {
+                "seller_id": 983, "product_id": 206, "attr_set_seq": 0,
+                "reserved_until": "2038-12-31T02:19:44.408+02:00",
+                "quantity": 18, "amount": {"unit": "15.44", "total": "277.92"}
+                },
+                {
+                "seller_id": 983, "product_id": 206, "attr_set_seq": 1,
+                "reserved_until": "2038-12-31T02:19:44.408+02:00",
+                "quantity": 5, "amount": {"unit": "15.95", "total": "79.75"}
+                },
+                {
+                "seller_id": 983, "product_id": 206, "attr_set_seq": 2,
+                "reserved_until": "2038-12-31T02:19:44.408+02:00",
+                "quantity": 8, "amount": {"unit": "16.6", "total": "132.8"}
+                },
+                {
+                "seller_id": 127, "product_id": 3805, "attr_set_seq": 0,
+                "reserved_until": "2038-11-30T06:00:25.223+02:00",
+                "quantity": 15, "amount": {"unit": "20.4", "total": "306.0"}
+                },
+                {
+                "seller_id": 983, "product_id": 3037, "attr_set_seq": 0,
+                "reserved_until": "2047-12-25T03:19:02.008+05:00",
+                "quantity": 9, "amount": {"unit": "8.0", "total": "72.0"}
+                }
+            ],
+            "currency": {
+                "snapshot": [
+                    {"name":"IDR", "rate":"16288.53"},
+                    {"name":"USD", "rate":"1.00"},
+                    {"name":"THB", "rate":"37.502"}
+                ],
+                "sellers": [
+                    {"currency":"THB", "seller_id":983},
+                    {"currency":"IDR", "seller_id":127}
+                ],
+                "buyer": "USD"
+            },
+            "billing": {
+                "contact": {
+                    "first_name": "Vonjutstes",
+                "last_name": "Don",
+                "emails": ["carry@outperform.org"],
+                "phones": [
+                    {"nation": 886, "number": "22940913"}
+                ]
+                }
+            }
 	    }
 	]
     },
@@ -95,47 +96,42 @@
     "rpc.order.order_returned_replica_refund": {
 	"0": [
 	    {
-                "abc123def4567890": [
-                    {
-                      "seller_id": 123456,
-                      "product_id": 9876543210,
-                      "create_time": "2024-10-08T14:25:30Z",
-                      "amount": {"unit": "99.99", "total": "199.98"},
-                      "qty": 2
-                    },
-                    {
-                      "seller_id": 654321,
-                      "product_id": 1234567890,
-                      "create_time": "2024-10-07T10:15:20Z",
-                      "amount": {"unit": "49.99", "total": "49.99"},
-                      "qty": 1
-                    }
-                ],
+        "abc123def4567890": [
+            {
+              "seller_id": 123456, "product_id": 9876543210, "attr_set_seq": 0,
+              "create_time": "2024-10-08T14:25:30Z",
+              "amount": {"unit": "99.99", "total": "199.98"}, "qty": 2
+            },
+            {
+              "seller_id": 654321, "product_id": 1234567890, "attr_set_seq": 0,
+              "create_time": "2024-10-07T10:15:20Z",
+              "amount": {"unit": "49.99", "total": "49.99"}, "qty": 1
+            }
+        ],
 		"7931649be98f24": [
-                    {
-                      "seller_id": 983,
-                      "product_id": 204,
-                      "create_time": "2024-09-05T14:48:01.495+03:35",
-                      "amount": {"unit": "18.1", "total": "162.9"},
-                      "qty": 9
-                    },
-                    {
-                      "seller_id": 983,
-                      "product_id": 206,
-                      "create_time": "2024-09-05T14:01:53.380+03:35",
-                      "amount": {"unit": "15.44", "total": "77.2"},
-                      "qty": 5
-                    }
+            {
+              "seller_id": 983, "product_id": 204, "attr_set_seq": 0,
+              "create_time": "2024-09-05T14:48:01.495+03:35",
+              "amount": {"unit": "18.1", "total": "162.9"}, "qty": 9
+            },
+            {
+              "seller_id": 983, "product_id": 206, "attr_set_seq": 0,
+              "create_time": "2024-09-05T14:01:53.380+03:35",
+              "amount": {"unit": "15.44", "total": "77.2"}, "qty": 5
+            },
+            {
+              "seller_id": 983, "product_id": 206, "attr_set_seq": 2,
+              "create_time": "2024-09-05T14:48:01.495+03:35",
+              "amount": {"unit": "16.6", "total": "49.8"}, "qty": 3
+            }
 		],
-                "df459c17891234": [
-                    {
-                      "seller_id": 111222,
-                      "product_id": 4445556667,
-                      "create_time": "2024-09-30T09:10:11Z",
-                      "amount": {"unit": "19.99", "total": "39.98"},
-                      "qty": 2
-                    }
-                ]
+        "df459c17891234": [
+            {
+              "seller_id": 111222, "product_id": 4445556667, "attr_set_seq": 0,
+              "create_time": "2024-09-30T09:10:11Z",
+              "amount": {"unit": "19.99", "total": "39.98"}, "qty": 2
+            }
+        ]
 	    }
 	]
     }

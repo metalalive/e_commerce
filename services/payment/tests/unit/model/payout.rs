@@ -25,13 +25,12 @@ pub(crate) fn ut_setup_buyer_charge_inner(
     let merchant_ids = [1008u32, 1009];
     let order_id = "overlapping-camera-calibrate".to_string();
     let charge_lines = vec![
-        (merchant_ids[0], 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,
-         (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
-        (merchant_ids[1], 9451, (1700, 1), (12600, 1), 8, (0,0), (0,0), 0, 0),
-        (merchant_ids[0], 6763, (9900, 2), (49500, 2), 5, (0,0), (0,0), 0, 0),
-        (merchant_ids[1], 8454, (3760, 1), (37600, 1), 10, (0,0), (0,0), 0, 0),
-        (merchant_ids[0], 9925, (411, 1), (3699, 1), 9, (0,0), (0,0), 0, 0),
-        (merchant_ids[1], 9914, (226, 0), (2486, 0), 11, (0,0), (0,0), 0, 0),
+        ((merchant_ids[0], 19030, 0), ((502, 1), (2510, 1), 5), ((0, 0), (0, 0), 0), 0),
+        ((merchant_ids[1], 9451, 0), ((1700, 1), (12600, 1), 8), ((0,0), (0,0), 0), 0),
+        ((merchant_ids[0], 6763, 0), ((9900, 2), (49500, 2), 5), ((0,0), (0,0), 0), 0),
+        ((merchant_ids[1], 8454, 0), ((3760, 1), (37600, 1), 10), ((0,0), (0,0), 0), 0),
+        ((merchant_ids[0], 9925, 0), ((411, 1), (3699, 1), 9), ((0,0), (0,0), 0), 0),
+        ((merchant_ids[1], 9914, 0), ((226, 0), (2486, 0), 11), ((0,0), (0,0), 0), 0),
     ];
     let currency_snapshot = {
         let iter = [
@@ -142,11 +141,11 @@ fn create_after_refund_ok() {
             .map(|line| {
                 let mut arg = line.into_parts();
                 if arg.0.store_id == orig_store_id {
-                    arg.2.unit = arg.1.unit; // simulate amount refunded
-                    arg.2.total = arg.2.unit;
-                    arg.2.qty = 1;
+                    arg.3.unit = arg.2.unit; // simulate amount refunded
+                    arg.3.total = arg.3.unit;
+                    arg.3.qty = 1;
                     if arg.0.product_id == 8454u64 {
-                        arg.3 = 2;
+                        arg.4 = 2;
                     } // simulate number of rejected items
                 }
                 ChargeLineBuyerModel::from(arg)

@@ -27,19 +27,22 @@ pub enum RefundErrorParseOline {
 pub enum RefundModelError {
     ParseOline {
         pid: BaseProductIdentity,
+        attr_set_seq: u16,
         reason: RefundErrorParseOline,
     },
     QtyInsufficient {
         pid: BaseProductIdentity,
+        attr_set_seq: u16,
         num_avail: u32,
         num_req: u32,
     },
     AmountInsufficient {
         pid: BaseProductIdentity,
+        attr_set_seq: u16,
         num_avail: Decimal,
         num_req: Decimal,
     },
-    MissingReqLine(BaseProductIdentity, DateTime<Utc>),
+    MissingReqLine(BaseProductIdentity, u16, DateTime<Utc>),
     MissingCurrency(String, u32),
     MissingMerchant,
     EmptyResolutionRequest(u32),
@@ -50,12 +53,13 @@ pub struct RefundLineQtyRejectModel(RefundLineRejectDto);
 
 pub struct RefundLineResolveAmountModel {
     // accumulated qty / amount against single line
-    accumulated_paid: PayLineAmountModel,
-    accumulated_rejected: u32, // rejected so far in previous rounds
+    accumulated_paid: PayLineAmountModel, //  TODO, rename to prev_accu_paid
+    accumulated_rejected: u32, // rejected so far in previous rounds, TODO, rename to prev_accu_rejected
     curr_round: PayLineAmountModel,
 }
 pub(super) struct RefundLineReqResolutionModel {
     pid: BaseProductIdentity,
+    attr_set_seq: u16,
     time_req: DateTime<Utc>,
     qty_reject: RefundLineQtyRejectModel, // rejected in current round
     // the amount should be present in buyer's currency
@@ -81,6 +85,7 @@ pub struct RefundReqResolutionModel {
 
 pub struct OLineRefundModel {
     pid: BaseProductIdentity,
+    attr_set_seq: u16,
     amount_req: PayLineAmountModel,
     // the time when customer issued the refund request,
     time_req: DateTime<Utc>,
@@ -96,14 +101,16 @@ pub struct OrderRefundModel {
 
 #[rustfmt::skip]
 impl RefundModelError {
-    fn qty_limit(pid: &BaseProductIdentity, num_avail:u32, num_req:u32) -> Self {
-        Self::QtyInsufficient { pid: pid.clone(), num_avail, num_req }
+    fn qty_limit(
+        pid: &BaseProductIdentity, attr_set_seq: u16, num_avail:u32, num_req:u32
+    ) -> Self {
+        Self::QtyInsufficient { pid: pid.clone(), attr_set_seq, num_avail, num_req }
     }
     fn amount_limit(
-        pid: &BaseProductIdentity, num_avail: Decimal, num_req: Decimal
+        pid: &BaseProductIdentity, attr_set_seq: u16, num_avail: Decimal, num_req: Decimal
     ) -> Self {
         Self::AmountInsufficient {
-            pid: pid.clone(), num_avail, num_req
+            pid: pid.clone(), attr_set_seq, num_avail, num_req
         }
     }
 } // end of impl RefundModelError
@@ -112,7 +119,7 @@ impl<'a> From<&'a RefundLineRejectDto> for RefundLineQtyRejectModel {
     fn from(value: &'a RefundLineRejectDto) -> Self {
         Self(value.clone())
     }
-}
+} // TODO, remove this trait implementation
 impl Default for RefundLineQtyRejectModel {
     fn default() -> Self {
         let iter = [
@@ -126,6 +133,23 @@ impl Default for RefundLineQtyRejectModel {
     }
 }
 impl RefundLineQtyRejectModel {
+    fn build_and_reduce(req: &RefundLineRejectDto, mut tot_num_reduce: u32) -> Self {
+        let mut obj = Self::from(req);
+        let keys = [
+            RefundRejectReasonDto::Damaged,
+            RefundRejectReasonDto::Fraudulent,
+        ];
+        for key in keys {
+            obj.0.get_mut(&key).map(|num| {
+                if num > &mut 0u32 {
+                    let num_reduce = min(*num, tot_num_reduce);
+                    *num -= num_reduce;
+                    tot_num_reduce -= num_reduce;
+                }
+            });
+        }
+        obj
+    }
     fn total_qty(&self) -> u32 {
         self.0.values().sum()
     }
@@ -150,13 +174,11 @@ impl RefundLineResolveAmountModel {
     }
     pub fn accumulated(&self) -> (&PayLineAmountModel, u32) {
         (&self.accumulated_paid, self.accumulated_rejected)
-    }
+    } // TODO, rename to last-round
     fn accumulate(&self, dst: &mut PayLineAmountModel) {
         assert_eq!(dst.unit, self.accumulated_paid.unit);
-        let tot_qty = self.accumulated_paid.qty + self.curr_round.qty;
-        let tot_amt = self.accumulated_paid.total + self.curr_round.total;
-        dst.qty = tot_qty;
-        dst.total = tot_amt;
+        dst.qty += self.curr_round.qty;
+        dst.total += self.curr_round.total;
     } // end of fn accumulate
 } // end of impl RefundLineResolveAmountModel
 
@@ -181,24 +203,24 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
     #[allow(clippy::field_reassign_with_default)]
     fn try_from(value: OrderLineReplicaRefundDto) -> Result<Self, Self::Error> {
         let OrderLineReplicaRefundDto {
-            seller_id, product_id, create_time, amount, qty
+            seller_id, product_id, create_time, amount, qty, attr_set_seq,
         } = value;
         let pid = BaseProductIdentity { store_id: seller_id, product_id };
         let time_req = DateTime::parse_from_rfc3339(create_time.as_str())
             .map_err(|e| RefundModelError::ParseOline {
-                pid: pid.clone(),
+                pid: pid.clone(), attr_set_seq,
                 reason: RefundErrorParseOline::CreateTime(e.to_string())
             })?.to_utc();
         let unit = Decimal::from_str(amount.unit.as_str())
             .map_err(|e| RefundModelError::ParseOline {
-                pid: pid.clone(),
+                pid: pid.clone(), attr_set_seq,
                 reason: RefundErrorParseOline::Amount(
                     PayLineAmountError::ParseUnit(amount.unit, e.to_string())
                 )
             })?;
         let total = Decimal::from_str(amount.total.as_str())
             .map_err(|e| RefundModelError::ParseOline {
-                pid: pid.clone(),
+                pid: pid.clone(), attr_set_seq,
                 reason: RefundErrorParseOline::Amount(
                     PayLineAmountError::ParseTotal(amount.total, e.to_string())
                 )
@@ -207,12 +229,13 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
         let mut amount_aprv = PayLineAmountModel::default();
         amount_aprv.unit = amount_req.unit;
         let rejected = RefundLineQtyRejectModel::default();
-        Ok(Self { pid, amount_req, time_req, amount_aprv, rejected })
+        Ok(Self { pid, attr_set_seq, amount_req, time_req, amount_aprv, rejected })
     } // end of fn try-from
 } // end of impl OLineRefundModel
 
 type OLineRefundCvtArgs = (
     BaseProductIdentity,
+    u16,
     PayLineAmountModel,
     DateTime<Utc>,
     PayLineAmountModel,
@@ -222,12 +245,15 @@ type OLineRefundCvtArgs = (
 impl From<OLineRefundCvtArgs> for OLineRefundModel {
     #[rustfmt::skip]
     fn from(value: OLineRefundCvtArgs) -> Self {
-        let (pid, amount_req, time_req, amount_aprv, rejected) = value;
-        Self { pid, amount_req, time_req, amount_aprv, rejected }
+        let (pid, attr_set_seq, amount_req, time_req, amount_aprv, rejected) = value;
+        Self { pid, attr_set_seq, amount_req, time_req, amount_aprv, rejected }
     }
 }
 
 impl OLineRefundModel {
+    pub fn requested(&self) -> &PayLineAmountModel {
+        &self.amount_req
+    }
     pub fn approved(&self) -> &PayLineAmountModel {
         &self.amount_aprv
     }
@@ -237,8 +263,8 @@ impl OLineRefundModel {
 
     #[rustfmt::skip]
     pub(crate) fn into_parts(self) -> OLineRefundCvtArgs {
-        let Self { pid, amount_req, time_req, amount_aprv, rejected } = self;
-        (pid, amount_req, time_req, amount_aprv, rejected)
+        let Self { pid, attr_set_seq, amount_req, time_req, amount_aprv, rejected } = self;
+        (pid, attr_set_seq, amount_req, time_req, amount_aprv, rejected)
     }
 
     #[rustfmt::skip]
@@ -251,14 +277,14 @@ impl OLineRefundModel {
             self.rejected.total_qty(),
         );
         let qty_avail = detail.0.checked_sub(detail.1)
-            .ok_or(RefundModelError::qty_limit(&self.pid, detail.0, detail.1))?;
+            .ok_or(RefundModelError::qty_limit(&self.pid, self.attr_set_seq, detail.0, detail.1))?;
         let qty_avail = qty_avail.checked_sub(detail.2)
-            .ok_or(RefundModelError::qty_limit(&self.pid, qty_avail, detail.2))?;
+            .ok_or(RefundModelError::qty_limit(&self.pid, self.attr_set_seq, qty_avail, detail.2))?;
         let detail = (qty_avail, data.approval.quantity, data.total_qty_rejected());
         let qty_avail = detail.0.checked_sub(detail.1)
-            .ok_or(RefundModelError::qty_limit(&self.pid, detail.0, detail.1))?;
+            .ok_or(RefundModelError::qty_limit(&self.pid, self.attr_set_seq, detail.0, detail.1))?;
         let qty_avail = qty_avail.checked_sub(detail.2)
-            .ok_or(RefundModelError::qty_limit(&self.pid, qty_avail, detail.2))?;
+            .ok_or(RefundModelError::qty_limit(&self.pid, self.attr_set_seq, qty_avail, detail.2))?;
         Ok(qty_avail)
     }
 
@@ -269,6 +295,7 @@ impl OLineRefundModel {
         let amt_new_aprv = Decimal::from_str(data.approval.amount_total.as_str()).map_err(|e| {
             RefundModelError::ParseOline {
                 pid: self.pid.clone(),
+                attr_set_seq: self.attr_set_seq,
                 reason: RefundErrorParseOline::Amount(PayLineAmountError::ParseTotal(
                     data.approval.amount_total.clone(),
                     e.to_string(),
@@ -284,11 +311,19 @@ impl OLineRefundModel {
         );
         macro_rules! check_subtract_amount {
             ($n0: expr, $n1: expr) => {{
-                let out = $n0
-                    .checked_sub($n1)
-                    .ok_or(RefundModelError::amount_limit(&self.pid, $n0, $n1))?;
+                let out = $n0.checked_sub($n1).ok_or(RefundModelError::amount_limit(
+                    &self.pid,
+                    self.attr_set_seq,
+                    $n0,
+                    $n1,
+                ))?;
                 if out.is_sign_negative() {
-                    return Err(RefundModelError::amount_limit(&self.pid, $n0, $n1));
+                    return Err(RefundModelError::amount_limit(
+                        &self.pid,
+                        self.attr_set_seq,
+                        $n0,
+                        $n1,
+                    ));
                 }
                 out
             }};
@@ -335,7 +370,7 @@ impl From<(String, Vec<OLineRefundModel>)> for OrderRefundModel {
 }
 
 type ORefundValidateReturnType =
-    Result<Vec<(u64, DateTime<Utc>, u32, Decimal)>, Vec<RefundModelError>>;
+    Result<Vec<(u64, u16, DateTime<Utc>, u32, Decimal)>, Vec<RefundModelError>>;
 
 impl OrderRefundModel {
     pub(crate) fn into_parts(self) -> (String, Vec<OLineRefundModel>) {
@@ -350,13 +385,22 @@ impl OrderRefundModel {
         let hset: HashSet<u32, RandomState> = HashSet::from_iter(iter);
         hset.into_iter().collect()
     }
-    #[rustfmt::skip]
     pub fn get_line(
-        &self, merchant_id: u32, product_id: u64, time_req: DateTime<Utc>,
+        &self,
+        merchant_id: u32,
+        product_id: u64,
+        attr_seq: u16,
+        time_req: DateTime<Utc>,
     ) -> Option<&OLineRefundModel> {
-        let key = BaseProductIdentity { store_id: merchant_id, product_id };
-        self.lines.iter()
-            .find(|v| v.pid == key && v.time_req.trunc_subsecs(0) == time_req.trunc_subsecs(0))
+        let pid = BaseProductIdentity {
+            store_id: merchant_id,
+            product_id,
+        };
+        self.lines.iter().find(|v| {
+            v.pid == pid
+                && v.attr_set_seq == attr_seq
+                && v.time_req.trunc_subsecs(0) == time_req.trunc_subsecs(0)
+        })
     }
 
     #[rustfmt::skip]
@@ -364,7 +408,7 @@ impl OrderRefundModel {
         let mut errors = Vec::new();
         let valid_amt_qty = data.lines.iter()
             .filter_map(|d| {
-                let result = self.get_line(merchant_id, d.product_id, d.time_issued);
+                let result = self.get_line(merchant_id, d.product_id, d.attr_set_seq, d.time_issued);
                 if let Some(line) = result {
                     match line.estimate_remains(d) {
                         Err(e) => {
@@ -372,7 +416,7 @@ impl OrderRefundModel {
                             None
                         }
                         Ok((qty, amt_tot)) => Some((
-                            d.product_id, d.time_issued, qty, amt_tot,
+                            d.product_id, d.attr_set_seq, d.time_issued, qty, amt_tot,
                         )),
                     }
                 } else {
@@ -380,6 +424,7 @@ impl OrderRefundModel {
                         BaseProductIdentity {
                             store_id: merchant_id, product_id: d.product_id,
                         },
+                        d.attr_set_seq,
                         d.time_issued,
                     );
                     errors.push(e);
@@ -400,10 +445,13 @@ impl OrderRefundModel {
             .iter_mut()
             .filter_map(|v| {
                 rslv_m
-                    .get_status(v.pid.store_id, v.pid.product_id, v.time_req)
+                    .get_status(v.pid.store_id, v.pid.product_id, v.attr_set_seq, v.time_req)
                     .map(|r| (v, r.0, r.1))
             })
             .map(|(line_req, rslv_rej, rslv_aprv)| {
+                // FIXME, accumulated quantity should be estimated exact once when updating each
+                // `OlineRefundModel` with `RefundReqResolutionModel`, regardless of the time
+                // on the resolution model.
                 rslv_aprv.accumulate(&mut line_req.amount_aprv);
                 rslv_rej.accumulate(&mut line_req.rejected);
             })
@@ -413,33 +461,50 @@ impl OrderRefundModel {
 } // end of impl OrderRefundModel
 
 impl RefundLineReqResolutionModel {
+    // TODO, FIXME, should return error when completion request contains number of returns
+    // more than number of remaining items
     fn to_vec(c: &ChargeLineBuyerModel, cmplt_req: &RefundCompletionReqDto) -> Vec<Self> {
         let amt_prev_refunded = c.amount_refunded();
         let num_prev_rejected = c.num_rejected();
         let mut amt_remain = c.amount_remain();
+        let orig_charge_id_raw = c.id();
         cmplt_req
             .lines
             .iter()
-            .filter(|r| r.product_id == c.pid.product_id)
+            .filter(|r| {
+                (orig_charge_id_raw.1, orig_charge_id_raw.2) == (r.product_id, r.attr_set_seq)
+            })
             .map(|r| {
                 let amt_tot_req = Decimal::from_str(r.approval.amount_total.as_str()).unwrap();
-                let qty_fetched = min(amt_remain.qty, r.approval.quantity);
-                let tot_amt_fetched = min(amt_remain.total, amt_tot_req);
-                if qty_fetched > 0 {
-                    amt_remain.qty -= qty_fetched;
-                    amt_remain.total -= tot_amt_fetched;
+                let qty4aprv = min(amt_remain.qty, r.approval.quantity);
+                let tot_amt_4aprv = min(amt_remain.total, amt_tot_req);
+                if qty4aprv > 0 {
+                    amt_remain.qty -= qty4aprv;
+                    amt_remain.total -= tot_amt_4aprv;
                 }
-                let arg = (
+                let args_rslv_amt = (
                     amt_prev_refunded,
                     num_prev_rejected,
-                    qty_fetched,
-                    tot_amt_fetched,
+                    qty4aprv,
+                    tot_amt_4aprv,
                 );
+                let qty4rejreq = r.total_qty_rejected();
+                let qty4rej = min(amt_remain.qty, qty4rejreq);
+                if qty4rej > 0 {
+                    amt_remain.qty -= qty4rej;
+                }
                 Self {
-                    pid: c.pid.clone(),
+                    pid: BaseProductIdentity {
+                        store_id: orig_charge_id_raw.0,
+                        product_id: orig_charge_id_raw.1,
+                    },
+                    attr_set_seq: orig_charge_id_raw.2,
                     time_req: r.time_issued,
-                    qty_reject: RefundLineQtyRejectModel::from(&r.reject),
-                    amount: RefundLineResolveAmountModel::from(arg),
+                    qty_reject: RefundLineQtyRejectModel::build_and_reduce(
+                        &r.reject,
+                        qty4rejreq - qty4rej,
+                    ),
+                    amount: RefundLineResolveAmountModel::from(args_rslv_amt),
                 }
             })
             .filter(|m| m.total_qty_curr_round() > 0)
@@ -452,8 +517,8 @@ impl RefundLineReqResolutionModel {
         num_rej + num_aprv
     }
 
-    pub(super) fn pid(&self) -> &BaseProductIdentity {
-        &self.pid
+    pub(super) fn id(&self) -> (&BaseProductIdentity, u16) {
+        (&self.pid, self.attr_set_seq)
     }
     pub(super) fn amount(&self) -> &RefundLineResolveAmountModel {
         &self.amount
@@ -462,10 +527,10 @@ impl RefundLineReqResolutionModel {
         self.qty_reject.total_qty()
     }
     #[rustfmt::skip]
-    fn into_parts(self) -> (BaseProductIdentity, DateTime<Utc>, RefundLineQtyRejectModel, RefundLineResolveAmountModel)
+    fn into_parts(self) -> (BaseProductIdentity, u16, DateTime<Utc>, RefundLineQtyRejectModel, RefundLineResolveAmountModel)
     {
-        let Self { pid, time_req, qty_reject, amount } = self;
-        (pid, time_req, qty_reject, amount)
+        let Self { pid, attr_set_seq, time_req, qty_reject, amount } = self;
+        (pid, attr_set_seq, time_req, qty_reject, amount)
     }
 } // end of impl RefundLineReqResolutionModel
 
@@ -488,7 +553,7 @@ impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
                 "merchant-id".to_string(), merchant_id,
             ))?;
         let lines = charge_m.lines.iter()
-            .filter(|c| c.pid.store_id == merchant_id)
+            .filter(|c| c.id().0 == merchant_id)
             .flat_map(|c| RefundLineReqResolutionModel::to_vec(c, cmplt_req))
             .collect::<Vec<_>>();
         let inner = RefundReqRslvInnerModel {
@@ -513,7 +578,7 @@ impl RefundReqRslvInnerModel {
     pub(crate) fn merchant_id(&self) -> Result<u32, RefundModelError> {
         self.lines
             .first()
-            .map(|v| v.pid().store_id)
+            .map(|v| v.id().0.store_id)
             .ok_or(RefundModelError::MissingMerchant)
     }
     pub(crate) fn total_amount_curr_round(&self) -> Decimal {
@@ -525,12 +590,14 @@ impl RefundReqRslvInnerModel {
     }
     #[rustfmt::skip]
     fn get_status(
-        &self, merchant_id: u32, product_id: u64, time_req: DateTime<Utc>,
+        &self, merchant_id: u32, product_id: u64, attr_seq: u16, time_req: DateTime<Utc>,
     ) -> Option<(&RefundLineQtyRejectModel, &RefundLineResolveAmountModel)> {
-        let key = BaseProductIdentity {store_id: merchant_id ,product_id};
         self.lines.iter()
-            .find(|v| v.pid == key && time_req.trunc_subsecs(0) == v.time_req.trunc_subsecs(0))
-            .map(|v| (&v.qty_reject, &v.amount))
+            .find(|v| v.pid.store_id == merchant_id
+                && v.pid.product_id == product_id
+                && v.attr_set_seq == attr_seq
+                && time_req.trunc_subsecs(0) == v.time_req.trunc_subsecs(0))
+            .map(|v| (&v.qty_reject, v.amount()))
     }
 } // end of impl RefundReqRslvInnerModel
 
@@ -559,7 +626,7 @@ impl RefundReqResolutionModel {
         let reduced_lines = req.lines.into_iter()
             .filter_map(|mut rline| {
                 let result = self.get_status(
-                    merchant_id, rline.product_id, rline.time_issued,
+                    merchant_id, rline.product_id, rline.attr_set_seq, rline.time_issued,
                 );
                 if let Some((rslv_rej, rslv_amt)) = result {
                     rline.reject.iter_mut()
@@ -589,16 +656,16 @@ impl RefundReqResolutionModel {
     /// for refund rquest recording
     #[rustfmt::skip]
     pub fn get_status(
-        &self, merchant_id: u32, product_id: u64, time_req: DateTime<Utc>,
+        &self, merchant_id: u32, product_id: u64, attr_seq: u16, time_req: DateTime<Utc>,
     ) -> Option<(&RefundLineQtyRejectModel, &RefundLineResolveAmountModel)> {
-        self.inner.get_status(merchant_id, product_id, time_req)
+        self.inner.get_status(merchant_id, product_id, attr_seq, time_req)
     }
 } // end of impl RefundReqResolutionModel
 
 impl From<Vec<RefundReqResolutionModel>> for RefundCompletionRespDto {
     #[rustfmt::skip]
     fn from(value: Vec<RefundReqResolutionModel>) -> Self {
-        type MapKeyType = (u64, DateTime<Utc>);
+        type MapKeyType = (u64, u16, DateTime<Utc>);
         // the value sequence of each map entry :
         // qty-aprv, amount-total-aprv, qty-rej-damage, qty-rej-fraud
         type MapValType = (u32, Decimal, u32, u32);
@@ -606,9 +673,9 @@ impl From<Vec<RefundReqResolutionModel>> for RefundCompletionRespDto {
         let mut line_map: LineMapType = HashMap::new();
         value.into_iter().map(|rfnd_m| {
             rfnd_m.inner.lines.into_iter().map(|rline| {
-                let (r_pid, r_time_req, mut r_qty_rej, r_amt) = rline.into_parts();
+                let (r_pid, r_attrseq, r_time_req, mut r_qty_rej, r_amt) = rline.into_parts();
                 let BaseProductIdentity { store_id: _, product_id } = r_pid;
-                let key = (product_id, r_time_req);
+                let key = (product_id, r_attrseq, r_time_req);
                 let (qty_aprv_dst, amt_tot_aprv_dst, qty_rej_damage_dst, qty_rej_fraud_dst) =
                     line_map.entry(key).or_insert((0, Decimal::ZERO, 0, 0));
                 *qty_aprv_dst     += r_amt.curr_round().qty;
@@ -622,7 +689,7 @@ impl From<Vec<RefundReqResolutionModel>> for RefundCompletionRespDto {
 
         let lines = line_map.into_iter()
             .map(|(k,v)| {
-                let (product_id, time_issued) = k;
+                let (product_id, attr_set_seq, time_issued) = k;
                 let (qty_aprv, amount_total_aprv, qty_rej_damage, qty_rej_fraud) = v;
                 let reject = HashMap::from([
                     (RefundRejectReasonDto::Damaged, qty_rej_damage),
@@ -631,7 +698,9 @@ impl From<Vec<RefundReqResolutionModel>> for RefundCompletionRespDto {
                 let approval = RefundLineApprovalDto {
                     quantity: qty_aprv, amount_total: amount_total_aprv.to_string(),
                 };
-                RefundCompletionOlineRespDto {product_id, time_issued, reject, approval}
+                RefundCompletionOlineRespDto {
+                    product_id, attr_set_seq, time_issued, reject, approval
+                }
             }).collect::<Vec<_>>();
         Self { lines }
     } // end of fn from

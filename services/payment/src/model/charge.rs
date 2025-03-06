@@ -59,14 +59,17 @@ pub enum BuyerPayInState {
 }
 
 pub struct ChargeLineBuyerModel {
-    pub pid: BaseProductIdentity, // product ID
+    pid: BaseProductIdentity,
+    attr_set_seq: u16,
     // the amount to charge in buyer's currency,
     amount_orig: PayLineAmountModel,
     amount_refunded: PayLineAmountModel,
     num_rejected: u32, // num of rejected items without reasons
 }
 
-type ChargeRefundLineMap = HashMap<BaseProductIdentity, (PayLineAmountModel, u32)>;
+// TODO, add `attr-set-seq` u16 as part of the key
+#[derive(Default)]
+pub struct ChargeRefundLineMap(HashMap<(BaseProductIdentity, u16), (PayLineAmountModel, u32)>);
 
 #[derive(Default)]
 pub struct ChargeRefundMap(HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap>);
@@ -234,10 +237,10 @@ impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
     #[rustfmt::skip]
     fn from(value: ChargeLineBuyerModel) -> Self {
         let ChargeLineBuyerModel {
-            pid, amount_orig, amount_refunded: _, num_rejected: _
+            pid, attr_set_seq, amount_orig, amount_refunded: _, num_rejected: _
         } = value;
         let BaseProductIdentity { store_id, product_id } = pid;
-        Self { seller_id: store_id, product_id, qty: amount_orig.qty }
+        Self { seller_id: store_id, product_id, attr_set_seq, qty: amount_orig.qty }
     }
 }
 
@@ -354,8 +357,13 @@ impl ChargeBuyerModel {
 } // end of impl ChargeBuyerModel
 
 impl ChargeRefundMap {
-    pub fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
+    pub(crate) fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
         self.0
+    }
+
+    pub fn get(&self, buyer_id: u32, create_time: DateTime<Utc>) -> Option<&ChargeRefundLineMap> {
+        let key = (buyer_id, create_time);
+        self.0.get(&key)
     }
 
     pub fn build(rfd_rslv_ms: &[RefundReqResolutionModel]) -> Self {
@@ -378,8 +386,9 @@ impl ChargeRefundMap {
         rlines
             .iter()
             .map(|rline| {
-                let k = rline.pid();
-                if !inner_map.contains_key(k) {
+                let k = rline.id();
+                let k = (k.0.clone(), k.1);
+                if !inner_map.0.contains_key(&k) {
                     let prev_rounds = rline.amount().accumulated();
                     let v_amt = PayLineAmountModel {
                         unit: prev_rounds.0.unit,
@@ -387,9 +396,9 @@ impl ChargeRefundMap {
                         qty: prev_rounds.0.qty,
                     };
                     let v = (v_amt, prev_rounds.1);
-                    let _old = inner_map.insert(k.clone(), v);
-                }
-                let entry = inner_map.get_mut(k).unwrap();
+                    let _old = inner_map.0.insert(k.clone(), v);
+                } // TODO, move the code to ChargeRefundLineMap
+                let entry = inner_map.0.get_mut(&k).unwrap();
                 let curr_round = rline.amount().curr_round();
                 entry.0.total += curr_round.total;
                 entry.0.qty += curr_round.qty;
@@ -398,6 +407,30 @@ impl ChargeRefundMap {
             .count()
     }
 } // end of impl ChargeRefundMap
+
+impl ChargeRefundLineMap {
+    pub(crate) fn into_inner(
+        self,
+    ) -> HashMap<(BaseProductIdentity, u16), (PayLineAmountModel, u32)> {
+        self.0
+    }
+    pub fn get(
+        &self,
+        merchant_id: u32,
+        product_id: u64,
+        attr_seq: u16,
+    ) -> Option<&(PayLineAmountModel, u32)> {
+        let pid = BaseProductIdentity {
+            store_id: merchant_id,
+            product_id,
+        };
+        let key = (pid, attr_seq);
+        self.0.get(&key)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+} // end of impl ChargeRefundLineMap
 
 impl TryFrom<Vec<u8>> for ChargeToken {
     type Error = (AppErrorCode, String);
@@ -549,15 +582,12 @@ impl
     ) -> Result<Self, Self::Error> {
         let (valid_olines, rl, currency_label, now) = value;
         let ChargeAmountOlineDto {
-            seller_id, product_id, quantity: qty_req, amount: amount_dto,
+            seller_id, product_id, attr_set_seq,
+            quantity: qty_req, amount: amount_dto,
         } = rl;
         let mut e = ChargeOlineErrorDto {
-            seller_id,
-            product_id,
-            quantity: None,
-            amount: None,
-            expired: None,
-            not_exist: false,
+            seller_id, product_id, attr_set_seq, quantity: None,
+            amount: None, expired: None, not_exist: false,
         };
         let amount_dto_bak = amount_dto.clone();
         let amount_orig = match PayLineAmountModel::try_from((qty_req, amount_dto, currency_label))
@@ -573,10 +603,15 @@ impl
                 return Err(e);
             }, // TODO, improve error detail
         };
-        let pid_req = BaseProductIdentity { store_id: seller_id,  product_id };
-        let result = valid_olines.iter().find(|v| v.pid == pid_req);
+        let result = {
+            let args = (seller_id,  product_id, attr_set_seq);
+            OrderLineModel::find(valid_olines, args)
+        };
         if let Some(v) = result {
-            let qty_avail = v.rsv_total.qty - v.paid_total.qty;
+            if let Err(re) = v.check_qty_avail(qty_req) {
+                e.quantity = Some(re);
+                return Err(e);
+            }
             if now > (v.reserved_until - Duration::seconds(SECONDS_ORDERLINE_DISCARD_MARGIN as i64))
             {
                 e.expired = Some(true);
@@ -584,16 +619,13 @@ impl
             } else if amount_orig.unit != v.rsv_total.unit {
                 e.amount = Some(amount_dto_bak);
                 Err(e)
-            } else if qty_avail < qty_req {
-                e.quantity = Some(GenericRangeErrorDto {
-                    max_: u16::try_from(qty_avail).unwrap_or(u16::MAX),
-                    given: qty_req,
-                    min_: 1,
-                });
-                Err(e)
             } else {
+                let pid_req = BaseProductIdentity { store_id: seller_id,  product_id };
                 let amount_refunded = PayLineAmountModel::default();
-                Ok(Self {pid: pid_req, amount_orig, amount_refunded, num_rejected: 0})
+                Ok(Self {
+                    pid: pid_req, amount_orig, attr_set_seq,
+                    amount_refunded, num_rejected: 0
+                })
             }
         } else {
             e.not_exist = true;
@@ -603,22 +635,25 @@ impl
 } // end of impl TryFrom for ChargeLineBuyerModel
 
 #[rustfmt::skip]
-type ChargeLineBuyerArgs = (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel, u32);
+type ChargeLineBuyerArgs = (BaseProductIdentity, u16, PayLineAmountModel, PayLineAmountModel, u32);
 
 #[rustfmt::skip]
 impl From<ChargeLineBuyerArgs> for ChargeLineBuyerModel
 {
     fn from(value: ChargeLineBuyerArgs) -> Self {
-        let (pid, amount_orig, mut amount_refunded, num_rejected) = value;
+        let (pid, attr_set_seq, amount_orig, mut amount_refunded, num_rejected) = value;
         assert!(amount_orig.unit > Decimal::ZERO);
         assert!(amount_orig.total > Decimal::ZERO);
         assert!(amount_orig.qty > 0u32);
         amount_refunded.unit = amount_orig.unit;
-        Self { pid, amount_orig, amount_refunded, num_rejected }
+        Self { pid, attr_set_seq, amount_orig, amount_refunded, num_rejected }
     }
 }
 
 impl ChargeLineBuyerModel {
+    pub fn id(&self) -> (u32, u64, u16) {
+        (self.pid.store_id, self.pid.product_id, self.attr_set_seq)
+    }
     pub fn amount_orig(&self) -> &PayLineAmountModel {
         &self.amount_orig
     }
@@ -644,7 +679,7 @@ impl ChargeLineBuyerModel {
     }
     #[rustfmt::skip]
     pub fn into_parts(self) -> ChargeLineBuyerArgs {
-        let Self { pid, amount_orig, amount_refunded, num_rejected } = self;
-        (pid, amount_orig, amount_refunded, num_rejected)
+        let Self { pid, attr_set_seq, amount_orig, amount_refunded, num_rejected } = self;
+        (pid, attr_set_seq, amount_orig, amount_refunded, num_rejected)
     }
 } // end of impl ChargeLineBuyerModel

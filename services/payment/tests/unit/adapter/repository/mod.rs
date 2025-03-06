@@ -19,13 +19,13 @@ fn ut_setup_orderline_set(
     num_charges: u32,
     create_time: DateTime<Utc>,
     currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
-    d_lines: Vec<(u32, u64, Decimal, Decimal, u32, Duration)>,
+    d_lines: Vec<(u32, u64, u16, Decimal, Decimal, u32, Duration)>,
 ) -> OrderLineModelSet {
     let lines = d_lines
         .into_iter()
         .map(|d| {
-            let (store_id, product_id, charge_rsv_unit, charge_rsv_total,
-                 charge_rsv_qty, rsv_time_delta) = d;
+            let (store_id, product_id, attr_set_seq, charge_rsv_unit,
+                charge_rsv_total, charge_rsv_qty, rsv_time_delta) = d;
             let pid = BaseProductIdentity {store_id, product_id};
             let reserved_until = create_time + rsv_time_delta;
             let rsv_total = PayLineAmountModel {
@@ -38,7 +38,9 @@ fn ut_setup_orderline_set(
                 total: Decimal::new(0, 0),
                 qty: 0,
             };
-            OrderLineModel { pid, rsv_total, paid_total, reserved_until }
+            OrderLineModel {
+                pid, attr_set_seq, rsv_total, paid_total, reserved_until
+            }
         })
         .collect();
     OrderLineModelSet {

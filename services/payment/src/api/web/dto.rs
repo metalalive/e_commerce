@@ -31,6 +31,7 @@ pub enum PaymentMethodReqDto {
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub quantity: u32,
     pub amount: PayAmountDto,
     // TODO, tax and discount
@@ -91,6 +92,7 @@ pub enum PaymentMethodErrorReason {
 pub struct ChargeOlineErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub quantity: Option<GenericRangeErrorDto>,
     // to indicate mismatch,  this backend app returns the estimated amount
     pub amount: Option<PayAmountDto>,
@@ -210,6 +212,7 @@ pub struct RefundCompletionReqDto {
 #[derive(Deserialize)]
 pub struct RefundCompletionOlineReqDto {
     pub product_id: u64,
+    pub attr_set_seq: u16,
     // the time when customer issued the refund request,
     // not when this completion DTO is sent to server
     pub time_issued: DateTime<Utc>,
@@ -264,6 +267,7 @@ pub struct RefundCompletionRespDto {
 #[derive(Serialize)]
 pub struct RefundCompletionOlineRespDto {
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub time_issued: DateTime<Utc>,
     pub reject: RefundLineRejectDto,
     pub approval: RefundLineApprovalDto,
