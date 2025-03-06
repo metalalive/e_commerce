@@ -27,7 +27,7 @@ use payment::{
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
 const CASES_PATH: &str = "./tests/integration/examples/";
-const API_VERSION: &str = "v0.1.0";
+const API_VERSION: &str = "v0.1.1";
 
 async fn itest_onboard_merchant(
     app: &ItestService!(),
@@ -366,7 +366,7 @@ async fn charge_stripe_ok() {
         assert!(result.is_ok());
         let (num_order, num_lines) = result.unwrap();
         assert_eq!(num_order, 3);
-        assert_eq!(num_lines, 5);
+        assert_eq!(num_lines, 6);
     }
 
     // --- partial refund ----

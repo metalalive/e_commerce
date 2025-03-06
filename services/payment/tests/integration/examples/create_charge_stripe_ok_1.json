@@ -3,17 +3,17 @@
 	"id": "7931649be98f24",
 	"lines": [
 	    {
-	        "seller_id": 983,
-	        "product_id": 204,
-	        "quantity": 50,
+	        "seller_id": 983, "product_id": 204, "attr_set_seq": 0, "quantity": 50,
 	        "amount": {"unit": "18.1", "total": "905.0"}
 	    },
 	    {
-	        "seller_id": 983,
-	        "product_id": 206,
-	        "quantity": 18,
+	        "seller_id": 983, "product_id": 206, "attr_set_seq": 0, "quantity": 18,
 	        "amount": {"unit": "15.44", "total": "277.92"}
-	    }
+	    },
+        {
+            "seller_id": 983, "product_id": 206, "attr_set_seq": 2, "quantity": 2,
+            "amount": {"unit": "16.6", "total": "33.2"}
+        }
         ],
         "currency": "USD"
     },

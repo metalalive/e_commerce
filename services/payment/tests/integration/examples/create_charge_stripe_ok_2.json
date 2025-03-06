@@ -3,17 +3,21 @@
 	"id": "7931649be98f24",
 	"lines": [
 	    {
-	        "seller_id": 127,
-	        "product_id": 3805,
-	        "quantity": 4,
+	        "seller_id": 127, "product_id": 3805, "attr_set_seq": 0, "quantity": 4,
 	        "amount": {"unit": "20.4", "total": "81.6"}
 	    },
 	    {
-	        "seller_id": 983,
-	        "product_id": 204,
-	        "quantity": 20,
+	        "seller_id": 983, "product_id": 204, "attr_set_seq": 0, "quantity": 20,
 	        "amount": {"unit": "18.1", "total": "362.0"}
-	    }
+	    },
+        {
+            "seller_id": 983, "product_id": 206, "attr_set_seq": 1, "quantity": 3,
+            "amount": {"unit": "15.95", "total": "47.85"}
+        },
+        {
+            "seller_id": 983, "product_id": 206, "attr_set_seq": 2, "quantity": 5,
+            "amount": {"unit": "16.6", "total": "83.0"}
+        }
         ],
         "currency": "USD"
     },
