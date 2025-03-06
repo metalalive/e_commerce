@@ -24,24 +24,23 @@ mod _oline_return {
     pub(super) const QTY_DELIMITER: &str = "/";
     pub(super) const QTY_KEY_FORMAT: &str = "%Y%m%d%H%M%S%z";
 
+    #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        SellerID,
-        ProductId,
-        QtyRefund,
-        TotNumColumns,
+        SellerID, ProductId, AttrSetSeq, QtyRefund, TotNumColumns,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
                 InMemColIdx::SellerID => 0,
                 InMemColIdx::ProductId => 1,
-                InMemColIdx::QtyRefund => 2,
-                InMemColIdx::TotNumColumns => 3,
+                InMemColIdx::AttrSetSeq => 2,
+                InMemColIdx::QtyRefund => 3,
+                InMemColIdx::TotNumColumns => 4,
             }
         }
     }
-    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64) -> String {
-        format!("{oid}-{seller_id}-{prod_id}")
+    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64, attr_seq: u16) -> String {
+        format!("{oid}-{seller_id}-{prod_id}-{attr_seq}")
     }
     pub(super) fn inmem_get_oid(pkey: &str) -> &str {
         pkey.split('-').next().unwrap()
@@ -59,8 +58,8 @@ mod _oline_return {
                     "{} {} {} {}",
                     time.format(QTY_KEY_FORMAT),
                     qty,
-                    refund.unit,
-                    refund.total
+                    refund.unit(),
+                    refund.total()
                 )
             })
             .collect::<Vec<_>>()
@@ -76,7 +75,7 @@ mod _oline_return {
                 tokens.next().unwrap().parse().unwrap(),
                 tokens.next().unwrap().parse().unwrap(),
             );
-            (time, (q, OrderLinePriceModel { unit, total }))
+            (time, (q, OrderLinePriceModel::from((unit, total))))
         });
         HashMap::from_iter(iter)
     }
@@ -135,11 +134,15 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
         let _ = [
             (
                 _oline_return::InMemColIdx::SellerID,
-                id_.store_id.to_string(),
+                id_.store_id().to_string(),
             ),
             (
                 _oline_return::InMemColIdx::ProductId,
-                id_.product_id.to_string(),
+                id_.product_id().to_string(),
+            ),
+            (
+                _oline_return::InMemColIdx::AttrSetSeq,
+                id_.attrs_seq_num().to_string(),
             ),
             (_oline_return::InMemColIdx::QtyRefund, qty_serial),
         ]
@@ -155,29 +158,31 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
 
 impl From<AppInMemFetchedSingleRow> for OrderReturnModel {
     fn from(value: AppInMemFetchedSingleRow) -> OrderReturnModel {
-        let (store_id, product_id, qty_serial) = (
-            value
-                .get::<usize>(_oline_return::InMemColIdx::SellerID.into())
-                .unwrap()
-                .to_owned()
-                .parse()
-                .unwrap(),
-            value
-                .get::<usize>(_oline_return::InMemColIdx::ProductId.into())
-                .unwrap()
-                .to_owned()
-                .parse()
-                .unwrap(),
-            value
-                .get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
-                .unwrap()
-                .to_owned(),
-        );
+        let store_id = value
+            .get::<usize>(_oline_return::InMemColIdx::SellerID.into())
+            .unwrap()
+            .to_owned()
+            .parse()
+            .unwrap();
+        let product_id = value
+            .get::<usize>(_oline_return::InMemColIdx::ProductId.into())
+            .unwrap()
+            .to_owned()
+            .parse()
+            .unwrap();
+        let attr_seq = value
+            .get::<usize>(_oline_return::InMemColIdx::AttrSetSeq.into())
+            .unwrap()
+            .to_owned()
+            .parse()
+            .unwrap();
+        let qty_serial = value
+            .get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
+            .unwrap()
+            .to_owned();
+
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id,
-                product_id,
-            },
+            id_: OrderLineIdentity::from((store_id, product_id, attr_seq)),
             qty: _oline_return::inmem_col2qty(qty_serial),
         }
     }
@@ -193,7 +198,9 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let table_name = _oline_return::TABLE_LABEL;
         let pkeys = pids
             .into_iter()
-            .map(|p| _oline_return::inmem_pkey(oid, p.store_id, p.product_id))
+            .map(|p| {
+                _oline_return::inmem_pkey(oid, p.store_id(), p.product_id(), p.attrs_seq_num())
+            })
             .collect();
         let info = HashMap::from([(table_name.to_string(), pkeys)]);
         let mut data = self.datastore.fetch(info).await?;
@@ -266,7 +273,8 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
             if req.qty.is_empty() {
                 let detail = format!(
                     "return-req, in-mem-repo, prod-id: {} {}",
-                    req.id_.store_id, req.id_.product_id
+                    req.id_.store_id(),
+                    req.id_.product_id()
                 );
                 Some(detail)
             } else {
@@ -283,7 +291,12 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let num_saved = reqs.iter().map(|r| r.qty.len()).sum();
         let mut info = vec![];
         for req in reqs {
-            let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id, req.id_.product_id);
+            let pkey = _oline_return::inmem_pkey(
+                oid,
+                req.id_.store_id(),
+                req.id_.product_id(),
+                req.id_.attrs_seq_num(),
+            );
             // load saved `qty` inner table
             let _info = HashMap::from([(table_name.clone(), vec![pkey.clone()])]);
             let mut _data = self.datastore.fetch(_info).await?;

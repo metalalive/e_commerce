@@ -14,7 +14,8 @@ use order::api::web::dto::OrderLineCreateErrorReason;
 use order::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
     OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
-    ProductStockModel, StockLevelModelSet, StockQtyRsvModel, StockQuantityModel, StoreStockModel,
+    ProdAttriPriceModel, ProductStockModel, StockLevelModelSet, StockQtyRsvModel,
+    StockQuantityModel, StoreStockModel,
 };
 
 use crate::model::verify_stocklvl_model;
@@ -254,7 +255,7 @@ fn ut_get_curr_qty(store: &StoreStockModel, req: &OrderLineModel) -> Vec<StockQu
         .products
         .iter()
         .filter_map(|p| {
-            if req.id_.product_id == p.id_ {
+            if req.id().product_id() == p.id_ {
                 Some(p.quantity.clone())
             } else {
                 None
@@ -267,6 +268,7 @@ fn ut_get_curr_qty(store: &StoreStockModel, req: &OrderLineModel) -> Vec<StockQu
 fn reserve_ok_1() {
     let create_time = DateTime::parse_from_rfc3339("2022-09-16T14:59:00.091-08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(10);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -281,39 +283,42 @@ fn reserve_ok_1() {
         ],
     };
     let mut expect_booked_qty = vec![13, 4, 10];
-    #[rustfmt::skip]
-    let reqs: Vec<_> = {
-        [
-            (1014, saved_products[5].id_, 3, 35, expect_booked_qty[0]),
-            (1013, saved_products[3].id_, 2, 8, expect_booked_qty[1]),
-            (1014, saved_products[7].id_, 5, 48, expect_booked_qty[2]),
-        ].into_iter()
-        .map(|(store_id, product_id, unit, total, reserved)| OrderLineModel {
-            id_: OrderLineIdentity { store_id, product_id },
-            price: OrderLinePriceModel { unit, total },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved, paid: 0, paid_last_update: None,
-            },
-        })
-        .collect()
-    };
-    let ol_set = OrderLineModelSet {
-        order_id: "AliceOrdered".to_string(),
-        lines: reqs,
-        create_time: create_time.clone(),
-        owner_id: 123,
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+    let reqs: Vec<_> = [
+        (1014, saved_products[5].id_, 3, 35, expect_booked_qty[0]),
+        (1013, saved_products[3].id_, 2, 8, expect_booked_qty[1]),
+        (1014, saved_products[7].id_, 5, 48, expect_booked_qty[2]),
+    ]
+    .into_iter()
+    .map(|(store_id, product_id, unit, total, reserved)| {
+        let id_ = OrderLineIdentity::from((store_id, product_id, 0));
+        let price = OrderLinePriceModel::from((unit, total));
+        let policy = OrderLineAppliedPolicyModel {
+            reserved_until: mock_warranty.clone(),
+            warranty_until: mock_warranty.clone(),
+        };
+        let qty = OrderLineQuantityModel {
+            reserved,
+            paid: 0,
+            paid_last_update: None,
+        };
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
+    })
+    .collect();
+    let ol_set = {
+        let order_id = "AliceOrdered".to_string();
+        let lines = reqs;
+        let owner_id = 123;
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
-        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[2]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines()[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[2]),
     ]
     .into_iter()
     .map(|v1| {
@@ -360,6 +365,7 @@ fn reserve_ok_1() {
 fn reserve_ok_2() {
     let create_time = DateTime::parse_from_rfc3339("2022-09-16T14:59:00.091-08:00").unwrap();
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(11);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -374,55 +380,43 @@ fn reserve_ok_2() {
         ],
     };
     let mut expect_booked_qty = vec![5, 2];
-    let reqs = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1014,
-                product_id: saved_products[7].id_,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 50,
-            },
-            policy: OrderLineAppliedPolicyModel {
+    let reqs = [
+        (1014, saved_products[7].id_, (10, 50), expect_booked_qty[0]),
+        (1013, saved_products[3].id_, (2, 8), expect_booked_qty[1]),
+    ]
+    .into_iter()
+    .map(|(store_id, product_id, (unit, total), reserved)| {
+        let args = (
+            OrderLineIdentity::from((store_id, product_id, 0)),
+            OrderLinePriceModel::from((unit, total)),
+            OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone(),
             },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[0],
+            OrderLineQuantityModel {
+                reserved,
                 paid: 0,
                 paid_last_update: None,
             },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1013,
-                product_id: saved_products[3].id_,
-            },
-            price: OrderLinePriceModel { unit: 2, total: 8 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[1],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-    ];
-    let ol_set = OrderLineModelSet {
-        order_id: "BobCart".to_string(),
-        lines: reqs,
-        create_time,
-        owner_id: 321,
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
+        );
+        OrderLineModel::from(args)
+    })
+    .collect::<Vec<_>>();
+
+    let ol_set = {
+        let order_id = "BobCart".to_string();
+        let lines = reqs;
+        let owner_id = 321;
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
-        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines()[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines()[1]),
     ]
     .into_iter()
     .map(|v1| {
@@ -450,6 +444,7 @@ fn reserve_ok_2() {
 #[test]
 fn reserve_shortage() {
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(13);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![
@@ -469,48 +464,51 @@ fn reserve_shortage() {
         qty_ref.reserve("anotherCustomer", qty_ref.total - qty_ref.cancelled);
     }
     let expect_booked_qty = vec![22, 4, 1];
-    #[rustfmt::skip]
-    let reqs: Vec<_> = {
-        [
-            (1014, saved_products[5].id_, 3, 66, expect_booked_qty[0]),
-            (1013, saved_products[0].id_, 2, 8, expect_booked_qty[1]),
-            (1013, saved_products[1].id_, 5, 5, expect_booked_qty[2]),
-        ].iter()
-         .map(|&(store_id, product_id, unit, total, reserved)| OrderLineModel {
-                id_: OrderLineIdentity { store_id, product_id },
-                price: OrderLinePriceModel { unit, total },
-                policy: OrderLineAppliedPolicyModel {
-                    reserved_until: mock_warranty.clone(),
-                    warranty_until: mock_warranty.clone(),
-                },
-                qty: OrderLineQuantityModel {
-                    reserved,
-                    paid: 0,
-                    paid_last_update: None,
-                },
-            })
-            .collect()
-    };
-    let ol_set = OrderLineModelSet {
-        order_id: "xx1".to_string(),
-        lines: reqs,
-        owner_id: 123,
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
-        currency: ut_setup_order_currency(vec![1013, 1014]),
+    let reqs: Vec<_> = [
+        (1014, saved_products[5].id_, 3, 66, expect_booked_qty[0]),
+        (1013, saved_products[0].id_, 2, 8, expect_booked_qty[1]),
+        (1013, saved_products[1].id_, 5, 5, expect_booked_qty[2]),
+    ]
+    .iter()
+    .map(|&(store_id, product_id, unit, total, reserved)| {
+        OrderLineModel::from((
+            OrderLineIdentity::from((store_id, product_id, 0)),
+            OrderLinePriceModel::from((unit, total)),
+            OrderLineAppliedPolicyModel {
+                reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone(),
+            },
+            OrderLineQuantityModel {
+                reserved,
+                paid: 0,
+                paid_last_update: None,
+            },
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
+        ))
+    })
+    .collect();
+    let ol_set = {
+        let order_id = "xx1".to_string();
+        let lines = reqs;
+        let owner_id = 123;
+        let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
+        let currency = ut_setup_order_currency(vec![1013, 1014]);
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
     {
-        let (expect, actual) = (&ol_set.lines[0], &error[0]);
-        assert_eq!(expect.id_.store_id, actual.seller_id);
-        assert_eq!(expect.id_.product_id, actual.product_id);
+        let (expect, actual) = (&ol_set.lines()[0], &error[0]);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::NotEnoughToClaim
         ));
-        let (expect, actual) = (&ol_set.lines[2], &error[1]);
-        assert_eq!(expect.id_.store_id, actual.seller_id);
-        assert_eq!(expect.id_.product_id, actual.product_id);
+        let (expect, actual) = (&ol_set.lines()[2], &error[1]);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::OutOfStock
@@ -521,6 +519,7 @@ fn reserve_shortage() {
 #[test]
 fn reserve_seller_nonexist() {
     let mock_warranty = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let attr_lastupdate = mock_warranty - Duration::days(14);
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet {
         stores: vec![StoreStockModel {
@@ -529,53 +528,44 @@ fn reserve_seller_nonexist() {
         }],
     };
     let expect_booked_qty = vec![2, 2];
-    let reqs = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1013,
-                product_id: saved_products[0].id_,
-            },
-            price: OrderLinePriceModel { unit: 2, total: 4 },
-            policy: OrderLineAppliedPolicyModel {
+    let reqs = [
+        (1013, saved_products[0].id_, (2, 4), expect_booked_qty[1]),
+        (1099, saved_products[2].id_, (3, 6), expect_booked_qty[0]),
+    ]
+    .into_iter()
+    .map(|(store_id, product_id, (unit, total), reserved)| {
+        OrderLineModel::from((
+            OrderLineIdentity::from((store_id, product_id, 0)),
+            OrderLinePriceModel::from((unit, total)),
+            OrderLineAppliedPolicyModel {
                 reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
+                warranty_until: mock_warranty,
             },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[1],
+            OrderLineQuantityModel {
+                reserved,
                 paid: 0,
                 paid_last_update: None,
             },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1099,
-                product_id: saved_products[2].id_,
-            },
-            price: OrderLinePriceModel { unit: 3, total: 6 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[0],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-    ];
-    let ol_set = OrderLineModelSet {
-        order_id: "xx1".to_string(),
-        lines: reqs,
-        owner_id: 321,
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
-        currency: ut_setup_order_currency(vec![1013, 1099]),
+            ProdAttriPriceModel::from((attr_lastupdate, None)),
+        ))
+    })
+    .collect::<Vec<_>>();
+
+    let ol_set = {
+        let order_id = "xx1".to_string();
+        let lines = reqs;
+        let owner_id = 321;
+        let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
+        let currency = ut_setup_order_currency(vec![1013, 1099]);
+        let args = (order_id, owner_id, create_time, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);
     {
-        let (expect, actual) = (&ol_set.lines[1], &error[0]);
-        assert_eq!(expect.id_.store_id, actual.seller_id);
-        assert_eq!(expect.id_.product_id, actual.product_id);
+        let (expect, actual) = (&ol_set.lines()[1], &error[0]);
+        assert_eq!(expect.id().store_id(), actual.seller_id);
+        assert_eq!(expect.id().product_id(), actual.product_id);
         assert!(matches!(
             actual.reason,
             OrderLineCreateErrorReason::NotExist

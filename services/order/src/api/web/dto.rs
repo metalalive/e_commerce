@@ -7,17 +7,31 @@ use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, PhyAddrErrorDto, QuotaResourceErrorDto,
 };
 
-use crate::api::dto::ShippingDto;
+use crate::api::dto::{ProdAttrValueDto, ShippingDto};
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct OlineProductAttrDto {
+    pub label_id: String,
+    pub value: ProdAttrValueDto,
+}
 
 #[derive(Deserialize, Serialize)]
-pub struct OrderLineReqDto {
+pub struct OrderLineRsvReqDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub quantity: u32,
+    pub applied_attr: Option<Vec<OlineProductAttrDto>>,
+}
+#[derive(Deserialize, Serialize)]
+pub struct OrderLineReturnReqDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    pub attr_set_seq: u16,
     pub quantity: u32,
 }
 
 // TODO , extra field to indicate whether to discard specific line
-pub type CartLineDto = OrderLineReqDto;
+pub type CartLineDto = OrderLineRsvReqDto;
 
 #[derive(Deserialize, Serialize)]
 pub struct CartDto {
@@ -30,8 +44,9 @@ pub enum OrderLineCreateErrorReason {
     NotExist,
     OutOfStock,
     NotEnoughToClaim,
+    DuplicateLines,
     RsvLimitViolation,
-} // TODO, rename to line-create error reason
+}
 
 #[derive(Serialize)]
 pub enum OrderLineReturnErrorReason {
@@ -55,6 +70,7 @@ pub struct OrderLineCreateErrorDto {
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>,
+    pub attr_vals: Option<Vec<String>>,
     pub rsv_limit: Option<GenericRangeErrorDto>,
 }
 
@@ -62,6 +78,7 @@ pub struct OrderLineCreateErrorDto {
 pub struct OrderLineReturnErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub reason: OrderLineReturnErrorReason,
 }
 
@@ -94,7 +111,7 @@ pub struct ShippingErrorDto {
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateReqData {
-    pub order_lines: Vec<OrderLineReqDto>,
+    pub order_lines: Vec<OrderLineRsvReqDto>,
     pub currency: CurrencyDto, // currency in buyer's local region
     // Note the rate is determined at the time of placing an order, in this
     // project this API endpoint does not allow front-end clients to insert
@@ -107,7 +124,7 @@ pub struct OrderCreateReqData {
 pub struct OrderCreateRespOkDto {
     pub order_id: String,
     pub usr_id: u32,
-    pub time: u64,
+    pub time: u64, // TODO, to RFC3339 formatted string
     pub currency: OrderCurrencySnapshotDto,
     pub reserved_lines: Vec<OrderLinePayDto>,
 }

@@ -5,11 +5,23 @@
       "updating": [],
       "creating": [
 	  {"price": 10, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20099},
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20099,
+       "attributes": {"last_update": "2021-06-07T22:40:15+09:00", "extra_charge":[
+           {"label_id": "tahit", "value": "ta7021", "price": 4}
+       ]}
+      },
 	  {"price": 35, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20100},
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20100,
+       "attributes": {"last_update": "2021-06-07T22:40:15+09:00", "extra_charge":[
+           {"label_id": "rroya", "value": true, "price": 2}
+       ]}
+      },
 	  {"price": 20, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20101}
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20101,
+       "attributes": {"last_update": "2021-06-07T22:40:15+09:00", "extra_charge":[
+           {"label_id": "embei", "value": 2239, "price": 3}
+       ]}
+      }
       ]
      },
      {"callbacks": null, "errbacks": null, "chain": null, "chord": null}

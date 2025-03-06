@@ -33,10 +33,10 @@ struct ReturnOidMap {
 
 impl InsertReqArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`create_time`,\
+        let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`attr_seq`,`create_time`,\
             `quantity`,`price_unit`,`price_total`";
         let items = (0..num_batch)
-            .map(|_| "(?,?,?,?,?,?,?,?)")
+            .map(|_| "(?,?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
             "INSERT INTO `oline_return_req`({col_seq}) VALUES {}",
@@ -51,8 +51,10 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
         let mut args = MySqlArguments::default();
         reqs.into_iter()
             .map(|req| {
-                let (id_, qty_map) = (req.id_, req.qty);
-                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
+                let qty_map = req.qty;
+                let seller_id = req.id_.store_id();
+                let prod_id = req.id_.product_id();
+                let attr_seq = req.id_.attrs_seq_num();
                 qty_map
                     .into_iter()
                     .map(|(ctime, (qty, refund))| {
@@ -60,10 +62,11 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
                         args.add(seq_start).unwrap();
                         args.add(seller_id).unwrap();
                         args.add(prod_id).unwrap();
+                        args.add(attr_seq).unwrap();
                         args.add(ctime.naive_utc()).unwrap();
                         args.add(qty).unwrap();
-                        args.add(refund.unit).unwrap();
-                        args.add(refund.total).unwrap();
+                        args.add(refund.unit()).unwrap();
+                        args.add(refund.total()).unwrap();
                         seq_start += 1;
                     })
                     .count();
@@ -79,13 +82,14 @@ impl From<InsertReqArg> for (String, MySqlArguments) {
     }
 }
 
-const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_id`,`create_time`,\
+// TODO, add column `attr_seq` to order-line return request
+const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_id`,`attr_seq`,`create_time`,\
             `quantity`,`price_unit`,`price_total`";
 
 impl FetchByIdArg {
     fn sql_pattern(num_batch: usize) -> String {
         let items = (0..num_batch)
-            .map(|_| "(`store_id`=? AND `product_id`=?)")
+            .map(|_| "(`store_id`=? AND `product_id`=? AND `attr_seq`=?)")
             .collect::<Vec<_>>();
         format!(
             "SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` WHERE `o_id`=? AND ({})",
@@ -99,10 +103,10 @@ impl<'q> IntoArguments<'q, MySql> for FetchByIdArg {
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
-            .map(|id_| {
-                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
-                args.add(seller_id).unwrap();
-                args.add(prod_id).unwrap();
+            .map(|pid| {
+                args.add(pid.store_id()).unwrap();
+                args.add(pid.product_id()).unwrap();
+                args.add(pid.attrs_seq_num()).unwrap();
             })
             .count();
         args
@@ -128,7 +132,7 @@ impl From<FetchByTimeArg> for (String, MySqlArguments) {
         // - time-series database (TODO)
         let sql_patt = format!(
             "SELECT {COLUMN_SEQ_SELECT},`o_id` FROM `oline_return_req` \
-                                WHERE `create_time` > ? AND `create_time` <= ?"
+             WHERE `create_time` > ? AND `create_time` <= ?"
         );
         let mut args = MySqlArguments::default();
         args.add(start.naive_utc()).unwrap();
@@ -142,7 +146,7 @@ impl From<FetchByIdAndTimeArg> for (String, MySqlArguments) {
         let (oid_b, start, end) = (value.0, value.1, value.2);
         let sql_patt = format!(
             "SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` \
-                                WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
+             WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
         );
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column()).unwrap();
@@ -159,10 +163,8 @@ impl ReturnsPerOrder {
     fn try_merge(&mut self, row: MySqlRow) -> DefaultResult<(), AppError> {
         let store_id = row.try_get::<u32, usize>(0)?;
         let product_id = row.try_get::<u64, usize>(1)?;
-        let id_ = OrderLineIdentity {
-            store_id,
-            product_id,
-        };
+        let attr_seq = row.try_get::<u16, usize>(2)?;
+        let id_ = OrderLineIdentity::from((store_id, product_id, attr_seq));
         let result = self.0.iter_mut().find(|ret| ret.id_ == id_);
         let saved_ret = if let Some(v) = result {
             v
@@ -174,11 +176,11 @@ impl ReturnsPerOrder {
             self.0.push(item);
             self.0.last_mut().unwrap()
         };
-        let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
-        let quantity = row.try_get::<u32, usize>(3)?;
-        let unit = row.try_get::<u32, usize>(4)?;
-        let total = row.try_get::<u32, usize>(5)?;
-        let refund = OrderLinePriceModel { unit, total };
+        let create_time = row.try_get::<NaiveDateTime, usize>(3)?.and_utc().into();
+        let quantity = row.try_get::<u32, usize>(4)?;
+        let unit = row.try_get::<u32, usize>(5)?;
+        let total = row.try_get::<u32, usize>(6)?;
+        let refund = OrderLinePriceModel::from((unit, total));
         saved_ret.qty.insert(create_time, (quantity, refund));
         Ok(())
     }
@@ -204,7 +206,7 @@ impl TryInto<Vec<(String, OrderReturnModel)>> for ReturnOidMap {
         let has_error = rows
             .into_iter()
             .map(|row| {
-                let oid = to_app_oid(&row, 6)?;
+                let oid = to_app_oid(&row, 7)?;
                 if !ret_map.contains_key(oid.as_str()) {
                     ret_map.insert(oid.clone(), ReturnsPerOrder::new());
                 }

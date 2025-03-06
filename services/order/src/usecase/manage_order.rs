@@ -16,14 +16,15 @@ use ecommerce_common::api::web::dto::{
 };
 
 use crate::api::rpc::dto::{
-    OrderLineStockReturningDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto,
-    OrderReplicaStockReservingDto, OrderReplicaStockReturningDto, StockLevelReturnDto,
-    StockReturnErrorDto,
+    InventoryEditStockLevelDto, OrderLineStockReturningDto, OrderReplicaInventoryDto,
+    OrderReplicaInventoryReqDto, OrderReplicaStockReservingDto, OrderReplicaStockReturningDto,
+    StockLevelReturnDto, StockReturnErrorDto,
 };
 use crate::api::web::dto::{
     BillingReqDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
     OrderLineCreateErrNonExistDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
-    OrderLineReqDto, OrderLineReturnErrorDto, ShippingErrorDto, ShippingReqDto,
+    OrderLineReturnErrorDto, OrderLineReturnReqDto, OrderLineRsvReqDto, ShippingErrorDto,
+    ShippingReqDto,
 };
 
 use ecommerce_common::error::AppErrorCode;
@@ -33,8 +34,9 @@ use ecommerce_common::model::order::BillingModel;
 use crate::constant::app_meta;
 use crate::error::AppError;
 use crate::model::{
-    OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
-    ProductPolicyModelSet, ProductPriceModelSet, ShippingModel, StockLevelModelSet,
+    OlineDupError, OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet, ShippingModel,
+    StockLevelModelSet,
 };
 use crate::repository::{
     AbsCurrencyRepo, AbsOrderRepo, AbsOrderReturnRepo, AbsProductPriceRepo, AbstProductPolicyRepo,
@@ -118,13 +120,8 @@ impl CreateOrderUseCase {
         let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
         let usr_id = self.auth_claim.profile;
-        let ol_set = OrderLineModelSet {
-            order_id: oid,
-            lines: o_items,
-            currency: o_currency,
-            create_time: timenow, // trait `Copy` implemented, clone implicitly
-            owner_id: usr_id,
-        };
+        let args = (oid, usr_id, timenow, o_currency, o_items);
+        let ol_set = OrderLineModelSet::try_from(args).map_err(Self::handle_toplvl_error)?;
         // repository implementation should treat order-line reservation and
         // stock-level update as a single atomic operation
         self.try_reserve_stock(&ol_set).await?;
@@ -132,7 +129,7 @@ impl CreateOrderUseCase {
         // Contact info might be lost after order lines were saved, if power outage happenes
         // at here. TODO: Improve the code here
         self.repo_order
-            .save_contact(ol_set.order_id.as_str(), o_bl, o_sh)
+            .save_contact(ol_set.id().as_str(), o_bl, o_sh)
             .await
             .map_err(|e| {
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-fail-save: {e}");
@@ -237,7 +234,7 @@ impl CreateOrderUseCase {
 
     async fn load_product_properties(
         &self,
-        data: &[OrderLineReqDto],
+        data: &[OrderLineRsvReqDto],
     ) -> DefaultResult<(ProductPolicyModelSet, Vec<ProductPriceModelSet>), CreateOrderUsKsErr> {
         let req_ids_policy = data.iter().map(|d| d.product_id).collect::<Vec<u64>>();
         let req_ids_price = data
@@ -301,7 +298,7 @@ impl CreateOrderUseCase {
     pub fn validate_orderline(
         ms_policy: ProductPolicyModelSet,
         ms_price: Vec<ProductPriceModelSet>,
-        data: Vec<OrderLineReqDto>,
+        data: Vec<OrderLineRsvReqDto>,
     ) -> DefaultResult<Vec<OrderLineModel>, CreateOrderUsKsErr> {
         let (mut client_errors, mut server_errors) = (vec![], vec![]);
         let lines = data
@@ -311,13 +308,7 @@ impl CreateOrderUseCase {
                     .policies
                     .iter()
                     .find(|m| m.product_id == d.product_id);
-                let result2 = ms_price.iter().find_map(|ms| {
-                    if ms.store_id == d.seller_id {
-                        ms.items.iter().find(|m| m.product_id == d.product_id) // TODO, validate expiry of the pricing rule
-                    } else {
-                        None
-                    }
-                });
+                let result2 = ms_price.iter().find_map(|ms| ms.find_product(&d));
                 let (plc_nonexist, price_nonexist) = (result1.is_none(), result2.is_none());
                 if let (Some(plc), Some(price)) = (result1, result2) {
                     let (seller_id, product_id, req_qty) = (d.seller_id, d.product_id, d.quantity);
@@ -335,6 +326,7 @@ impl CreateOrderUseCase {
                                     rsv_limit: Some(rsv_limit),
                                     nonexist: None,
                                     shortage: None,
+                                    attr_vals: None,
                                     reason: OrderLineCreateErrorReason::RsvLimitViolation,
                                 };
                                 client_errors.push(e);
@@ -356,6 +348,7 @@ impl CreateOrderUseCase {
                         reason: OrderLineCreateErrorReason::NotExist,
                         nonexist: Some(nonexist),
                         shortage: None,
+                        attr_vals: None,
                     };
                     client_errors.push(e);
                     None
@@ -374,6 +367,17 @@ impl CreateOrderUseCase {
             Err(CreateOrderUsKsErr::ReqContent(Box::new(err_dto)))
         }
     } // end of fn validate_orderline
+
+    fn handle_toplvl_error(es: Vec<OlineDupError>) -> CreateOrderUsKsErr {
+        let olines_err = es.into_iter().map(OrderLineCreateErrorDto::from).collect();
+        let error = OrderCreateRespErrorDto {
+            order_lines: Some(olines_err),
+            billing: None,
+            shipping: None,
+            quota_olines: None,
+        };
+        CreateOrderUsKsErr::ReqContent(Box::new(error))
+    }
 
     async fn try_reserve_stock(
         &self,
@@ -632,19 +636,16 @@ impl OrderDiscardUnpaidItemsUseCase {
         ol_set: OrderLineModelSet,
     ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + 'a>> {
         let fut = async move {
-            let (order_id, unpaid_lines) = (
-                ol_set.order_id,
-                ol_set
-                    .lines
-                    .into_iter()
-                    .filter(|m| m.qty.has_unpaid())
-                    .collect::<Vec<OrderLineModel>>(),
-            );
+            let order_id = ol_set.id().to_string();
+            let unpaid_lines = ol_set.unpaid_lines();
             if unpaid_lines.is_empty() {
                 Ok(()) // all items have been paid, nothing to discard for now.
             } else {
                 let st_repo = o_repo.stock();
-                let items = unpaid_lines.into_iter().map(OrderLineModel::into).collect();
+                let items = unpaid_lines
+                    .into_iter()
+                    .map(InventoryEditStockLevelDto::from)
+                    .collect();
                 let data = StockLevelReturnDto { items, order_id };
                 let _return_result = st_repo.try_return(Self::read_stocklvl_cb, data).await?;
                 Ok(()) // TODO, logging the stock-return result, the result may not be able
@@ -672,7 +673,7 @@ impl ReturnLinesReqUseCase {
     pub async fn execute(
         self,
         oid: String,
-        data: Vec<OrderLineReqDto>,
+        data: Vec<OrderLineReturnReqDto>,
     ) -> DefaultResult<ReturnLinesReqUcOutput, AppError> {
         if !self
             .authed_claim

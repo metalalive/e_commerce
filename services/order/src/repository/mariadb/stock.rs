@@ -36,7 +36,7 @@ struct ReserveArg(Vec<(u32, ProductStockModel)>);
 struct ReturnArg(Vec<(u32, ProductStockModel)>);
 
 struct FetchQtyArg(Vec<ProductStockIdentity>);
-struct FetchQtyForRsvArg<'a>(&'a Vec<OrderLineModel>); // TODO, add current time for expiry filtering
+struct FetchQtyForRsvArg<'a>(&'a [OrderLineModel]); // TODO, add current time for expiry filtering
 struct FetchRsvOrderArg<'a>(OidBytes, &'a Vec<InventoryEditStockLevelDto>);
 
 struct StkProdRows(Vec<MySqlRow>);
@@ -363,8 +363,8 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchQtyForRsvArg<'a> {
         self.0
             .iter()
             .map(|o| {
-                out.add(o.id_.store_id).unwrap();
-                out.add(o.id_.product_id).unwrap();
+                out.add(o.id().store_id()).unwrap();
+                out.add(o.id().product_id()).unwrap();
             })
             .count();
         out
@@ -674,7 +674,7 @@ impl StockMariaDbRepo {
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
         let mut mset = {
-            let (sql_patt, args) = FetchQtyForRsvArg(&order_req.lines).into();
+            let (sql_patt, args) = FetchQtyForRsvArg(order_req.lines()).into();
             let stmt = tx.prepare(sql_patt.as_str()).await?;
             let query = stmt.query_with(args);
             let exec = tx.deref_mut();

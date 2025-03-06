@@ -19,8 +19,8 @@ use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFet
 use crate::error::AppError;
 use crate::model::{
     CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
-    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, ShippingModel,
-    ShippingOptionModel,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
+    ProdAttriPriceModel, ShippingModel, ShippingOptionModel,
 };
 
 use super::super::{
@@ -130,10 +130,9 @@ mod _orderline {
     pub(super) const TABLE_LABEL: &str = "order_line_reserved";
     #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        SellerID, ProductId, QtyReserved, PriceUnit, PriceTotal,
-        PolicyReserved, PolicyWarranty, QtyPaid, QtyPaidLastUpdate,
-        TotNumColumns,
-    }
+        SellerID, ProductId, AttrSetSeq, QtyReserved, PriceUnit, PriceTotal, PolicyReserved, PolicyWarranty,
+        QtyPaid, QtyPaidLastUpdate, AttrLastUpdate, AttrPriceMap, TotNumColumns,
+    } // TODO, new column for attr-set-seq-num
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
@@ -146,19 +145,25 @@ mod _orderline {
                 InMemColIdx::PriceTotal => 6,
                 InMemColIdx::PolicyReserved => 7,
                 InMemColIdx::PolicyWarranty => 8,
-                InMemColIdx::TotNumColumns => 9,
+                InMemColIdx::AttrLastUpdate => 9,
+                InMemColIdx::AttrPriceMap => 10,
+                InMemColIdx::AttrSetSeq => 11,
+                InMemColIdx::TotNumColumns => 12,
             }
         }
     }
-    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64) -> String {
-        format!("{oid}-{seller_id}-{prod_id}")
+    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64, attr_set_seq: u16) -> String {
+        format!("{oid}-{seller_id}-{prod_id}-{attr_set_seq}")
     }
     pub(super) fn to_inmem_tbl(
         oid: &str,
         data: &[OrderLineModel],
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         let kv_iter = data.iter().map(|m| {
-            let pkey = inmem_pkey(oid, m.id_.store_id, m.id_.product_id);
+            let seller_id = m.id().store_id();
+            let product_id = m.id().product_id();
+            let attr_set_seq = m.id().attrs_seq_num();
+            let pkey = inmem_pkey(oid, seller_id, product_id, attr_set_seq);
             (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
@@ -234,12 +239,12 @@ mod _order_toplvl_meta {
     pub(super) fn to_inmem_tbl(
         data: &OrderLineModelSet,
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
-        let pkey = data.order_id.clone();
+        let pkey = data.id().to_string();
         let value = vec![
-            data.owner_id.to_string(),
-            data.create_time.to_rfc3339(),
-            data.currency.buyer.name.to_string(),
-            data.currency.buyer.rate.to_string(),
+            data.owner().to_string(),
+            data.create_time().to_rfc3339(),
+            data.currency().buyer.name.to_string(),
+            data.currency().buyer.rate.to_string(),
         ];
         HashMap::from([(pkey, value)])
     } // end of fn to_inmem_tbl
@@ -289,8 +294,9 @@ pub struct OrderInMemRepo {
 
 impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
     fn from(value: &OrderLineModel) -> Self {
-        let seller_id_s = value.id_.store_id.to_string();
-        let prod_id = value.id_.product_id.to_string();
+        let seller_id_s = value.id().store_id().to_string();
+        let prod_id = value.id().product_id().to_string();
+        let attrset_seq = value.id().attrs_seq_num().to_string();
         let _paid_last_update = if let Some(v) = value.qty.paid_last_update.as_ref() {
             v.to_rfc3339()
         } else {
@@ -300,7 +306,16 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
         let mut row = (0.._orderline::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
+        let attributes = value.attrs_charge();
         [
+            (
+                _orderline::InMemColIdx::AttrLastUpdate,
+                attributes.lastupdate().to_rfc3339(),
+            ),
+            (
+                _orderline::InMemColIdx::AttrPriceMap,
+                attributes.serialize_map().unwrap(),
+            ),
             (
                 _orderline::InMemColIdx::QtyReserved,
                 value.qty.reserved.to_string(),
@@ -312,11 +327,11 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
             ),
             (
                 _orderline::InMemColIdx::PriceUnit,
-                value.price.unit.to_string(),
+                value.price().unit().to_string(),
             ),
             (
                 _orderline::InMemColIdx::PriceTotal,
-                value.price.total.to_string(),
+                value.price().total().to_string(),
             ),
             (
                 _orderline::InMemColIdx::PolicyReserved,
@@ -326,6 +341,7 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
                 _orderline::InMemColIdx::PolicyWarranty,
                 value.policy.warranty_until.to_rfc3339(),
             ),
+            (_orderline::InMemColIdx::AttrSetSeq, attrset_seq),
             (_orderline::InMemColIdx::ProductId, prod_id),
             (_orderline::InMemColIdx::SellerID, seller_id_s),
         ]
@@ -348,14 +364,16 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
         let product_id = row
             .get::<usize>(_orderline::InMemColIdx::ProductId.into())
             .unwrap().parse().unwrap();
-        let price = OrderLinePriceModel {
-            unit: row
-                .get::<usize>(_orderline::InMemColIdx::PriceUnit.into())
+        let attrset_seq = row
+            .get::<usize>(_orderline::InMemColIdx::AttrSetSeq.into())
+            .unwrap().parse().unwrap();
+        let args: (u32, u32) = (
+            row.get::<usize>(_orderline::InMemColIdx::PriceUnit.into())
                 .unwrap().parse().unwrap(),
-            total: row
-                .get::<usize>(_orderline::InMemColIdx::PriceTotal.into())
-                .unwrap().parse().unwrap(),
-        };
+            row.get::<usize>(_orderline::InMemColIdx::PriceTotal.into())
+                .unwrap().parse().unwrap()
+        );
+        let price = OrderLinePriceModel::from(args);
         let qty_paid_last_update = {
             let p = row.get::<usize>(_orderline::InMemColIdx::QtyPaidLastUpdate.into());
             let p = p.unwrap().as_str();
@@ -381,19 +399,30 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
         };
         let warranty_until = {
             let s = row
-                .get::<usize>(_orderline::InMemColIdx::PolicyReserved.into())
+                .get::<usize>(_orderline::InMemColIdx::PolicyWarranty.into())
                 .unwrap();
             DateTime::parse_from_rfc3339(s.as_str()).unwrap()
         };
+
         let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id,
-            },
-            price, policy, qty,
-        }
-    }
+
+        let attr_lastupdate = {
+            let s = row
+                .get::<usize>(_orderline::InMemColIdx::AttrLastUpdate.into())
+                .unwrap();
+            DateTime::parse_from_rfc3339(s.as_str()).unwrap()
+        };
+        let attr_pricemap = {
+            let s = row
+                .get::<usize>(_orderline::InMemColIdx::AttrPriceMap.into())
+                .unwrap();
+            ProdAttriPriceModel::deserialize_map(s.as_str()).unwrap()
+        };
+        let args = (attr_lastupdate, attr_pricemap);
+        let attrs_charge = ProdAttriPriceModel::from(args);
+        let id_ = OrderLineIdentity::from((seller_id, product_id, attrset_seq));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
+    } // end of fn from
 } // end of impl into OrderLineModel
 
 impl From<ContactModelWrapper> for AppInMemFetchedSingleRow {
@@ -784,7 +813,9 @@ impl AbsOrderRepo for OrderInMemRepo {
             let pids = data
                 .lines
                 .iter()
-                .map(|d| _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_id))
+                .map(|d| {
+                    _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_id, d.attr_set_seq)
+                })
                 .collect();
             let info = HashMap::from([(table_name.to_string(), pids)]);
             let (mut rawdata, lock) = self.datastore.fetch_acquire(info).await?;
@@ -830,19 +861,21 @@ impl AbsOrderRepo for OrderInMemRepo {
             let InnerTopLvlWrapper(owner_id, create_time, buyer_currency, buyer_exrate) =
                 self.fetch_toplvl_meta(oid.as_str()).await?;
             let ms = self.fetch_lines_common(keys).await?;
-            let mset = OrderLineModelSet {
-                order_id: oid,
-                owner_id,
-                create_time,
-                lines: ms,
-                currency: OrderCurrencyModel {
-                    buyer: CurrencyModel {
-                        name: buyer_currency,
-                        rate: buyer_exrate,
-                    },
-                    sellers: std::collections::HashMap::new(),
-                }, // TODO, will be deleted once refactored
-            };
+            let currency = OrderCurrencyModel {
+                buyer: CurrencyModel {
+                    name: buyer_currency,
+                    rate: buyer_exrate,
+                },
+                sellers: std::collections::HashMap::new(),
+            }; // TODO, will be deleted once refactored
+            let args = (oid, owner_id, create_time, currency, ms);
+            let mset = OrderLineModelSet::try_from_repo(args).map_err(|mut es| {
+                let e = es.remove(0);
+                AppError {
+                    code: AppErrorCode::DataCorruption,
+                    detail: Some(e.to_string()),
+                }
+            })?;
             usr_cb(self, mset).await?;
         }
         Ok(())
@@ -855,7 +888,12 @@ impl AbsOrderRepo for OrderInMemRepo {
     ) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let keys = pids
             .into_iter()
-            .map(|d| _orderline::inmem_pkey(oid, d.store_id, d.product_id))
+            .map(|d| {
+                let seller = d.store_id();
+                let prod_id = d.product_id();
+                let attrs_seq = d.attrs_seq_num();
+                _orderline::inmem_pkey(oid, seller, prod_id, attrs_seq)
+            })
             .collect();
         self.fetch_lines_common(keys).await
     }
@@ -948,15 +986,15 @@ impl OrderInMemRepo {
     pub(super) fn gen_lowlvl_tablerows(
         lineset: &OrderLineModelSet,
     ) -> Vec<(String, AppInMemFetchedSingleTable)> {
-        let oid = lineset.order_id.as_str();
+        let oid = lineset.id().as_str();
         vec![
             (
                 _orderline::TABLE_LABEL.to_string(),
-                _orderline::to_inmem_tbl(oid, &lineset.lines),
+                _orderline::to_inmem_tbl(oid, lineset.lines()),
             ),
             (
                 _seller_currencies::TABLE_LABEL.to_string(),
-                _seller_currencies::to_inmem_tbl(oid, &lineset.currency.sellers),
+                _seller_currencies::to_inmem_tbl(oid, &lineset.currency().sellers),
             ),
             (
                 _order_toplvl_meta::TABLE_LABEL.to_string(),

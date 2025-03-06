@@ -106,8 +106,61 @@
             ALTER TABLE `stock_rsv_detail` DROP KEY `c_fk_stock_prod_id`;
         </rollback>
     </changeSet> 
-
     <changeSet id="tag_version_0.2.0" author="T.H.">
         <tagDatabase tag="0.2.0" />
+    </changeSet>
+    <changeSet id="add_attr_pricing__product_price" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `product_price` ADD COLUMN `attr_lastupdate` DATETIME NOT NULL, ADD COLUMN `attr_map` LONGTEXT NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `product_price` DROP COLUMN `attr_lastupdate`, DROP COLUMN `attr_map`;
+        </rollback>
+    </changeSet> 
+    <changeSet id="tag_version_0.2.1" author="T.H.">
+        <tagDatabase tag="0.2.1" />
+    </changeSet>
+    <changeSet id="add_attr_pricing__orderline" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` ADD COLUMN `attr_lastupdate` DATETIME NOT NULL, ADD COLUMN `attr_price` LONGTEXT NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` DROP COLUMN `attr_lastupdate`, DROP COLUMN `attr_price`;
+        </rollback>
+    </changeSet> 
+    <changeSet id="tag_version_0.2.2" author="T.H.">
+        <tagDatabase tag="0.2.2" />
+    </changeSet>
+    <changeSet id="add_attrset_seqnum__orderline" author="T.H.">
+        <comment>
+            - this is for simplifying data pointing to another more wordy column `attr_price` within the same order line,
+              so other data models like order-return line and charge line can identify the chosen attribute set with
+              less data bytes.
+            - TODO, consider to rename another column `seq` in order-line detail table
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` DROP COLUMN `attr_seq`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.2.3" author="T.H.">
+        <tagDatabase tag="0.2.3" />
+    </changeSet>
+    <changeSet id="add_attrset_seqnum__olinereturn" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_return_req` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_return_req` DROP COLUMN `attr_seq`;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.2.4" author="T.H.">
+        <tagDatabase tag="0.2.4" />
     </changeSet>
 </databaseChangeLog>

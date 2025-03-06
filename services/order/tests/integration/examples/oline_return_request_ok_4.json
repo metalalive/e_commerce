@@ -1,12 +1,4 @@
 [
-    {
-      "seller_id": 545,
-      "product_id": 20101,
-      "quantity": 4
-    },
-    {
-      "seller_id": 545,
-      "product_id": 20100,
-      "quantity": 6
-    }
+    {"seller_id": 545, "product_id": 20101, "attr_set_seq": 0, "quantity": 4},
+    {"seller_id": 545, "product_id": 20100, "attr_set_seq": 0, "quantity": 6}
 ]

@@ -5,7 +5,15 @@
       "updating": [],
       "creating": [
 	  {"price": 125, "start_after": "2021-08-23T23:30:16+06:35",
-	   "end_before": "2021-09-30T17:10:41.910+06:35", "product_id": 7001}
+	   "end_before": "2021-09-30T17:10:41.910+06:35", "product_id": 7001,
+       "attributes": {
+           "last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[
+               {"label_id": "tahit", "value": "ta7021", "price": 1},
+               {"label_id": "rroya", "value": true, "price": 2},
+               {"label_id": "embei", "value": 2239, "price": 3}
+           ]
+       }
+      }
       ]
      },
      {"callbacks": null, "errbacks": null, "chain": null, "chord": null}

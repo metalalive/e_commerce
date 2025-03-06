@@ -55,7 +55,7 @@ fn build_currency_model() {
     }
 } // end of fn build_currency_model
 
-fn ut_common_order_currency(seller_ids: [u32; 3]) -> OrderCurrencyModel {
+pub(super) fn ut_common_order_currency(seller_ids: [u32; 3]) -> OrderCurrencyModel {
     let search_scope = {
         let data = vec![
             (CurrencyDto::TWD, 32047, 3),
@@ -134,24 +134,25 @@ fn order_to_web_resp_dto_ok() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let mock_olines_data = vec![
         // seller uses INR
-        (mock_seller_ids[2], 66049, 35, 140, 4, 0, None,
-         mock_ctime + Duration::hours(2), mock_ctime + Duration::days(14)),
+        ((mock_seller_ids[2], 66049, 0), (35, 140), 4, 0, None,
+         mock_ctime + Duration::hours(2), mock_ctime + Duration::days(14), None),
         // seller uses IDR
-        (mock_seller_ids[1], 1082, 57000, 114000, 2, 0, None,
-         mock_ctime + Duration::hours(1), mock_ctime + Duration::days(1)),
+        ((mock_seller_ids[1], 1082, 0), (57000, 114000), 2, 0, None,
+         mock_ctime + Duration::hours(1), mock_ctime + Duration::days(1), None),
         // seller uses TWD
-        (mock_seller_ids[0], 1617, 215, 1075, 5, 0, None,
-         mock_ctime + Duration::hours(4), mock_ctime + Duration::days(180)),
+        ((mock_seller_ids[0], 1617, 0), (215, 1075), 5, 0, None,
+         mock_ctime + Duration::hours(4), mock_ctime + Duration::days(180), None),
         // seller uses INR
-        (mock_seller_ids[2], 50129, 426, 2656, 6, 0, None,
-         mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16)),
+        ((mock_seller_ids[2], 50129, 0), (426, 2656), 6, 0, None,
+         mock_ctime + Duration::hours(8), mock_ctime + Duration::days(16), None),
     ];
-    let model = OrderLineModelSet {
-        order_id: "extremelyInDepth".to_string(),
-        owner_id: 1234,
-        create_time: mock_ctime,
-        currency: ut_common_order_currency(mock_seller_ids),
-        lines: ut_setup_order_lines(mock_olines_data),
+    let model = {
+        let order_id = "extremelyInDepth".to_string();
+        let owner_id = 1234;
+        let currency = ut_common_order_currency(mock_seller_ids);
+        let lines = ut_setup_order_lines(mock_olines_data);
+        let args = (order_id, owner_id, mock_ctime, currency, lines);
+        OrderLineModelSet::try_from(args).unwrap()
     };
     let result = OrderCreateRespOkDto::try_from(model);
     assert!(result.is_ok());

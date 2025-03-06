@@ -5,11 +5,17 @@
       "updating": [],
       "creating": [
 	  {"price": 99, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20095},
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20095,
+       "attributes": {"last_update": "2021-05-27T19:01:15+09:00", "extra_charge":[]}
+      },
 	  {"price": 299, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20097},
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20097,
+       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+      },
 	  {"price": 349, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20096}
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20096,
+       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+      }
       ]
      },
      {"callbacks": null, "errbacks": null, "chain": null, "chord": null}

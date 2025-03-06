@@ -323,22 +323,17 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
         order_req: &OrderLineModelSet,
     ) -> AppStockRepoReserveReturn {
         let pids = order_req
-            .lines
+            .lines()
             .iter()
             .map(|d| ProductStockIdentity2 {
-                store_id: d.id_.store_id,
-                product_id: d.id_.product_id,
+                store_id: d.id().store_id(),
+                product_id: d.id().product_id(),
             })
             .collect();
-        let (mut stock_mset, rsv_set, d_lock) = match self
-            .fetch_with_lock(order_req.order_id.clone(), pids, Some(self.curr_time))
+        let (mut stock_mset, rsv_set, d_lock) = self
+            .fetch_with_lock(order_req.id().to_string(), pids, Some(self.curr_time))
             .await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(Err(e));
-            }
-        };
+            .map_err(Err)?;
         usr_cb(&mut stock_mset, order_req)?;
         let data = {
             let mut seq = OrderInMemRepo::gen_lowlvl_tablerows(order_req);

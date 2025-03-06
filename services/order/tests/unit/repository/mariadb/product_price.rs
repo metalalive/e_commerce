@@ -1,38 +1,66 @@
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
-use chrono::DateTime;
+use chrono::{DateTime, TimeDelta};
+use tokio::time::sleep;
 
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::rpc::dto::ProductPriceDeleteDto;
+use order::api::dto::ProdAttrValueDto;
+use order::api::rpc::dto::{
+    ProdAttrPriceSetDto, ProductAttrPriceDto, ProductPriceDeleteDto, ProductPriceEditDto,
+};
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::{app_repo_product_price, AbsProductPriceRepo};
 
 use super::dstore_ctx_setup;
-use crate::model::ut_clone_productprice;
 
 #[rustfmt::skip]
-fn ut_pprice_data() -> [ProductPriceModel; 10] {
-    let rawdata = [
-        (true, 1001, 87, "2023-09-09T09:12:53.001985+08:00", "2023-10-06T09:00:32.001030+08:00"),
-        (true, 1002, 94555, "2023-09-09T09:13:54+07:00", "2023-10-07T09:01:30+06:00"),
-        (true, 1003, 28379, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00"),
-        (true, 1004, 3008, "2022-07-30T11:16:55.468-01:00", "2023-10-10T09:01:31.3310+03:00"),
-        (true, 1005, 1389, "2023-07-29T10:17:04.1918+05:00", "2023-10-06T09:01:32.00012-06:30"),
-        (true, 1006, 183, "2023-06-29T11:18:54.995+04:00", "2023-10-05T08:14:05.913+09:00"),
-        (true, 1007, 666, "2022-07-28T12:24:47+08:00", "2023-12-26T16:58:00+09:00"),
-        (false, 1001, 94, "2023-09-09T09:12:53.001905+08:30", "2023-10-06T09:00:30.10301+08:30"),
-        (false, 1002, 515, "2023-09-10T11:14:54+07:00", "2023-10-07T09:01:30.000067+06:00"),
-        (false, 1003, 28023, "2023-07-31T10:18:54+05:00", "2023-10-10T06:11:50+02:00"),
+fn ut_pprice_data() -> Vec<ProductPriceModel> {
+    let rawdata_new = [
+        (1001, 87, "2023-09-09T09:12:53.001985+08:00", vec![]),
+        (1002, 94555, "2023-09-09T09:13:54+07:00", vec![("wUd0o", ProdAttrValueDto::Bool(true), 2i32)]  ),
+        (1003, 28379, "2023-07-31T10:16:54+05:00", vec![]),
+        (1004, 3008, "2022-07-30T11:16:55.468-01:00", vec![]),
+        (1005, 1389, "2023-07-29T10:17:04.1918+05:00", vec![("boRed", ProdAttrValueDto::Int(57), 9i32)]),
+        (1006, 183, "2023-06-29T11:18:54.995+04:00", vec![]),
+        (1007, 666, "2022-07-28T12:24:47+08:00", vec![]),
     ];
-    rawdata.map(|(is_create, product_id, price, start_after, end_before)| ProductPriceModel {
-        is_create, product_id, price,
-        start_after: DateTime::parse_from_rfc3339(start_after).unwrap(),
-        end_before: DateTime::parse_from_rfc3339(end_before).unwrap(),
-    })
-}
+    let rawdata_saved = [
+        (1001, 94, "2023-09-09T09:12:53.001905+08:30", "2023-10-06T09:00:30.10301+08:30"),
+        (1002, 515, "2023-09-10T11:14:54+07:00", "2023-10-07T09:01:30.000067+06:00"),
+        (1003, 28023, "2023-07-31T10:18:54+05:00", "2023-10-10T06:11:50+02:00"),
+    ];
+    let mut out = rawdata_new.into_iter().map(
+        |(product_id, price, t0, attr_price_raw)| {
+            let start_after = DateTime::parse_from_rfc3339(t0).unwrap();
+            let end_before = start_after + TimeDelta::days(9);
+            let last_update = start_after - TimeDelta::days(1);
+            let extra_charge = attr_price_raw.into_iter().map(|(label, value, price)| 
+                ProductAttrPriceDto { label_id: label.to_string(), value, price }
+            ).collect::<Vec<_>>();
+            let d = ProductPriceEditDto {
+                product_id, price, start_after, end_before,
+                attributes: ProdAttrPriceSetDto { extra_charge, last_update },
+            };
+            ProductPriceModel::try_from(&d).unwrap()
+        })
+        .collect::<Vec<_>>();
+    let mock_saved_iter = rawdata_saved.into_iter().map(
+        |(product_id, price, t0, t1)| {
+            let start_after = DateTime::parse_from_rfc3339(t0).unwrap();
+            let end_before = DateTime::parse_from_rfc3339(t1).unwrap();
+            let last_update = start_after - TimeDelta::days(1);
+            let ts = [start_after, end_before, last_update];
+            let args = (product_id, price, ts, None);
+            ProductPriceModel::from(args)
+        });
+    out.extend(mock_saved_iter);
+    out
+} // end of fn ut_pprice_data
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn save_fetch_ok() {
@@ -40,15 +68,12 @@ async fn save_fetch_ok() {
 
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
-    let data = ut_pprice_data();
+    let mut data = ut_pprice_data();
+    let pprice_ms_subsequent = data.split_off(4);
     let store_id = 123;
-    let items = data[..4]
-        .iter()
-        .map(ut_clone_productprice)
-        .collect::<Vec<_>>();
     let mset = ProductPriceModelSet {
         store_id,
-        items,
+        items: data,
         currency: CurrencyDto::TWD,
     }; // TODO
     let result = repo.save(mset).await;
@@ -59,38 +84,42 @@ async fn save_fetch_ok() {
         assert_eq!(ms.items.len(), 2);
         ms.items
             .into_iter()
-            .map(|m| {
-                let expect = match &m.product_id {
+            .map(|actual| {
+                let expect = match &actual.product_id() {
                     1002 => (
                         94555,
                         "2023-09-09T09:13:54+07:00",
-                        "2023-10-07T09:01:30+06:00",
+                        "2023-09-18T09:13:54+07:00",
+                        "2023-09-08T09:13:54+07:00",
+                        Some(HashMap::from([("wUd0o-true".to_string(), 2i32)])),
                     ),
                     1003 => (
                         28379,
                         "2023-07-31T10:16:54+05:00",
-                        "2023-10-10T09:01:31+02:00",
+                        "2023-08-09T10:16:54+05:00",
+                        "2023-07-30T10:16:54+05:00",
+                        None,
                     ),
                     _others => (
                         0u32,
                         "1997-07-31T23:59:59+00:00",
                         "1997-07-31T23:59:59+00:00",
+                        "1997-07-31T23:59:59+00:00",
+                        None,
                     ),
                 };
-                let actual = (m.price, m.start_after, m.end_before);
-                assert_eq!(expect.0, actual.0);
-                assert_eq!(DateTime::parse_from_rfc3339(expect.1).unwrap(), actual.1);
-                assert_eq!(DateTime::parse_from_rfc3339(expect.2).unwrap(), actual.2);
+                let t0 = DateTime::parse_from_rfc3339(expect.1).unwrap();
+                let t1 = DateTime::parse_from_rfc3339(expect.2).unwrap();
+                let t2 = DateTime::parse_from_rfc3339(expect.3).unwrap();
+                let args = (actual.product_id(), expect.0, [t0, t1, t2], expect.4);
+                let expect_obj = ProductPriceModel::from(args);
+                assert_eq!(expect_obj, actual);
             })
             .count();
     }
-    let items = data[4..]
-        .iter()
-        .map(ut_clone_productprice)
-        .collect::<Vec<_>>();
     let mset = ProductPriceModelSet {
         store_id,
-        items,
+        items: pprice_ms_subsequent,
         currency: CurrencyDto::TWD,
     }; // TODO
     let result = repo.save(mset).await;
@@ -101,28 +130,36 @@ async fn save_fetch_ok() {
         assert_eq!(ms.items.len(), 2);
         ms.items
             .into_iter()
-            .map(|m| {
-                let expect = match &m.product_id {
+            .map(|actual| {
+                let expect = match &actual.product_id() {
                     1002 => (
                         515,
                         "2023-09-10T11:14:54+07:00",
                         "2023-10-07T09:01:30+06:00",
+                        "2023-09-09T11:14:54+07:00",
+                        None,
                     ),
                     1005 => (
                         1389,
                         "2023-07-29T10:17:04+05:00",
-                        "2023-10-06T09:01:32-06:30",
+                        "2023-08-07T10:17:04+05:00",
+                        "2023-07-28T10:17:04+05:00",
+                        Some(HashMap::from([("boRed-57".to_string(), 9i32)])),
                     ),
                     _others => (
                         0u32,
                         "1997-07-31T23:59:59+00:00",
                         "1997-07-31T23:59:59+00:00",
+                        "1997-07-31T23:59:59+00:00",
+                        None,
                     ),
                 };
-                let actual = (m.price, m.start_after, m.end_before);
-                assert_eq!(expect.0, actual.0);
-                assert_eq!(DateTime::parse_from_rfc3339(expect.1).unwrap(), actual.1);
-                assert_eq!(DateTime::parse_from_rfc3339(expect.2).unwrap(), actual.2);
+                let t0 = DateTime::parse_from_rfc3339(expect.1).unwrap();
+                let t1 = DateTime::parse_from_rfc3339(expect.2).unwrap();
+                let t2 = DateTime::parse_from_rfc3339(expect.3).unwrap();
+                let args = (actual.product_id(), expect.0, [t0, t1, t2], expect.4);
+                let expect_obj = ProductPriceModel::from(args);
+                assert_eq!(expect_obj, actual);
             })
             .count();
     }
@@ -152,20 +189,14 @@ async fn fetch_empty() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn save_insert_dup() {
-    use std::time::Duration;
-    use tokio::time::sleep;
-
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
-    let data = ut_pprice_data();
+    let mut data = ut_pprice_data();
+    let _ = data.split_off(2);
     let store_id = 124;
-    let items = data[..2]
-        .iter()
-        .map(ut_clone_productprice)
-        .collect::<Vec<_>>();
     let mset = ProductPriceModelSet {
         store_id,
-        items,
+        items: data[..2].iter().map(Clone::clone).collect(),
         currency: CurrencyDto::TWD,
     };
     let result = repo.save(mset).await;
@@ -175,13 +206,9 @@ async fn save_insert_dup() {
     assert!(result.is_ok());
     let mut is_dup_err = false;
     for _ in 0..3 {
-        let items = data[..2]
-            .iter()
-            .map(ut_clone_productprice)
-            .collect::<Vec<_>>();
         let mset = ProductPriceModelSet {
             store_id,
-            items,
+            items: data[..2].iter().map(Clone::clone).collect(),
             currency: CurrencyDto::TWD,
         };
         let result = repo.save(mset).await;
@@ -206,17 +233,12 @@ async fn ut_delete_common_setup(
     currency: CurrencyDto,
     repo: Arc<Box<dyn AbsProductPriceRepo>>,
 ) {
-    let data = ut_pprice_data();
-    let mset = {
-        let items = data[..7]
-            .iter()
-            .map(ut_clone_productprice)
-            .collect::<Vec<_>>();
-        ProductPriceModelSet {
-            store_id,
-            items,
-            currency,
-        }
+    let mut data = ut_pprice_data();
+    let _ = data.split_off(7); // discard subsequent
+    let mset = ProductPriceModelSet {
+        store_id,
+        items: data,
+        currency,
     };
     let result = repo.save(mset).await;
     assert!(result.is_ok());
@@ -247,7 +269,7 @@ async fn delete_some_ok() {
         ms.items
             .into_iter()
             .map(|m| {
-                let exists = match &m.product_id {
+                let exists = match &m.product_id() {
                     1001 | 1003 | 1006 => true,
                     _others => false,
                 };
@@ -324,7 +346,7 @@ async fn fetch_many_ok() {
                     129 => mset
                         .items
                         .into_iter()
-                        .map(|m| match &m.product_id {
+                        .map(|m| match m.product_id() {
                             1005 | 1003 | 1002 => true,
                             _others => false,
                         })
@@ -332,7 +354,7 @@ async fn fetch_many_ok() {
                     130 => mset
                         .items
                         .into_iter()
-                        .map(|m| match &m.product_id {
+                        .map(|m| match &m.product_id() {
                             1004 | 1006 | 1007 => true,
                             _others => false,
                         })

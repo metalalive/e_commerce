@@ -5,6 +5,7 @@ use std::vec::Vec;
 use chrono::{DateTime, SubsecRound, Utc};
 
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::BaseProductIdentity;
 
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto, StockQuantityPresentDto,
@@ -15,7 +16,7 @@ use crate::api::web::dto::{
 };
 use crate::error::AppError;
 
-use super::{BaseProductIdentity, OrderLineModel, OrderLineModelSet};
+use super::{OrderLineModel, OrderLineModelSet};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -215,7 +216,7 @@ impl StoreStockModel {
         let _satisfied = self
             .products
             .iter()
-            .filter(|p| req.id_.product_id == p.id_)
+            .filter(|p| req.id().product_id() == p.id_)
             .any(|p| {
                 let num_taking = min(p.quantity.num_avail(), num_required);
                 num_required -= num_taking;
@@ -227,7 +228,7 @@ impl StoreStockModel {
             let _ = self
                 .products
                 .iter_mut()
-                .filter(|p| req.id_.product_id == p.id_)
+                .filter(|p| req.id().product_id() == p.id_)
                 .any(|p| {
                     let num_taking = p.quantity.reserve(oid, num_required);
                     num_required -= num_taking;
@@ -400,23 +401,24 @@ impl StockLevelModelSet {
     // this model instance will be no longer clean and should be discarded immediately.
     pub fn try_reserve(&mut self, ol_set: &OrderLineModelSet) -> Vec<OrderLineCreateErrorDto> {
         self.sort_by_expiry(true);
-        let oid = ol_set.order_id.as_str();
+        let oid = ol_set.id().as_str();
         ol_set
-            .lines
+            .lines()
             .iter()
             .filter_map(|req| {
                 let mut error = OrderLineCreateErrorDto {
-                    seller_id: req.id_.store_id,
-                    product_id: req.id_.product_id,
+                    seller_id: req.id().store_id(),
+                    product_id: req.id().product_id(),
                     rsv_limit: None,
                     shortage: None,
                     reason: OrderLineCreateErrorReason::NotExist,
                     nonexist: None,
+                    attr_vals: None,
                 };
                 let result = self
                     .stores
                     .iter_mut()
-                    .find(|m| req.id_.store_id == m.store_id);
+                    .find(|m| req.id().store_id() == m.store_id);
                 let opt_err = if let Some(store) = result {
                     if let Some((errtype, num)) = store.try_reserve(oid, req) {
                         error.shortage = Some(num);

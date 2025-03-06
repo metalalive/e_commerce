@@ -45,3 +45,11 @@ pub struct ShippingDto {
     pub address: Option<PhyAddrDto>,
     pub option: Vec<ShippingOptionDto>,
 }
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(untagged)]
+pub enum ProdAttrValueDto {
+    Int(i32),
+    Str(String),
+    Bool(bool),
+}

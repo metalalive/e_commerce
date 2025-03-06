@@ -46,10 +46,12 @@ impl CurrencyModel {
         self.rate = new_rate;
     }
     #[rustfmt::skip]
+    #[cfg(feature = "mariadb")]
     pub(crate) fn check_rate_range(&self) -> Result<(), AppError> {
         let ms = vec![self];
         Self::check_rate_range_multi(ms)
     }
+    #[cfg(feature = "mariadb")]
     pub(crate) fn check_rate_range_multi(ms: Vec<&Self>) -> Result<(), AppError> {
         let wholenum_limit = 10i128.pow(PRECISION_WHOLE_NUMBER);
         let msgs = ms
@@ -95,6 +97,7 @@ impl CurrencyModelSet {
             .count();
     }
 
+    #[cfg(feature = "mariadb")]
     pub(crate) fn check_rate_range(&self) -> Result<(), AppError> {
         let ms = self.exchange_rates.iter().collect::<Vec<_>>();
         CurrencyModel::check_rate_range_multi(ms)

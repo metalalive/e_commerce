@@ -15,7 +15,7 @@ use super::super::super::in_mem::oorder::stock::{
 };
 use super::super::dstore_ctx_setup;
 use super::create::ut_verify_fetch_all_olines_ok;
-use super::ut_oline_init_setup;
+use super::{ut_default_order_currency, ut_oline_init_setup};
 use crate::model::verify_stocklvl_model;
 
 #[rustfmt::skip]
@@ -158,9 +158,10 @@ fn mock_reserve_usr_cb_0(
     req: &OrderLineModelSet,
 ) -> AppStockRepoReserveReturn {
     assert_eq!(ms.stores.len(), 1);
-    assert_eq!(req.lines.len(), 1);
+    assert_eq!(req.lines().len(), 1);
     let saved_store = &mut ms.stores[0];
-    let id_combo = (req.lines[0].id_.store_id, req.lines[0].id_.product_id);
+    let item0id = req.lines()[0].id();
+    let id_combo = (item0id.store_id(), item0id.product_id());
     let product = match id_combo {
         (1013, 9006) => saved_store
             .products
@@ -173,14 +174,15 @@ fn mock_reserve_usr_cb_0(
         }
     };
     assert!(product.quantity.rsv_detail.is_none());
-    product.quantity.booked += req.lines[0].qty.reserved;
+    product.quantity.booked += req.lines()[0].qty.reserved;
     product.quantity.rsv_detail = Some(StockQtyRsvModel {
-        oid: req.order_id.clone(),
-        reserved: req.lines[0].qty.reserved,
+        oid: req.id().clone(),
+        reserved: req.lines()[0].qty.reserved,
     });
     Ok(())
 } // end of mock_reserve_usr_cb_0
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn try_reserve_ok() {
     let mock_warranty = DateTime::parse_from_rfc3339("3015-11-29T15:02:30.005-03:00").unwrap();
@@ -220,60 +222,44 @@ async fn try_reserve_ok() {
         .await;
     }
     {
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await,
-            (2, 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await,
-            (0, 0, 14)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await,
-            (17 + 7 + 4, 3, 120)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await,
-            (0, 1, 37)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await,
-            ((3 + 1), 1, 46)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await;
+        assert_eq!(actual, (2, 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await;
+        assert_eq!(actual, (0, 0, 14));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await;
+        assert_eq!(actual, (17 + 7 + 4, 3, 120));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
+        assert_eq!(actual, (0, 1, 37));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
+        assert_eq!(actual, ((3 + 1), 1, 46));
     }
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T07:29:01.027-03:00").unwrap();
         let lines = vec![
-            (1013, 9004, 2, 3, mock_warranty + Duration::minutes(1)),
-            (1013, 9006, 3, 4, mock_rsved_end + Duration::minutes(2)),
-            (1014, 9008, 29, 20, mock_warranty + Duration::minutes(3)),
-            (1014, 9009, 6, 15, mock_rsved_end + Duration::minutes(4)),
+            ((1013, 9004), 2, 3, None, mock_warranty + Duration::minutes(1)),
+            ((1013, 9006), 3, 4, Some(("bolu",1)), mock_rsved_end + Duration::minutes(2)),
+            ((1014, 9008), 28, 20, None, mock_warranty + Duration::minutes(3)),
+            ((1014, 9008), 1, 21, Some(("sora",2)), mock_warranty + Duration::minutes(3)),
+            ((1014, 9009), 6, 15, Some(("bolu",4)), mock_rsved_end + Duration::minutes(4)),
+            ((1014, 9009), 2, 11, None, mock_rsved_end + Duration::minutes(5)),
+            ((1014, 9009), 3, 14, Some(("peri",3)), mock_rsved_end + Duration::minutes(6)),
         ];
-        ut_oline_init_setup("800eff40", 123, create_time, lines)
+        let currency = ut_default_order_currency(vec![1013, 1014]);
+        ut_oline_init_setup("800eff40", 123, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     {
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await,
-            ((2 + 2), 0, 15)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await,
-            (3, 0, 14)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await,
-            (17 + 7 + 4, 3, 120)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await,
-            (29, 1, 37)
-        );
-        assert_eq!(
-            ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await,
-            ((3 + 1 + 6), 1, 46)
-        );
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await;
+        assert_eq!(actual, ((2 + 2), 0, 15));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await;
+        assert_eq!(actual, (3, 0, 14));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await;
+        assert_eq!(actual, (17 + 7 + 4, 3, 120));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await;
+        assert_eq!(actual, ((28 + 1), 1, 37));
+        let actual = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await;
+        assert_eq!(actual, ((3 + 1 + 6 + 2 + 3), 1, 46));
     }
     // verify order lines and top-level metadata
     ut_verify_fetch_all_olines_ok(&o_repo).await;
@@ -283,7 +269,7 @@ fn mock_reserve_usr_cb_2(
     ms: &mut StockLevelModelSet,
     req: &OrderLineModelSet,
 ) -> AppStockRepoReserveReturn {
-    assert_eq!(req.lines.len(), 2);
+    assert_eq!(req.lines().len(), 2);
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(ms.stores[0].products.len(), 2);
     ms.stores[0]
@@ -302,18 +288,20 @@ fn mock_reserve_usr_cb_2(
         .count();
     let errors = vec![
         OrderLineCreateErrorDto {
-            seller_id: req.lines[0].id_.store_id,
-            product_id: req.lines[0].id_.product_id,
+            seller_id: req.lines()[0].id().store_id(),
+            product_id: req.lines()[0].id().product_id(),
             nonexist: None,
             rsv_limit: None,
+            attr_vals: None,
             shortage: Some(2),
             reason: OrderLineCreateErrorReason::NotEnoughToClaim,
         },
         OrderLineCreateErrorDto {
-            seller_id: req.lines[1].id_.store_id,
-            product_id: req.lines[1].id_.product_id,
+            seller_id: req.lines()[1].id().store_id(),
+            product_id: req.lines()[1].id().product_id(),
             nonexist: None,
             rsv_limit: None,
+            attr_vals: None,
             shortage: Some(1),
             reason: OrderLineCreateErrorReason::OutOfStock,
         },
@@ -348,10 +336,11 @@ async fn try_reserve_shortage() {
     let ol_set = {
         let create_time = DateTime::parse_from_rfc3339("2022-11-29T06:35:00.519-02:00").unwrap();
         let lines = vec![
-            (1015, 9003, 12, 3, mock_warranty.clone()),
-            (1015, 9002, 6, 4, mock_warranty.clone()),
+            ((1015, 9003), 12, 3, None, mock_warranty),
+            ((1015, 9002), 6, 4, None, mock_warranty),
         ];
-        ut_oline_init_setup("8100ffe0", 123, create_time, lines)
+        let currency = ut_default_order_currency(vec![1015]);
+        ut_oline_init_setup("8100ffe0", 123, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
     assert!(result.is_err());
@@ -407,12 +396,12 @@ fn mock_reserve_usr_cb_3(
     }
     assert_eq!(ms.stores.len(), 1);
     let store = &mut ms.stores[0];
-    let oid = req.order_id.as_str();
-    req.lines
+    let oid = req.id().as_str();
+    req.lines()
         .iter()
         .map(|line| {
             let mut line_rsv_req = line.qty.reserved;
-            match line.id_.product_id {
+            match line.id().product_id() {
                 9006 => inner_try_reserve!(9006, 120, 14, store.products, oid, line_rsv_req),
                 9008 => inner_try_reserve!(9008, 49, 37, store.products, oid, line_rsv_req),
                 _others => {
@@ -460,6 +449,7 @@ fn mock_return_usr_cb_1(
     vec![]
 }
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn try_return_ok() {
     let ds = dstore_ctx_setup();
@@ -486,29 +476,18 @@ async fn try_return_ok() {
         let create_time = Local::now().fixed_offset();
         let mock_warranty = create_time + Duration::days(7);
         let lines = vec![
-            (
-                mock_seller,
-                9006,
-                123,
-                4,
-                mock_warranty + Duration::hours(1),
-            ),
-            (
-                mock_seller,
-                9008,
-                50,
-                20,
-                mock_warranty + Duration::hours(10),
-            ),
+            ((mock_seller, 9006), 123, 4, None, mock_warranty + Duration::hours(1)),
+            ((mock_seller, 9008), 50, 20, Some(("bolu",2)), mock_warranty + Duration::hours(10)),
         ];
-        ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines)
+        let currency = ut_default_order_currency(vec![mock_seller]);
+        ut_oline_init_setup(mock_oid, mock_usr_id, create_time, currency, lines)
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
     assert!(result.is_ok());
     let data = {
         let items = [
             (mock_seller, 9006u64, 1i32, all_products[8].expiry.clone()),
-            (mock_seller, 9008, 1, all_products[9].expiry.clone()),
+            (mock_seller, 9008, 1, all_products[9].expiry),
             (mock_seller, 9008, 5, all_products[10].expiry.clone()),
         ]
         .into_iter()

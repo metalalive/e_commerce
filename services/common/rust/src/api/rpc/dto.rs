@@ -65,6 +65,7 @@ pub struct OrderReplicaPaymentDto {
 pub struct OrderLinePaidUpdateDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub qty: u32,
 }
 
@@ -86,6 +87,7 @@ pub enum OrderLinePayUpdateErrorReason {
 pub struct OrderLinePayUpdateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     pub reason: OrderLinePayUpdateErrorReason,
 }
 
@@ -106,6 +108,7 @@ pub struct OrderReplicaRefundReqDto {
 pub struct OrderLineReplicaRefundDto {
     pub seller_id: u32,
     pub product_id: u64,
+    pub attr_set_seq: u16,
     // the field `create-time` should be serial RFC3339 date-time format
     pub create_time: String,
     pub amount: PayAmountDto,

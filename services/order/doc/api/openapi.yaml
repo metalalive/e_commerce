@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 1.4.0
+  version: 1.5.0
 
 servers:
-  - url: https://order-proc.site.not.ready/api/v1.4.0
+  - url: https://order-proc.site.not.ready/api/v1.5.0
 tags:
   - name: cart
     description: shopping cart for user collecting items to checkout
@@ -54,7 +54,6 @@ paths:
                     example: 2
                 required:
                   - product_id
-                  - product_type
                   - async_stock_chk
                   - auto_cancel_secs
                   - warranty_hours
@@ -96,7 +95,6 @@ paths:
                           example: 4
                   required:
                     - product_id
-                    - product_type
                     - err_type
         
         '403':
@@ -248,7 +246,7 @@ paths:
               minItems: 1
               items:
                 allOf:
-                - $ref: '#/components/schemas/OrderLineObject'
+                - $ref: '#/components/schemas/OrderLineReturnReqDto'
       responses:
         '200':
           description: request accepted
@@ -363,6 +361,11 @@ components:
       format: uint32
       example: 18830
 
+    AttrSetSequenceNum:
+      type: integer
+      format: uint16
+      example: 3
+
     CurrencyLabel:
       type: string
       enum: [INR, IDR, THB, TWD, USD]
@@ -434,7 +437,7 @@ components:
           minItems: 1
           uniqueItems: true
           items:
-            $ref: '#/components/schemas/OrderLineObject'
+            $ref: '#/components/schemas/OrderLineRsvReqDto'
         currency:
           $ref: '#/components/schemas/CurrencyLabel'
         shipping:
@@ -453,22 +456,22 @@ components:
           type: array
           items:
             allOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
+            - $ref: '#/components/schemas/OrderLinePayDto'
         paid_lines:
           type: array
           items:
             allOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
+            - $ref: '#/components/schemas/OrderLinePayDto'
         shipping_lines:
           type: array
           items:
             oneOf:
-            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineRsvReqDto'
         completed_lines:
           type: array
           items:
             allOf:
-            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineRsvReqDto'
           minItems: 0
         shipping:
           allOf:
@@ -521,32 +524,77 @@ components:
           description: in case the seller provides discount or couple in the future.
           example: '360.118005'
 
-    PayOrderLineObject:
+    OrderLinePayDto:
       allOf:
         - $ref: '#/components/schemas/BaseOrderLineObject'
       properties:
         seller_id:
           $ref: '#/components/schemas/SellerId'
           example: 986543
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
         amount:
           $ref: '#/components/schemas/PayAmountObject'
       required:
         - seller_id
-        - product_type
         - product_id
+        - attr_set_seq
         - quantity
         - amount
 
-    OrderLineObject:
+    ProdAttrValueDto:
+      oneOf:
+        - type: integer
+          format: int32
+          example: 42
+        - type: string
+          example: "example_value"
+        - type: boolean
+          example: true
+      description: Possible attribute values as integer, string, or boolean.
+
+    OlineProductAttrDto:
+      type: object
+      properties:
+        label_id:
+          type: string
+          description: The ID of the attribute label.
+          example: "attr123"
+        value:
+          $ref: '#/components/schemas/ProdAttrValueDto'
+      required:
+        - label_id
+        - value
+
+    OrderLineRsvReqDto:
       allOf:
         - $ref: '#/components/schemas/BaseOrderLineObject'
       properties:
         seller_id:
           $ref: '#/components/schemas/SellerId'
+        applied_attr:
+          type: array
+          description: List of applied product attributes.
+          items:
+            $ref: '#/components/schemas/OlineProductAttrDto'
+          nullable: true
       required:
         - seller_id
-        - product_type
         - product_id
+        - quantity
+
+    OrderLineReturnReqDto:
+      allOf:
+        - $ref: '#/components/schemas/BaseOrderLineObject'
+      properties:
+        seller_id:
+          $ref: '#/components/schemas/SellerId'
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
+      required:
+        - seller_id
+        - product_id
+        - attr_set_seq
         - quantity
         
     OrderLineCreateError:
@@ -558,11 +606,10 @@ components:
           $ref: '#/components/schemas/ProductId'
         reason:
           type: string
-          enum: [NotExist, OutOfStock, NotEnoughToClaim, RsvLimitViolation]
+          enum: [NotExist, OutOfStock, NotEnoughToClaim, DuplicateLines, RsvLimitViolation]
           example: OutOfStock
       required:
         - seller_id
-        - product_type
         - product_id
         - reason
     
@@ -573,14 +620,16 @@ components:
           $ref: '#/components/schemas/SellerId'
         product_id:
           $ref: '#/components/schemas/ProductId'
+        attr_set_seq:
+          $ref: '#/components/schemas/AttrSetSequenceNum'
         reason:
           type: string
           enum: [NotExist, WarrantyExpired, QtyLimitExceed, DuplicateReturn]
           example: WarrantyExpired
       required:
         - seller_id
-        - product_type
         - product_id
+        - attr_set_seq
         - reason
     
     BillingValid:
@@ -824,7 +873,7 @@ components:
           minItems: 1
           items:
             allOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
+            - $ref: '#/components/schemas/OrderLinePayDto'
     
     OrderCreateErrorResponse:
       type: object
@@ -867,7 +916,7 @@ components:
             - $ref: '#/components/schemas/CartLineObject'
     
     CartLineObject:
-      $ref: '#/components/schemas/OrderLineObject'
+      $ref: '#/components/schemas/OrderLineRsvReqDto'
 
   securitySchemes:
     BearerAuth:

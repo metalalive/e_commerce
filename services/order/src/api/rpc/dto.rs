@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::CurrencyDto;
 
-use crate::api::dto::ShippingDto;
+use crate::api::dto::{ProdAttrValueDto, ShippingDto};
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
@@ -14,12 +14,26 @@ pub struct ProductPriceDeleteDto {
 }
 
 #[derive(Deserialize)]
+pub struct ProductAttrPriceDto {
+    pub label_id: String,
+    pub value: ProdAttrValueDto,
+    pub price: i32, // extra amount to charge
+}
+
+#[derive(Deserialize)]
+pub struct ProdAttrPriceSetDto {
+    pub extra_charge: Vec<ProductAttrPriceDto>,
+    pub last_update: DateTime<FixedOffset>,
+}
+
+#[derive(Deserialize)]
 pub struct ProductPriceEditDto {
-    pub price: u32,
+    pub price: u32, // should be base price
     pub start_after: DateTime<FixedOffset>,
     pub end_before: DateTime<FixedOffset>,
     pub product_id: u64, // TODO, declare type alias
-} // TODO, extra pricing from product attributes
+    pub attributes: ProdAttrPriceSetDto,
+}
 
 #[derive(Deserialize)]
 pub struct ProductPriceDto {

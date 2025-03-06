@@ -21,14 +21,11 @@ async fn fetch_request_by_id_ok() {
     let result = oret_repo.create(mock_oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
-        assert_eq!(num_saved, 6);
+        assert_eq!(num_saved, 8);
     }
-    let pids = [(49, 195), (48, 574), (18u32, 465u64)]
+    let pids = [(49, 195, 0), (48, 574, 0), (18, 465, 0)]
         .into_iter()
-        .map(|(store_id, product_id)| OrderLineIdentity {
-            store_id,
-            product_id,
-        })
+        .map(OrderLineIdentity::from)
         .collect::<Vec<_>>();
     let result = oret_repo.fetch_by_pid(mock_oid, pids.clone()).await;
     assert!(result.is_ok());
@@ -37,14 +34,19 @@ async fn fetch_request_by_id_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
-                    48 => (3, 10, 130),
-                    49 => (1, 7, 112),
-                    18 => (2, 6, 90),
-                    _others => (0usize, 0u32, 0u32),
+                let combo = (m.id_.store_id(), m.id_.product_id(), m.id_.attrs_seq_num());
+                let expect = match combo {
+                    (48, 574, 0) => (3, 10, 130),
+                    (49, 195, 0) => (1, 7, 112),
+                    (18, 465, 0) => (2, 6, 90),
+                    _others => (9999, 9999, 9999),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -54,29 +56,33 @@ async fn fetch_request_by_id_ok() {
     let result = oret_repo.create(mock_oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
-        assert_eq!(num_saved, 2);
+        assert_eq!(num_saved, 3);
     }
-    let pids = [(49, 195), (18u32, 465u64)]
+    let pids = [(49, 195, 2), (49, 195, 1), (49, 195, 0), (18, 465, 0)]
         .into_iter()
-        .map(|(store_id, product_id)| OrderLineIdentity {
-            store_id,
-            product_id,
-        })
+        .map(OrderLineIdentity::from)
         .collect::<Vec<_>>();
     let result = oret_repo.fetch_by_pid(mock_oid, pids.clone()).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
-        assert_eq!(fetched.len(), 2);
+        assert_eq!(fetched.len(), 4);
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
-                    49 => (2, 9, 144),
-                    18 => (2, 6, 90),
-                    _others => (0usize, 0u32, 0u32),
+                let combo = (m.id_.store_id(), m.id_.product_id(), m.id_.attrs_seq_num());
+                let expect = match combo {
+                    (18, 465, 0) => (2, 6, 90),
+                    (49, 195, 0) => (2, 9, 144),
+                    (49, 195, 1) => (1, 2, 34),
+                    (49, 195, 2) => (2, 2, 36),
+                    _others => (9999, 9999, 9999),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -107,9 +113,9 @@ async fn fetch_request_by_ctime_ok() {
         mock_time + Duration::seconds(33),
         mock_time + Duration::minutes(6),
         vec![
-            (format!("0a991e"), (49, 195, mock_time + Duration::seconds(51), 3, 63)),
-            (format!("0a991e"), (49, 195, mock_time + Duration::seconds(34), 1, 18)),
-            (format!("beef"), (48, 574, mock_time + Duration::minutes(5), 1, 16)),
+            (format!("0a991e"), (49, 195, 0, mock_time + Duration::seconds(51), 3, 63)),
+            (format!("0a991e"), (49, 195, 0, mock_time + Duration::seconds(34), 1, 18)),
+            (format!("beef"), (48, 574, 0, mock_time + Duration::minutes(5), 1, 16)),
         ],
     )
     .await;
@@ -118,8 +124,8 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::minutes(42),
         mock_time - Duration::minutes(9),
         vec![
-            (format!("50ba"), (18, 465, mock_time - Duration::minutes(41), 1, 15)),
-            (format!("beef"), (48, 574, mock_time - Duration::minutes(10), 5, 65)),
+            (format!("50ba"), (18, 465, 0, mock_time - Duration::minutes(41), 1, 15)),
+            (format!("beef"), (48, 574, 0, mock_time - Duration::minutes(10), 5, 65)),
         ],
     )
     .await;
@@ -129,9 +135,10 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
-            (48, 574, mock_time - Duration::seconds(3),3, 39),
-            (49, 195, mock_time - Duration::seconds(4), 7, 112),
-            (48, 574, mock_time - Duration::seconds(55), 2, 26),
+            (48, 574, 0, mock_time - Duration::seconds(3),3, 39),
+            (49, 195, 0, mock_time - Duration::seconds(4), 7, 112),
+            (49, 195, 2, mock_time - Duration::seconds(8), 1, 18),
+            (48, 574, 0, mock_time - Duration::seconds(55), 2, 26),
         ],
     )
     .await;
@@ -141,8 +148,8 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
-            (48, 574, mock_time + Duration::minutes(5), 1, 16),
-            (18, 465, mock_time - Duration::seconds(1), 5, 75),
+            (48, 574, 0, mock_time + Duration::minutes(5), 1, 16),
+            (18, 465, 0, mock_time - Duration::seconds(1), 5, 75),
         ],
     )
     .await;

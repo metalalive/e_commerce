@@ -1,5 +1,5 @@
 use std::collections::hash_map::RandomState;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
@@ -19,64 +19,48 @@ async fn in_mem_repo_ds_setup(nitems: u32) -> OrderReturnInMemRepo {
 
 #[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
-    vec![
-        OrderReturnModel {
-            id_: OrderLineIdentity { product_id: 465, store_id: 18 },
-            qty: HashMap::from([
-                (
-                    t_base - Duration::minutes(41),
-                    (1, OrderLinePriceModel { unit: 15, total: 15 }),
-                ),
-                (
-                    t_base - Duration::seconds(1),
-                    (5, OrderLinePriceModel { unit: 15, total: 75 }),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 48, product_id: 574 },
-            qty: HashMap::from([
-                (
-                    t_base - Duration::minutes(10),
-                    (5, OrderLinePriceModel { unit: 13, total: 65 }),
-                ),
-                (
-                    t_base - Duration::seconds(55),
-                    (2, OrderLinePriceModel { unit: 13, total: 26 }),
-                ),
-                (
-                    t_base - Duration::seconds(3),
-                    (3, OrderLinePriceModel { unit: 13, total: 39 }),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 49, product_id: 195 },
-            qty: HashMap::from([(
-                t_base - Duration::seconds(4),
-                (7, OrderLinePriceModel { unit: 16, total: 112 }),
-            )]),
-        },
+    [
+        ((18, 465, 0), vec![(-41*60, 1, (15, 15)), (-1, 5, (15, 75))]),
+        ((48, 574, 0), vec![(-10*60, 5, (13, 65)), (-55, 2, (13, 26)), (-3, 3, (13, 39))]),
+        ((49, 195, 2), vec![(-8, 1, (18, 18)), (-96, 1, (18, 18))]),
+        ((49, 195, 0), vec![(-4, 7, (16, 112))]),
     ]
+    .into_iter()
+    .map(|(id_tuple, qty_data)| OrderReturnModel {
+        id_: OrderLineIdentity::from(id_tuple),
+        qty: qty_data
+            .iter()
+            .map(|&(offset_min, quantity, (unit, total))| {
+                (
+                    t_base + Duration::seconds(offset_min),
+                    (quantity, OrderLinePriceModel::from((unit, total)))
+                )
+            })
+            .collect(),
+    })
+    .collect()
 }
 #[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models_ks2(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
-    vec![
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 48, product_id: 574 },
-            qty: HashMap::from([(
-                t_base + Duration::seconds(18),
-                (1, OrderLinePriceModel { unit: 13, total: 13 }),
-            )]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 49, product_id: 195 },
-            qty: HashMap::from([(
-                t_base + Duration::seconds(40),
-                (2, OrderLinePriceModel { unit: 16, total: 32 }),
-            )]),
-        },
+    [
+        ((48, 574, 0), vec![(18, 1, (13, 13))]),
+        ((49, 195, 0), vec![(40, 2, (16, 32))]),
+        ((49, 195, 1), vec![(89, 2, (17, 34))]),
     ]
+    .into_iter()
+    .map(|(id_tuple, qty_data)| OrderReturnModel {
+        id_: OrderLineIdentity::from(id_tuple),
+        qty: qty_data
+            .iter()
+            .map(|&(offset_min, quantity, (unit, total))| {
+                (
+                    t_base + Duration::seconds(offset_min),
+                    (quantity, OrderLinePriceModel::from((unit, total)))
+                )
+            })
+            .collect(),
+    })
+    .collect()
 }
 
 #[tokio::test]
@@ -88,7 +72,7 @@ async fn fetch_by_pid_ok() {
     let pids = reqs
         .iter()
         .filter_map(|m| {
-            if m.id_.store_id == 18 {
+            if m.id_.store_id() == 18 {
                 None
             } else {
                 Some(m.id_.clone())
@@ -98,22 +82,28 @@ async fn fetch_by_pid_ok() {
     let result = repo.create(oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
-        assert_eq!(num_saved, 6);
+        assert_eq!(num_saved, 8);
     }
     let result = repo.fetch_by_pid(oid, pids).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
-        assert_eq!(fetched.len(), 2);
+        assert_eq!(fetched.len(), 3);
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
-                    48 => (3, 10, 130),
-                    49 => (1, 7, 112),
-                    _others => (0usize, 0u32, 0u32),
+                let combo = (m.id_.store_id(), m.id_.product_id(), m.id_.attrs_seq_num());
+                let expect = match combo {
+                    (48, 574, 0) => (3, 10, 130),
+                    (49, 195, 0) => (1, 7, 112),
+                    (49, 195, 2) => (2, 2, 36),
+                    _others => (9999, 9999, 9999),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -125,7 +115,7 @@ async fn fetch_by_pid_ok() {
     let result = repo.create(oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
-        assert_eq!(num_saved, 2);
+        assert_eq!(num_saved, 3);
     }
     let result = repo.fetch_by_pid(oid, pids).await;
     assert!(result.is_ok());
@@ -133,13 +123,19 @@ async fn fetch_by_pid_ok() {
         fetched
             .iter()
             .map(|m| {
-                let expect = match m.id_.store_id {
-                    48 => (4, 11, 143),
-                    49 => (2, 9, 144),
-                    _others => (0usize, 0u32, 0u32),
+                let combo = (m.id_.store_id(), m.id_.product_id(), m.id_.attrs_seq_num());
+                let expect = match combo {
+                    (48, 574, 0) => (4, 11, 143),
+                    (49, 195, 0) => (2, 9, 144),
+                    (49, 195, 1) => (1, 2, 34),
+                    _others => (9999, 9999, 9999),
                 };
                 let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
-                let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+                let total_refund = m
+                    .qty
+                    .values()
+                    .map(|(_, refund)| refund.total())
+                    .sum::<u32>();
                 let actual = (m.qty.len(), total_returned, total_refund);
                 assert_eq!(actual, expect);
             })
@@ -160,7 +156,7 @@ pub(crate) fn ut_setup_fetch_by_ctime(
     req_set[0][1].qty.remove(&(mock_time - Duration::minutes(10)));
     req_set[1][1].qty.insert(
         mock_time + Duration::minutes(5),
-        (1, OrderLinePriceModel { unit: 16, total: 16 }),
+        (1, OrderLinePriceModel::from((16, 16))),
     );
     req_set[1][0].qty.remove(&(mock_time - Duration::minutes(41)));
     {
@@ -168,16 +164,16 @@ pub(crate) fn ut_setup_fetch_by_ctime(
         let ret = req_set[2].last_mut().unwrap();
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(34),
-            (1, OrderLinePriceModel { unit: 18, total: 18 }),
+            (1, OrderLinePriceModel::from((18, 18))),
         );
         assert!(prev_entry.is_none());
         ret.qty.insert(
             mock_time + Duration::seconds(51),
-            (3, OrderLinePriceModel { unit: 21, total: 63 }),
+            (3, OrderLinePriceModel::from((21, 63))),
         );
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(388),
-            (1, OrderLinePriceModel { unit: 21, total: 21 }),
+            (1, OrderLinePriceModel::from((21, 21))),
         );
         assert!(prev_entry.is_none());
         assert_eq!(ret.qty.len(), 4);
@@ -211,15 +207,15 @@ async fn fetch_by_ctime_ok() {
         vec![
             (
                 format!("order10029803"),
-                (49, 195, mock_time + Duration::seconds(51), 3, 63),
+                (49, 195, 0, mock_time + Duration::seconds(51), 3, 63),
             ),
             (
                 format!("order10029803"),
-                (49, 195, mock_time + Duration::seconds(34), 1, 18),
+                (49, 195, 0, mock_time + Duration::seconds(34), 1, 18),
             ),
             (
                 format!("order00080273"),
-                (48, 574, mock_time + Duration::minutes(5), 1, 16),
+                (48, 574, 0, mock_time + Duration::minutes(5), 1, 16),
             ),
         ],
     )
@@ -231,11 +227,11 @@ async fn fetch_by_ctime_ok() {
         vec![
             (
                 format!("order0019286"),
-                (18, 465, mock_time - Duration::minutes(41), 1, 15),
+                (18, 465, 0, mock_time - Duration::minutes(41), 1, 15),
             ),
             (
                 format!("order00080273"),
-                (48, 574, mock_time - Duration::minutes(10), 5, 65),
+                (48, 574, 0, mock_time - Duration::minutes(10), 5, 65),
             ),
         ],
     )
@@ -246,8 +242,8 @@ async fn fetch_by_ctime_ok() {
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
-            (48, 574, mock_time + Duration::minutes(5), 1, 16),
-            (18, 465, mock_time - Duration::seconds(1), 5, 75),
+            (48, 574, 0, mock_time + Duration::minutes(5), 1, 16),
+            (18, 465, 0, mock_time - Duration::seconds(1), 5, 75),
         ],
     )
     .await;
@@ -257,15 +253,16 @@ async fn fetch_by_ctime_ok() {
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
-            (48, 574, mock_time - Duration::seconds(3), 3, 39),
-            (49, 195, mock_time - Duration::seconds(4), 7, 112),
-            (48, 574, mock_time - Duration::seconds(55), 2, 26),
+            (48, 574, 0, mock_time - Duration::seconds(3), 3, 39),
+            (49, 195, 0, mock_time - Duration::seconds(4), 7, 112),
+            (48, 574, 0, mock_time - Duration::seconds(55), 2, 26),
+            (49, 195, 2, mock_time - Duration::seconds(8), 1, 18),
         ],
     )
     .await;
 } // end of fn fetch_by_ctime_ok
 
-type UTflatReturnExpectData = (u32, u64, DateTime<FixedOffset>, u32, u32);
+type UTflatReturnExpectData = (u32, u64, u16, DateTime<FixedOffset>, u32, u32);
 
 pub(crate) async fn fetch_by_ctime_common(
     repo: Arc<Box<dyn AbsOrderReturnRepo>>,
@@ -279,11 +276,12 @@ pub(crate) async fn fetch_by_ctime_common(
         assert!(fetched.len() <= expect_data.len());
         let actual_iter = fetched.into_iter().flat_map(|(oid, m)| {
             assert!(m.qty.len() >= 1);
-            let (seller_id, prod_id) = (m.id_.store_id, m.id_.product_id);
+            let (seller_id, prod_id) = (m.id_.store_id(), m.id_.product_id());
+            let attr_seq = m.id_.attrs_seq_num();
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
                 (
                     oid.clone(),
-                    (seller_id, prod_id, create_time, q, refund.total),
+                    (seller_id, prod_id, attr_seq, create_time, q, refund.total()),
                 )
             })
         });
@@ -308,9 +306,11 @@ pub(crate) async fn fetch_by_oid_ctime_common(
         assert!(fetched.len() <= expect_data.len());
         let actual_iter = fetched.into_iter().flat_map(|m| {
             assert!(m.qty.len() >= 1);
-            let (seller_id, prod_id) = (m.id_.store_id, m.id_.product_id);
+            let seller_id = m.id_.store_id();
+            let prod_id = m.id_.product_id();
+            let attr_seq = m.id_.attrs_seq_num();
             m.qty.into_iter().map(move |(create_time, (q, refund))| {
-                (seller_id, prod_id, create_time, q, refund.total)
+                (seller_id, prod_id, attr_seq, create_time, q, refund.total())
             })
         });
         let expect: HashSet<UTflatReturnExpectData, RandomState> =

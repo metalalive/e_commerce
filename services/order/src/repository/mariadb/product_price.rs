@@ -16,7 +16,7 @@ use ecommerce_common::model::BaseProductIdentity;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
-use crate::model::{ProductPriceModel, ProductPriceModelSet};
+use crate::model::{ProdAttriPriceModel, ProductPriceModel, ProductPriceModelSet};
 use crate::repository::AbsProductPriceRepo;
 
 use super::{run_query_once, DATETIME_FORMAT};
@@ -34,39 +34,40 @@ struct DeleteStoreMetaArg(u32);
 
 impl InsertProductArg {
     fn sql_pattern(num_batch: usize) -> String {
-        const ITEM: &str = "(?,?,?,?,?,?,?)";
+        const ITEM: &str = "(?,?,?,?,?,?,?,?,?)";
         const DELIMITER: &str = ",";
         let items = (0..num_batch).map(|_| ITEM).collect::<Vec<_>>();
-        format!("INSERT INTO `product_price`(`store_id`,`product_id`,`price`,`start_after`,`end_before`, `start_tz_utc`, `end_tz_utc`) VALUES {}"
+        format!("INSERT INTO `product_price`(`store_id`,`product_id`,`price`,`start_after`,`end_before`, \
+                 `attr_lastupdate`, `start_tz_utc`, `end_tz_utc`, `attr_map`) VALUES {}"
                 , items.join(DELIMITER) )
     }
 }
 impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
     fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
-        let (store_id, items) = (self.0, self.1);
+        let Self(store_id, items) = self;
         items
             .into_iter()
             .map(|item| {
-                let (p_id, price, start_after, end_before) = (
-                    item.product_id,
-                    item.price,
-                    item.start_after,
-                    item.end_before,
-                );
+                let attrprices_serial = item.attrs_charge().serialize_map().unwrap();
+                let (p_id, baseprice, ts, _) = item.into_parts();
+                let [start_after, end_before, attr_lastupdate] = ts;
                 let tz = start_after.fixed_offset().timezone();
                 let start_tz_utc = tz.local_minus_utc() / 60;
                 let tz = end_before.fixed_offset().timezone();
                 let end_tz_utc = tz.local_minus_utc() / 60;
                 out.add(store_id).unwrap();
                 out.add(p_id).unwrap();
-                out.add(price).unwrap();
+                out.add(baseprice).unwrap();
                 let t0 = format!("{}", start_after.format(DATETIME_FORMAT));
                 let t1 = format!("{}", end_before.format(DATETIME_FORMAT));
+                let t2 = format!("{}", attr_lastupdate.to_utc().format(DATETIME_FORMAT));
                 out.add(t0).unwrap();
                 out.add(t1).unwrap();
+                out.add(t2).unwrap();
                 out.add(start_tz_utc as i16).unwrap();
                 out.add(end_tz_utc as i16).unwrap();
+                out.add(attrprices_serial).unwrap();
             })
             .count();
         out
@@ -91,8 +92,14 @@ impl UpdateProductArg {
             .map(|_| "(`product_id`=?)")
             .collect::<Vec<_>>()
             .join(" OR ");
-        format!("UPDATE `product_price` SET `price` = CASE {} ELSE `price` END, `start_after` = CASE {} ELSE `start_after` END, `end_before` = CASE {} ELSE `end_before` END, `start_tz_utc` = CASE {} ELSE `start_tz_utc` END, `end_tz_utc` = CASE {} ELSE `end_tz_utc` END  WHERE store_id = ? AND ({})" 
-                , case_ops, case_ops, case_ops, case_ops, case_ops, pid_cmps)
+        format!(
+            "UPDATE `product_price` SET `price` = CASE {} ELSE `price` END, \
+            `start_after` = CASE {} ELSE `start_after` END, `end_before` = CASE {} ELSE `end_before` END, \
+            `start_tz_utc` = CASE {} ELSE `start_tz_utc` END, `end_tz_utc` = CASE {} ELSE `end_tz_utc` END, \
+            `attr_lastupdate` = CASE {} ELSE `attr_lastupdate` END, `attr_map` = CASE {} ELSE `attr_map` END
+            WHERE store_id = ? AND ({})" 
+            , case_ops, case_ops, case_ops, case_ops, case_ops, case_ops, case_ops, pid_cmps
+        )
     }
 }
 impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
@@ -102,52 +109,68 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
         items
             .iter()
             .map(|item| {
-                let (p_id, price) = (item.product_id, item.price);
-                out.add(p_id).unwrap();
-                out.add(price).unwrap();
+                out.add(item.product_id()).unwrap();
+                out.add(item.base_price()).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, start_after) = (item.product_id, item.start_after);
-                out.add(p_id).unwrap();
-                let t = start_after.format(DATETIME_FORMAT).to_string();
+                out.add(item.product_id()).unwrap();
+                let t = item.start_after().format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, end_before) = (item.product_id, item.end_before);
-                out.add(p_id).unwrap();
-                let t = end_before.format(DATETIME_FORMAT).to_string();
+                out.add(item.product_id()).unwrap();
+                let t = item.end_before().format(DATETIME_FORMAT).to_string();
                 out.add(t).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, start_after) = (item.product_id, item.start_after);
-                let start_tz_utc = start_after.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(p_id).unwrap();
+                out.add(item.product_id()).unwrap();
+                let start_tz_utc = item.start_after().timezone().local_minus_utc() / 60;
                 out.add(start_tz_utc as i16).unwrap();
             })
             .count();
         items
             .iter()
             .map(|item| {
-                let (p_id, end_before) = (item.product_id, item.end_before);
-                let end_tz_utc = end_before.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(p_id).unwrap();
+                out.add(item.product_id()).unwrap();
+                let end_tz_utc = item
+                    .end_before()
+                    .fixed_offset()
+                    .timezone()
+                    .local_minus_utc()
+                    / 60;
                 out.add(end_tz_utc as i16).unwrap();
+            })
+            .count();
+        items
+            .iter()
+            .map(|item| {
+                out.add(item.product_id()).unwrap();
+                let t = item.attrs_charge().lastupdate().to_utc();
+                out.add(t.format(DATETIME_FORMAT).to_string()).unwrap();
+            })
+            .count();
+        items
+            .iter()
+            .map(|item| {
+                out.add(item.product_id()).unwrap();
+                let serial = item.attrs_charge().serialize_map().unwrap();
+                out.add(serial).unwrap();
             })
             .count();
         out.add(store_id).unwrap();
         items
             .into_iter()
             .map(|item| {
-                out.add(item.product_id).unwrap();
+                out.add(item.product_id()).unwrap();
             })
             .count();
         out
@@ -176,16 +199,22 @@ impl From<InsertUpdateMetaArg> for (String, MySqlArguments) {
     }
 }
 
+#[rustfmt::skip]
+const SELECT_COLUMN_SEQ: [&str ; 8] = [
+    "`product_id`", "`price`", "`start_after`", "`end_before`",
+    "`start_tz_utc`", "`end_tz_utc`", "`attr_lastupdate`", "`attr_map`",
+];
+
 impl FetchProductOneSellerArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch)
             .map(|_| "(`product_id`=?)")
             .collect::<Vec<_>>()
             .join("OR");
         format!(
             "SELECT {} FROM `product_price` WHERE `store_id`=? AND ({})",
-            col_seq, pid_cmps
+            SELECT_COLUMN_SEQ.join(","),
+            pid_cmps
         )
     }
 }
@@ -226,7 +255,9 @@ impl From<FetchMetaOneSellerArg> for (String, MySqlArguments) {
 
 impl FetchProductManySellersArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc`,`store_id`";
+        let mut col_seq = SELECT_COLUMN_SEQ.to_vec();
+        col_seq.push("`store_id`");
+        let col_seq = col_seq.join(",");
         let pid_cmps = (0..num_batch)
             .map(|_| "(`store_id`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
@@ -234,7 +265,7 @@ impl FetchProductManySellersArg {
         format!("SELECT {col_seq} FROM `product_price` WHERE {}", pid_cmps)
     }
     fn seller_id_column_idx() -> usize {
-        6usize
+        8usize
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchProductManySellersArg {
@@ -378,15 +409,24 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
             // Do NOT use DateTime::from_naive_utc_and_offset()
             end_before.and_local_timezone(tz).unwrap()
         };
+        let attr_lastupdate = {
+            let raw = value.try_get::<NaiveDateTime, usize>(6)?;
+            let utc_tz = FixedOffset::east_opt(0).unwrap();
+            raw.and_local_timezone(utc_tz).unwrap()
+        };
+        let attrprice = {
+            let raw = value.try_get::<&[u8], usize>(7)?;
+            let serial = std::str::from_utf8(raw).map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(format!("cvt-prod-attr-price: {}", e)),
+            })?;
+            ProdAttriPriceModel::deserialize_map(serial)?
+        };
         //println!("[DEBUG] product-id : {}, start_after naive: {:?}, final:{:?}",
         //        product_id, start_after_naive, start_after);
-        Ok(Self {
-            product_id,
-            price,
-            start_after,
-            end_before,
-            is_create: false,
-        })
+        let ts = [start_after, end_before, attr_lastupdate];
+        let arg = (product_id, price, ts, attrprice);
+        Ok(Self::from(arg))
     } // end of fn try-from
 } // end of impl try-from for ProductPriceModel
 
@@ -658,17 +698,7 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
             items,
             currency,
         } = mset;
-        let (mut prices_add, mut prices_modify) = (vec![], vec![]);
-        items
-            .into_iter()
-            .map(|p| {
-                if p.is_create {
-                    prices_add.push(p);
-                } else {
-                    prices_modify.push(p)
-                }
-            })
-            .count(); // TODO, swtich to feature `drain-filter` when it becomes stable
+        let (ms_add, ms_modify) = ProductPriceModel::split_by_update_state(items);
         let mut conn = self.db.acquire().await?;
         let mut tx = conn.begin().await?;
         {
@@ -677,8 +707,8 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo {
             let num_affected = resultset.rows_affected() as usize;
             assert!(num_affected == 1 || num_affected == 2);
         }
-        Self::_save(store_id, "update", 16, &mut tx, prices_modify).await?;
-        Self::_save(store_id, "insert", 8, &mut tx, prices_add).await?;
+        Self::_save(store_id, "update", 16, &mut tx, ms_modify).await?;
+        Self::_save(store_id, "insert", 8, &mut tx, ms_add).await?;
         tx.commit().await?;
         Ok(())
     }

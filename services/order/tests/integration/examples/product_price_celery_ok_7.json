@@ -5,9 +5,13 @@
       "updating": [],
       "creating": [
 	  {"price": 89, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20912},
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20912,
+       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+      },
 	  {"price": 404, "start_after": "2021-05-31T09:30:35+07:30",
-	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20911}
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20911,
+       "attributes": {"last_update": "2021-02-27T19:01:15+09:00", "extra_charge":[]}
+      }
       ]
      },
      {"callbacks": null, "errbacks": null, "chain": null, "chord": null}

@@ -11,17 +11,18 @@ use ecommerce_common::api::rpc::dto::OrderReplicaRefundReqDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
 
+use order::api::dto::ProdAttrValueDto;
 use order::api::rpc::dto::{
     OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, StockReturnErrorDto,
 };
-use order::api::web::dto::OrderLineReqDto;
+use order::api::web::dto::{OlineProductAttrDto, OrderLineReturnReqDto, OrderLineRsvReqDto};
 use order::constant::app_meta;
 use order::error::AppError;
 use order::model::{
     CurrencyModel, CurrencyModelSet, OrderCurrencyModel, OrderLineAppliedPolicyModel,
     OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderLinePriceModel,
-    OrderLineQuantityModel, OrderReturnModel, ProductPolicyModel, ProductPolicyModelSet,
-    ProductPriceModel, ProductPriceModelSet,
+    OrderLineQuantityModel, OrderReturnModel, ProdAttriPriceModel, ProductPolicyModel,
+    ProductPolicyModelSet, ProductPriceModel, ProductPriceModelSet,
 };
 use order::repository::{AbsOrderRepo, AbsOrderReturnRepo};
 use order::usecase::{
@@ -57,38 +58,40 @@ fn ut_setup_prod_policies() -> ProductPolicyModelSet {
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
+    let raw2obj = |d: (u64, &str, &str, u32)| -> ProductPriceModel {
+        let start_after = DateTime::parse_from_rfc3339(d.1).unwrap();
+        let end_before =  DateTime::parse_from_rfc3339(d.2).unwrap();
+        let attr_lastupdate = start_after;
+        let attr_map = HashMap::from([
+            ("goat-true".to_string(), 9i32),
+            ("sheep-kit".to_string(), 8),
+            ("buflo-56".to_string(), 19)
+        ]);
+        let ts = [start_after , end_before, attr_lastupdate];
+        let args = (d.0, d.3, ts, Some(attr_map));
+        ProductPriceModel::from(args)
+    };
     vec![
         ProductPriceModelSet {
             store_id: 51,
             currency: CurrencyDto::THB,
             items: [
-                (168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 510u32),
-                (1168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 1130),
-                (169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", false, 190),
+                (168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", 510u32),
+                (1168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", 1130),
+                (169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", 190),
             ]
-            .into_iter()
-            .map(|d| ProductPriceModel {
-                product_id: d.0, is_create: d.3,  price: d.4,
-                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-            })
-            .collect::<Vec<_>>(),
+            .into_iter().map(raw2obj).collect::<Vec<_>>(),
         },
         ProductPriceModelSet {
             store_id: 52,
             currency: CurrencyDto::TWD,
             items: [
-                (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", false, 480u32),
-                (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 490),
-                (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 399),
+                (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", 480u32),
+                (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 490),
+                (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", 399),
+                (1080,"2020-05-01T21:49:04+02:00", "2024-08-31T09:01:55-10:00", 28),
             ]
-            .into_iter()
-            .map(|d| ProductPriceModel {
-                product_id: d.0, is_create: d.3,  price: d.4,
-                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-            })
-            .collect::<Vec<_>>(),
+            .into_iter().map(raw2obj).collect::<Vec<_>>(),
         },
     ]
 } // end of fn ut_setup_prod_prices
@@ -126,22 +129,39 @@ fn ut_setup_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
 fn validate_orderline_ok() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
-    let data = [(52u32, 168u64, 6u32), (51, 1168, 1), (51, 168, 10)]
-        .into_iter()
-        .map(|d| OrderLineReqDto {
+    let data = [
+        (52u32, 168u64, 6u32, "goat", ProdAttrValueDto::Bool(true)),
+        (
+            51,
+            1168,
+            1,
+            "sheep",
+            ProdAttrValueDto::Str("kit".to_string()),
+        ),
+        (51, 168, 10, "buflo", ProdAttrValueDto::Int(56)),
+    ]
+    .into_iter()
+    .map(|d| {
+        let oline_attr = OlineProductAttrDto {
+            label_id: d.3.to_string(),
+            value: d.4,
+        };
+        OrderLineRsvReqDto {
             seller_id: d.0,
             product_id: d.1,
             quantity: d.2,
-        })
-        .collect::<Vec<_>>();
+            applied_attr: Some(vec![oline_attr]),
+        }
+    })
+    .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_ok());
     if let Ok(v) = result {
         assert_eq!(v.len(), 3);
         v.into_iter()
             .map(|m| {
-                let id = m.id_;
-                let search_key = (id.store_id, id.product_id);
+                let id = m.id();
+                let search_key = (id.store_id(), id.product_id());
                 let found = match search_key {
                     (52, 168) => true,
                     (51, 168) => true,
@@ -159,48 +179,52 @@ fn validate_orderline_client_errors() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
     let data = [
-        (51u32, 169u64, 6u32),
-        (52, 174, 4),
-        (52, 900, 2),
-        (51, 1168, 11),
-        (52, 901, 9),
+        (51u32, 169u64, 6u32, None),
+        (52, 174, 4, None),
+        (52, 900, 2, None),
+        (51, 1168, 11, None),
+        (52, 901, 9, None),
+        (52, 1080, 12, Some(("alpaca", ProdAttrValueDto::Bool(true)))),
     ]
     .into_iter()
-    .map(|d| OrderLineReqDto {
-        seller_id: d.0,
-        product_id: d.1,
-        quantity: d.2,
+    .map(|d| {
+        let oline_attr = d.3.map(|c| {
+            vec![OlineProductAttrDto {
+                label_id: c.0.to_string(),
+                value: c.1,
+            }]
+        });
+        OrderLineRsvReqDto {
+            seller_id: d.0,
+            product_id: d.1,
+            quantity: d.2,
+            applied_attr: oline_attr,
+        }
     })
     .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_err());
     if let Err(CreateOrderUsKsErr::ReqContent(v)) = result {
         let errs = v.order_lines.unwrap();
-        assert_eq!(errs.len(), 4);
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 900)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(v.product_policy);
-            assert!(!v.product_price);
-        }
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 901)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(v.product_policy);
-            assert!(!v.product_price);
-        }
-        let found = errs
-            .iter()
-            .find(|e| e.seller_id == 52 && e.product_id == 174)
-            .unwrap();
-        if let Some(v) = found.nonexist.as_ref() {
-            assert!(!v.product_policy);
-            assert!(v.product_price);
-        }
+        assert_eq!(errs.len(), 5);
+        [
+            (52, 900, true, false),
+            (52, 901, true, false),
+            (52, 174, false, true),
+            (52, 1080, true, true),
+        ]
+        .into_iter()
+        .map(|d| {
+            let found = errs
+                .iter()
+                .find(|e| e.seller_id == d.0 && e.product_id == d.1)
+                .unwrap();
+            if let Some(v) = found.nonexist.as_ref() {
+                assert_eq!(v.product_policy, d.2);
+                assert_eq!(v.product_price, d.3);
+            }
+        })
+        .count();
         let found = errs
             .iter()
             .find(|e| e.seller_id == 51 && e.product_id == 169)
@@ -289,6 +313,7 @@ async fn create_order_snapshot_currency_err() {
 fn ut_setup_orderlines() -> Vec<OrderLineModel> {
     let base_time = Local::now().fixed_offset();
     let paid_last_update = Some(base_time + Duration::minutes(4));
+    let attr_lastupdate = base_time - Duration::minutes(6);
     let reserved_until = base_time + Duration::minutes(5);
     let warranty_until = base_time + Duration::days(14);
     [
@@ -297,11 +322,13 @@ fn ut_setup_orderlines() -> Vec<OrderLineModel> {
         (426, 192, 12, 216, 18, 15),
     ]
     .into_iter()
-    .map(|d| OrderLineModel {
-        id_: OrderLineIdentity {store_id: d.0, product_id: d.1},
-        price: OrderLinePriceModel {unit: d.2, total: d.3},
-        qty: OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update},
-        policy: OrderLineAppliedPolicyModel {reserved_until, warranty_until},
+    .map(|d| {
+        let id_ = OrderLineIdentity::from((d.0, d.1, 0));
+        let price = OrderLinePriceModel::from((d.2, d.3));
+        let qty = OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update};
+        let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
+        let attrs_charge = ProdAttriPriceModel::from((attr_lastupdate, None));
+        OrderLineModel::from((id_, price, policy, qty, attrs_charge))
     })
     .collect::<Vec<_>>()
 }
@@ -309,72 +336,24 @@ fn ut_setup_orderlines() -> Vec<OrderLineModel> {
 #[rustfmt::skip]
 fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
     let return_time = DateTime::parse_from_rfc3339("2023-11-18T02:39:04+02:00").unwrap();
-    vec![
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 108, product_id: 190 },
-            qty: HashMap::from([
-                (
-                    return_time + Duration::seconds(11),
-                    (1, OrderLinePriceModel {unit: 10, total: 10}),
-                ),
-                (
-                    return_time + Duration::seconds(30),
-                    (5, OrderLinePriceModel {unit: 13, total: 65}),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 800, product_id: 191 },
-            qty: HashMap::from([
-                (
-                    return_time + Duration::seconds(6),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
-                ),
-                (
-                    return_time + Duration::seconds(28),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
-                ),
-                (
-                    return_time + Duration::seconds(65),
-                    (2, OrderLinePriceModel {unit: 12, total: 24}),
-                ),
-                (
-                    return_time + Duration::seconds(99),
-                    (1, OrderLinePriceModel {unit: 12, total: 12}),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 426, product_id: 192 },
-            qty: HashMap::from([
-                (
-                    return_time + Duration::seconds(12),
-                    (2, OrderLinePriceModel {unit: 11, total: 22}),
-                ),
-                (
-                    return_time + Duration::seconds(73),
-                    (3, OrderLinePriceModel {unit: 11, total: 33}),
-                ),
-                (
-                    return_time + Duration::seconds(94),
-                    (1, OrderLinePriceModel {unit: 11, total: 11}),
-                ),
-            ]),
-        },
-        OrderReturnModel {
-            id_: OrderLineIdentity { store_id: 426, product_id: 8964 },
-            qty: HashMap::from([
-                (
-                    return_time + Duration::seconds(10),
-                    (3, OrderLinePriceModel {unit: 15, total: 45}),
-                ),
-                (
-                    return_time + Duration::seconds(19),
-                    (4, OrderLinePriceModel {unit: 15, total: 60}),
-                ),
-            ]),
-        },
+    [
+        (108, 190, vec![(11, 1, (10, 10)), (30, 5, (13, 65))]),
+        (800, 191, vec![(6, 1, (12, 12)), (28, 1, (12, 12)), (65, 2, (12, 24)), (99, 1, (12, 12))]),
+        (426, 192, vec![(12, 2, (11, 22)), (73, 3, (11, 33)), (94, 1, (11, 11))]),
+        (426, 8964, vec![(10, 3, (15, 45)), (19, 4, (15, 60))]),
     ]
+        .into_iter()
+        .map(|(store_id, product_id, qty_data)| OrderReturnModel {
+            id_: OrderLineIdentity::from((store_id, product_id, 0)),
+            qty: qty_data
+                .into_iter()
+                .map(|(seconds, quantity, (unit, total))| {
+                    (return_time + Duration::seconds(seconds),
+                    (quantity, OrderLinePriceModel::from((unit, total))))
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 async fn discard_unpaid_items_common(
@@ -410,22 +389,24 @@ async fn discard_unpaid_items_ok() {
     let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
     let mocked_seller_ids = mocked_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id())
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
-        OrderLineModelSet {
-            order_id: "xx1".to_string(),
-            owner_id: 123,
-            create_time: create_time.clone(),
-            lines: mocked_olines.drain(0..2).collect(),
-            currency: ut_setup_order_currency(mocked_seller_ids.clone()),
+        {
+            let order_id = "xx1".to_string();
+            let owner_id = 123;
+            let lines = mocked_olines.drain(0..2).collect();
+            let currency = ut_setup_order_currency(mocked_seller_ids.clone());
+            let args = (order_id, owner_id, create_time, currency, lines);
+            OrderLineModelSet::try_from(args).unwrap()
         },
-        OrderLineModelSet {
-            order_id: "xx2".to_string(),
-            owner_id: 124,
-            create_time,
-            lines: mocked_olines,
-            currency: ut_setup_order_currency(mocked_seller_ids),
+        {
+            let order_id = "xx2".to_string();
+            let owner_id = 124;
+            let lines = mocked_olines;
+            let currency = ut_setup_order_currency(mocked_seller_ids);
+            let args = (order_id, owner_id, create_time, currency, lines);
+            OrderLineModelSet::try_from(args).unwrap()
         },
     ];
     let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
@@ -443,22 +424,24 @@ async fn discard_unpaid_items_err_stocklvl() {
     let create_time = DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap();
     let mocked_seller_ids = mocked_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id())
         .collect::<Vec<_>>();
     let fetched_ol_sets = vec![
-        OrderLineModelSet {
-            order_id: "xx1".to_string(),
-            owner_id: 500,
-            create_time: create_time.clone(),
-            lines: mocked_olines.drain(0..1).collect(),
-            currency: ut_setup_order_currency(mocked_seller_ids.clone()),
+        {
+            let order_id = "xx1".to_string();
+            let owner_id = 500;
+            let lines = mocked_olines.drain(0..1).collect();
+            let currency = ut_setup_order_currency(mocked_seller_ids.clone());
+            let args = (order_id, owner_id, create_time, currency, lines);
+            OrderLineModelSet::try_from(args).unwrap()
         },
-        OrderLineModelSet {
-            order_id: "xx2".to_string(),
-            owner_id: 510,
-            create_time,
-            lines: mocked_olines,
-            currency: ut_setup_order_currency(mocked_seller_ids),
+        {
+            let order_id = "xx2".to_string();
+            let owner_id = 510;
+            let lines = mocked_olines;
+            let currency = ut_setup_order_currency(mocked_seller_ids);
+            let args = (order_id, owner_id, create_time, currency, lines);
+            OrderLineModelSet::try_from(args).unwrap()
         },
     ];
     let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
@@ -514,7 +497,7 @@ async fn return_lines_request_common(
     let logctx = shr_state.log_context().clone();
     let mocked_seller_ids = fetched_olines
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.id().store_id())
         .collect::<Vec<_>>();
     let currency_rate = ut_setup_order_currency(mocked_seller_ids);
     let o_repo = ut_oreturn_setup_repository_1(
@@ -526,10 +509,11 @@ async fn return_lines_request_common(
     );
     let or_repo = ut_oreturn_setup_repository_2(fetched_returns, Ok(vec![]), save_result);
     let mock_order_id = "SomebodyOrderedThis".to_string();
-    let mock_return_req = vec![OrderLineReqDto {
+    let mock_return_req = vec![OrderLineReturnReqDto {
         seller_id: 800,
         product_id: 191,
         quantity: 2,
+        attr_set_seq: 0,
     }];
     let authed_claim = AppAuthedClaim {
         profile: req_usr_id,
@@ -741,7 +725,7 @@ async fn replica_refund_ok() {
     let mock_buyer_id = 789u32;
     let mocked_seller_ids = fetched_oid_returns
         .iter()
-        .map(|v| v.1.id_.store_id)
+        .map(|v| v.1.id_.store_id())
         .collect::<Vec<_>>();
     let mocked_currency_rate = ut_setup_order_currency(mocked_seller_ids);
     let expect_num_returns = fetched_oid_returns
@@ -752,10 +736,10 @@ async fn replica_refund_ok() {
         let iter = fetched_oid_returns.iter().flat_map(|(_, ret)| {
             ret.qty.iter().map(|(t, (qty, refund))| {
                 let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
-                let mantissa = (refund.total as i64) * 10i64.pow(scale_limit);
+                let mantissa = (refund.total() as i64) * 10i64.pow(scale_limit);
                 (
-                    ret.id_.store_id,
-                    ret.id_.product_id,
+                    ret.id_.store_id(),
+                    ret.id_.product_id(),
                     t.to_rfc3339(),
                     Decimal::new(mantissa, scale_limit).to_string(),
                     *qty,
