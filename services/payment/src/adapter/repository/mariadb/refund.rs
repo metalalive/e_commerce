@@ -33,6 +33,7 @@ const JOB_SCHE_LABEL: &str = "refund-req-sync";
 
 type Req4RslvRowType = (
     u64,      // `product_id`
+    u16,      // `attr_seq`
     MySqlVal, // `create_time`
     Decimal,  // `amt_req_unit`
     Decimal,  // `amt_req_total`
@@ -68,10 +69,10 @@ impl TryFrom<Vec<OrderRefundModel>> for InsertRequestArgs {
 
     #[rustfmt::skip]
     fn try_from(value: Vec<OrderRefundModel>) -> Result<Self, Self::Error> {
-        let stmt = "INSERT INTO `oline_refund_req`(`o_id`,`store_id`,`product_id`,\
+        let stmt = "INSERT INTO `oline_refund_req`(`o_id`,`store_id`,`product_id`,`attr_seq`,\
                     `create_time`,`amt_req_unit`,`amt_req_total`,`qty_req`,`qty_rej_fraud`,\
                     `qty_rej_damage`,`qty_aprv`,`amt_aprv_unit`,`amt_aprv_total`) VALUES\
-                    (?,?,?,?,?,?,?,?,?,?,?,?)";
+                    (?,?,?,?,?,?,?,?,?,?,?,?,?)";
         let mut errors = Vec::new();
         let final_params = value.into_iter()
             .map(Self::try_from_one_req)
@@ -95,7 +96,7 @@ impl InsertRequestArgs {
             .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
         let params = rlines.into_iter()
             .map(|line| {
-                let (pid, amt_req, ctime, amt_aprv, rejected) = line.into_parts();
+                let (pid, attr_seq, amt_req, ctime, amt_aprv, rejected) = line.into_parts();
                 let BaseProductIdentity {store_id, product_id} = pid;
                 let num_rej_fraud = rejected.inner_map()
                     .get(&RefundRejectReasonDto::Fraudulent)
@@ -107,6 +108,7 @@ impl InsertRequestArgs {
                     oid_b.as_column().into(),
                     store_id.into(),
                     product_id.into(),
+                    attr_seq.into(),
                     ctime.format(DATETIME_FMT_P0F).to_string().into(),
                     amt_req.unit.into(),
                     amt_req.total.into(),
@@ -138,6 +140,7 @@ impl<'a, 'b> From<(&'a OidBytes, u32, &'b [RefundCompletionOlineReqDto])> for Fe
             .flat_map(|rline| {
                 vec![
                     rline.product_id.into(),
+                    rline.attr_set_seq.into(),
                     rline
                         .time_issued
                         .format(DATETIME_FMT_P0F)
@@ -155,16 +158,17 @@ impl<'a, 'b> From<(&'a OidBytes, u32, &'b [RefundCompletionOlineReqDto])> for Fe
 inner_into_parts!(FetchReqForRslvArgs);
 
 impl FetchReqForRslvArgs {
-    #[rustfmt::skip]
-    fn generate_prep_statement(num_batches : usize) -> String {
+    fn generate_prep_statement(num_batches: usize) -> String {
         assert_ne!(num_batches, 0);
         let cond = (0..num_batches)
-            .map(|_| "(`product_id`=? AND `create_time`=?)")
+            .map(|_| "(`product_id`=? AND `attr_seq`=? AND `create_time`=?)")
             .collect::<Vec<_>>()
             .join("OR");
-        format!("SELECT `product_id`,`create_time`,`amt_req_unit`,`amt_req_total`,\
+        format!(
+            "SELECT `product_id`,`attr_seq`,`create_time`,`amt_req_unit`,`amt_req_total`,\
         `qty_req`,`qty_rej_fraud`,`qty_rej_damage`,`amt_aprv_unit`,`amt_aprv_total`,\
-        `qty_aprv` FROM `oline_refund_req` WHERE `o_id`=? AND `store_id`=? AND ({cond})")
+        `qty_aprv` FROM `oline_refund_req` WHERE `o_id`=? AND `store_id`=? AND ({cond})"
+        )
     }
 }
 
@@ -175,31 +179,28 @@ impl<'a> From<(&'a OidBytes, Vec<OLineRefundModel>)> for UpdateResolvedReqArgs {
         let oid = oid_b.as_column();
         let stmt = "UPDATE `oline_refund_req` SET `qty_rej_fraud`=?, `qty_rej_damage`=?,\
                     `amt_aprv_unit`=?, `amt_aprv_total`=?, `qty_aprv`=? WHERE `o_id`=? \
-                    AND `store_id`=? AND `product_id`=? AND `create_time`=?";
-        let params = rlines_m.into_iter()
-            .map(|rline| {
-                let (pid, _amt_req, ctime, amt_aprv, rejected) = rline.into_parts();
-                let BaseProductIdentity {store_id, product_id} = pid;
-                let num_rej_fraud = rejected.inner_map()
-                    .get(&RefundRejectReasonDto::Fraudulent)
-                    .unwrap_or(&0u32).to_owned();
-                let num_rej_damage = rejected.inner_map()
-                    .get(&RefundRejectReasonDto::Damaged)
-                    .unwrap_or(&0u32).to_owned();
-                let arg = vec![
-                    num_rej_fraud.into(),
-                    num_rej_damage.into(),
-                    amt_aprv.unit.into(),
-                    amt_aprv.total.into(),
-                    amt_aprv.qty.into(),
-                    oid.clone().into(),
-                    store_id.into(),
-                    product_id.into(),
-                    ctime.format(DATETIME_FMT_P0F).to_string().into(),
-                ];
-                Params::Positional(arg)
-            })
-            .collect::<Vec<_>>();
+                    AND `store_id`=? AND `product_id`=? AND `attr_seq`=? AND `create_time`=?";
+        let params = rlines_m.into_iter().map(|rline| {
+            let (pid, attr_seq, _amt_req, ctime, amt_aprv, rejected) = rline.into_parts();
+            let BaseProductIdentity { store_id, product_id } = pid;
+            let num_rej_fraud = rejected.inner_map().get(&RefundRejectReasonDto::Fraudulent)
+                .unwrap_or(&0u32).to_owned();
+            let num_rej_damage = rejected.inner_map().get(&RefundRejectReasonDto::Damaged)
+                .unwrap_or(&0u32).to_owned();
+            let arg = vec![
+                num_rej_fraud.into(),
+                num_rej_damage.into(),
+                amt_aprv.unit.into(),
+                amt_aprv.total.into(),
+                amt_aprv.qty.into(),
+                oid.clone().into(),
+                store_id.into(),
+                product_id.into(),
+                attr_seq.into(),
+                ctime.format(DATETIME_FMT_P0F).to_string().into(),
+            ];
+            Params::Positional(arg)
+        }).collect::<Vec<_>>();
         Self(stmt.to_string(), params)
     } // end of fn from
 } // end of impl UpdateResolvedReqArgs
@@ -218,7 +219,7 @@ impl TryFrom<(u32, Req4RslvRowType)> for OLineRefundModel {
         let (
             merchant_id,
             (
-                product_id, time_issued,
+                product_id, attr_seq, time_issued,
                 amt_req_unit, amt_req_total, qty_req,
                 qty_rej_fraud, qty_rej_damage,
                 amt_aprv_unit, amt_aprv_total, qty_aprv,
@@ -240,7 +241,8 @@ impl TryFrom<(u32, Req4RslvRowType)> for OLineRefundModel {
             let rejmap = HashMap::from(list);
             RefundLineQtyRejectModel::from(&rejmap)
         };
-        Ok(Self::from((pid, amt_req, time_issued, amt_aprv, rejected)))
+        let args = (pid, attr_seq, amt_req, time_issued, amt_aprv, rejected);
+        Ok(Self::from(args))
     } // end of fn try-from
 } // end of impl OLineRefundModel
 

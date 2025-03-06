@@ -84,8 +84,24 @@
             ALTER TABLE `charge_line` ADD CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`) REFERENCES `charge_buyer_toplvl` (`usr_id`, `create_time`) ON DELETE CASCADE ON UPDATE CASCADE;
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.1.2" author="Haam">
         <tagDatabase tag="0.1.2" />
+    </changeSet>
+    <changeSet id="add_attrseq__oline_refund_req" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_refund_req` DROP PRIMARY KEY;
+            ALTER TABLE `oline_refund_req` ADD COLUMN `attr_seq` SMALLINT UNSIGNED NOT NULL;
+            ALTER TABLE `oline_refund_req` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`,`attr_seq`,`create_time`);
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_refund_req` DROP PRIMARY KEY;
+            ALTER TABLE `oline_refund_req` DROP COLUMN `attr_seq`;
+            ALTER TABLE `oline_refund_req` ADD PRIMARY KEY (`o_id`,`store_id`,`product_id`,`create_time`);
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.3" author="Haam">
+        <tagDatabase tag="0.1.3" />
     </changeSet>
 </databaseChangeLog>

@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::error::AppErrorCode;
-use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
 use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
@@ -337,6 +336,7 @@ async fn update_refund_in_chargeline_ok() {
         (mock_merchant_id, 1295, 0, Decimal::new(214, 1), Decimal::new(1498, 1), 7, Duration::days(2)),
         (mock_merchant_id, 1299, 0, Decimal::new(798, 1), Decimal::new(7980, 1), 10, Duration::days(3)),
         (mock_merchant_id, 2945, 0, Decimal::new(505, 1), Decimal::new(5050, 1), 10, Duration::days(4)),
+        (mock_merchant_id, 2945, 1, Decimal::new(511, 1), Decimal::new(6132, 1), 12, Duration::days(5)),
     ];
     let mock_currency_map = ut_setup_currency_snapshot(
         vec![mock_merchant_id, mock_buyer_id]
@@ -358,6 +358,7 @@ async fn update_refund_in_chargeline_ok() {
              (mock_merchant_id, 1294u64, 0u16, (191i64, 1u32), (1910i64, 1u32), 10u32),
              (mock_merchant_id, 1295, 0, (214, 1), (1070, 1), 5),
              (mock_merchant_id, 1299, 0, (798, 1), (1596, 1), 2),
+             (mock_merchant_id, 2945, 1, (511, 1), (4599, 1), 9),
         ]),
         (charge_ctime[1], true, vec![
              (mock_merchant_id, 1295, 0, (214, 1), (428, 1), 2),
@@ -379,15 +380,17 @@ async fn update_refund_in_chargeline_ok() {
     }
     let rslv_m0 = setup_resolve_model!(
         charge_ctime[0], vec![
-            (1294, 10, 573, 3, 2, 1),
-            (1295, 12, 214, 1, 0, 1),
-            (1299, 14, 0,   0, 1, 0),
+            ((1294, 0), 10, 573, 3, 2, 1),
+            ((1295, 0), 12, 214, 1, 0, 1),
+            ((1299, 0), 14, 0,   0, 1, 0),
+            ((2945, 1), 90, 511, 1, 2, 1),
+            ((2945, 1), 80, 511, 1, 1, 2),
         ]);
     let rslv_m1 = setup_resolve_model!(
         charge_ctime[1], vec![
-            (1295, 16, 428, 2, 0, 0),
-            (1299, 18, 2394, 3, 2, 0),
-            (2945, 20, 3030, 6, 1, 2),
+            ((1295, 0), 16, 428, 2, 0, 0),
+            ((1299, 0), 18, 2394, 3, 2, 0),
+            ((2945, 0), 20, 3030, 6, 1, 2),
         ]);
 
     let rslv_ms = vec![rslv_m0, rslv_m1];
@@ -404,29 +407,30 @@ async fn update_refund_in_chargeline_ok() {
                 .map(|line| {
                     let amt_rfd = line.amount_refunded();
                     let actual = (amt_rfd.total, amt_rfd.qty, line.num_rejected());
-                    let (store_id, product_id, _) = line.id();
+                    let (store_id, product_id, attr_seq) = line.id();
                     assert_eq!(store_id, mock_merchant_id);
-                    let expect = $data_selector(product_id);
+                    let expect = $data_selector(product_id, attr_seq);
                     assert_eq!(actual, expect);
                 }).count();
         };
     }
 
-    let fn1 = |product_id|
-        match (product_id,) {
-            (1294u64,) => (Decimal::new(573,1), 3u32, 3u32),
-            (1295,) => (Decimal::new(214,1), 1, 1),
-            (1299,) => (Decimal::ZERO, 0, 1),
+    let fn1 = |product_id, attr_seq|
+        match (product_id, attr_seq) {
+            (1294, 0) => (Decimal::new(573,1), 3u32, 3u32),
+            (1295, 0) => (Decimal::new(214,1), 1, 1),
+            (1299, 0) => (Decimal::ZERO, 0, 1),
+            (2945, 1) => (Decimal::new(1022, 1), 2, 6),
             _others => (Decimal::MAX, 9999, 9999),
         };
-    let fn2 = |product_id|
-        match (product_id,) {
-            (1295u64,) => (Decimal::new(428,1), 2u32, 0u32),
-            (1299,) => (Decimal::new(2394,1), 3, 2),
-            (2945,) => (Decimal::new(3030,1), 6, 3),
+    let fn2 = |product_id, attr_seq|
+        match (product_id, attr_seq) {
+            (1295u64, 0u16) => (Decimal::new(428,1), 2u32, 0u32),
+            (1299, 0) => (Decimal::new(2394,1), 3, 2),
+            (2945, 0) => (Decimal::new(3030,1), 6, 3),
             _others => (Decimal::MAX, 9999, 9999),
         };
-    verify_updated_line!(charge_ctime[0], 3, fn1);
+    verify_updated_line!(charge_ctime[0], 4, fn1);
     verify_updated_line!(charge_ctime[1], 3, fn2);
 } // update_refund_in_chargeline_ok
 

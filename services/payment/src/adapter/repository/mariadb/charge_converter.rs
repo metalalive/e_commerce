@@ -424,11 +424,10 @@ impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
 #[rustfmt::skip]
 impl From<ChargeRefundMap> for UpdateChargeLineRefundArgs {
     fn from(value: ChargeRefundMap) -> Self {
-        let attr_set_seq_dummy = 0u16; // TODO, WIP
         let params = value.into_inner().into_iter()
             .flat_map(|((buyer_id, charge_ctime), inner_map)| {
-                inner_map.into_iter()
-                    .map(move |(pid, (amt_rfnd, num_rej))| {
+                inner_map.into_inner().into_iter()
+                    .map(move |((pid, attr_seq), (amt_rfnd, num_rej))| {
                         let BaseProductIdentity {store_id, product_id} = pid;
                         let param = vec![
                             amt_rfnd.unit.into(),
@@ -439,7 +438,7 @@ impl From<ChargeRefundMap> for UpdateChargeLineRefundArgs {
                             charge_ctime.format(DATETIME_FMT_P0F).to_string().into(),
                             store_id.into(),
                             product_id.into(),
-                            attr_set_seq_dummy.into(),
+                            attr_seq.into(),
                         ];
                         Params::Positional(param)
                     })
