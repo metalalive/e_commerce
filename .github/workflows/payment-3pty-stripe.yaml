@@ -65,21 +65,28 @@ jobs:
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
       run: |
           cargo test --test unit -- adapter::processor::stripe::refund  --test-threads=1
-
-    - name: install headless firefox driver for mocking client
-      working-directory: services/payment
-      run: |
-          cargo install --version 0.7.4   litemap 
-          cargo install --version 0.35.0  geckodriver
-          ~/.cargo/bin/geckodriver &
-          echo "[debug] gecko driver started"
-
-    - name: Run pay-in / pay-out test
+    
+    - name: Run pay-out test
       working-directory: services/payment
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
       run: |
           cargo test --test unit -- adapter::processor::stripe::pay_out --test-threads=1
+
+    ## - name: install headless firefox driver for mocking client
+    ##   working-directory: services/payment
+    ##   run: |
+    ##       cargo install --version 0.7.4   litemap 
+    ##       cargo install --version 0.35.0  geckodriver
+    ##       ~/.cargo/bin/geckodriver &
+    ##       echo "[debug] gecko driver started"
+
+    - name: Run pay-in test
+      working-directory: services/payment
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+      run: |
           cargo test --test unit -- adapter::processor::stripe::pay_in::charge_flow_completed  --test-threads=1
 
