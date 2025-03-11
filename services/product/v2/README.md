@@ -1,4 +1,4 @@
-# Product service
+# Product Application
 
 ## Features
 This application is designed for managing the following resources:
@@ -25,22 +25,23 @@ This application is designed for managing the following resources:
 flowchart TD
     %% Clients subgraph with human icons
     subgraph Clients
+      OIA(["👤 Other Internal Applications"])
       PU(["👤 Public Users"])
       AS(["👤 Authorized Sellers"])
       PS(["👤 Platform Staff"])
-      OIA(["👤 Other Internal Applications"])
     end
 
     %% API Endpoints subgraph with only two nodes: Web and RPC
     subgraph API_Endpoints
-      WEB[Web]
       RPC[RPC]
+      WEB[Web]
+      WEBAUTH[Web authorised]
     end
 
     %% Service Layer subgraph with separated Saleable Item services
     subgraph Service_Layer
-      SIU[Saleable Item Update]
       SIS[Saleable Item Search]
+      SIU[Saleable Item Update]
       PAL[Product Attribute Labels]
       HT[Hierarchical Tags]
     end
@@ -52,15 +53,16 @@ flowchart TD
 
     %% Connections from Clients to API Endpoints
     PU --> WEB
-    AS --> WEB
-    PS --> WEB
+    AS --> WEBAUTH
+    PS --> WEBAUTH
     OIA --> RPC
 
     %% Connections from API Endpoints to Service Layer
-    WEB --> SIU
-    WEB --> PAL
-    WEB --> HT
     WEB --> SIS
+    WEBAUTH --> SIS
+    WEBAUTH --> SIU
+    WEBAUTH --> PAL
+    WEBAUTH --> HT
     RPC --> SIS
 
     %% Connections from Service Layer to Data Store Layer
@@ -72,7 +74,6 @@ flowchart TD
 
 Note :
 - currently, the internal applications like storefront application may send request to this RPC endpoint through AMQP protocol
-
 
 ## Pre-requisite
 | software | version | installation/setup guide |
