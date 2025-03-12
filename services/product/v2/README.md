@@ -22,7 +22,7 @@ This application is designed for managing the following resources:
 ## High-Level Architecture
 
 ```mermaid
-flowchart TD
+flowchart LR
     %% Clients subgraph with human icons
     subgraph Clients
       OIA(["👤 Other Internal Applications"])
@@ -34,8 +34,8 @@ flowchart TD
     %% API Endpoints subgraph with only two nodes: Web and RPC
     subgraph API_Endpoints
       RPC[RPC]
-      WEB[Web]
       WEBAUTH[Web authorised]
+      WEB[Web]
     end
 
     %% Service Layer subgraph with separated Saleable Item services
@@ -59,17 +59,11 @@ flowchart TD
 
     %% Connections from API Endpoints to Service Layer
     WEB --> SIS
-    WEBAUTH --> SIS
-    WEBAUTH --> SIU
-    WEBAUTH --> PAL
-    WEBAUTH --> HT
     RPC --> SIS
+    WEBAUTH --> Service_Layer
 
     %% Connections from Service Layer to Data Store Layer
-    SIU --> ES
-    SIS --> ES
-    PAL --> ES
-    HT --> ES
+    Service_Layer --> Data_Store_Layer
 ```
 
 Note :
