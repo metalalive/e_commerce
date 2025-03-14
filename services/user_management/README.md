@@ -1,11 +1,78 @@
 # User-Management service
 ## Features
-- authentication (currently only support JWT and JWKS rotation)
-- authorization (currently only support user-level)
-- Hierarchical user / group management
-- user account management
-- Role-based access control
-- Quota management
+#### Role-Based Access Control
+- each user can be assigned a custom set of roles, with each role containing specific set of low-level permissions
+- the permission model defines whether a role is allowed to perform certain operation on specific resource of specific application.
+
+#### Quota management
+- enforces limits on various resource types (materials) within a specific application.
+- each user can be assigned a custom set of quota arrangements
+
+#### Authentication / Authorization
+- manage login account
+- JWT token setup with JWKS support
+- identity verification, permission / quota check with JWT
+- unauthenticated token-based account maintenance, with email notification
+
+#### User Profile  / Hierarchical Group Management
+- maintains contact information, quota, and role assignments
+- supports inheritance of quotas / roles from group to their members
+- Enable activation / deactivation of a linked login account.
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph Clients
+      AUTHUSR(["👤 Authenticated Users"])
+      PUBUSER(["👤 Public User"])
+    end
+
+    subgraph Internal-Apps
+      direction LR
+      PROD_AP(["Product application"])
+      STORE_AP(["Storefront application"])
+      MEDIA_AP(["Media application"])
+    end
+
+    subgraph Web-Service-Layer
+      subgraph Authenticated
+        direction LR
+        ROLE_AC[Role-based Access Control]
+        QUOTA_ARNG[Quota Arrangement]
+        JWT_SETUP[JWT token setup]
+        USR_GRP_PROF_MGT[User Profile / Group Management]
+      end
+      subgraph Unauthenticated
+        direction LR
+        UNAUTH_ACC_RECOV[account recovery]
+        UNAUTH_ACC_ACTIV[account activation]
+        UNAUTH_PSWD_RST[password reset]
+      end
+    end
+
+    subgraph RPC-Consumer-Layer
+      EMAIL_NOTF[E-mail Nortification]
+      JWKS_MGT[JWKS maintenance]
+      USRPROF_FIND[User Profile Search]
+    end
+
+    subgraph Data-Store-Layer
+      MARIA[MariaDB]
+    end
+
+    subgraph CronJob
+    end
+
+    AUTHUSR --> Authenticated
+    PUBUSER --> Unauthenticated
+    Web-Service-Layer --> Data-Store-Layer
+    RPC-Consumer-Layer --> Data-Store-Layer
+    CronJob --> JWKS_MGT
+    Unauthenticated --> EMAIL_NOTF
+    Internal-Apps --> USRPROF_FIND
+```
+
 
 ## Pre-requisite
 | software | version | installation/setup guide |
