@@ -1,14 +1,15 @@
 # Order Processing service
 ## Features
-#### saleable product polices
-- supports reservation limit, warranty duration, auto-cancel time
-#### product pricing rules
+#### Saleable Product Polices
+- each product defines policies including reservation limit, warranty duration, auto-cancel time
+- policies will be applied to each new order once created
+#### Product Pricing Rules
 - including base pricing, custom attribute pricing, and multi-currency support
 - implements time-Based Pricing, it ensures price validity within specified start and end times
 - synchronizes pricing update made by store staff from storefront application
-#### Cart management
+#### Cart Management
 - maintains cart content for authenticated users
-#### Order lifecycle management
+#### Order Lifecycle Management
 - creates order with respect to permission model, quota limit, inventory reservation
 - supports returns for individual order lines with appropriate validation
 - synchronizes order payment status with payment application
@@ -18,9 +19,9 @@
 
 ```mermaid
 flowchart LR
-    subgraph Clients
+    subgraph Authenticated-Clients
       STORESTAFF(["👤 Store Staff"])
-      AUTHUSR(["👤 Authenticated Users"])
+      BUYER(["👤 Buyer"])
     end
     subgraph Internal-Apps
       STORE_AP(["Storefront application"])
@@ -41,7 +42,7 @@ flowchart LR
       CART_MGT[Cart management]
       subgraph Order-Lifecycle
         ORDER_CREATE[Create]
-        ORDER_RETURN[Return]
+        ORDER_RETURN[Return Lines]
       end
     end
 
@@ -49,21 +50,21 @@ flowchart LR
       MARIA[MariaDB]
     end
 
-    subgraph SysTimer
+    subgraph CronJob
     end
 
     subgraph 3party-CurrencyEx-provider
     end
     
     STORESTAFF --> PROD_POLICY
-    AUTHUSR --> CART_MGT
-    AUTHUSR --> ORDER_CREATE
-    AUTHUSR --> ORDER_RETURN
+    BUYER --> CART_MGT
+    BUYER --> ORDER_CREATE
+    BUYER --> ORDER_RETURN
     STORE_AP --> PRICE_SYNC
     IVTRY_AP --> STOCKLVL_SYNC
     PAYM_AP --> PAYM_SYNC
-    SysTimer --> AUTO_CANCEL
-    SysTimer --> CURREX_SYNC
+    CronJob --> AUTO_CANCEL
+    CronJob --> CURREX_SYNC
     CURREX_SYNC --> 3party-CurrencyEx-provider
     RPC-Consumer-Layer --> Data-Store-Layer
     Web-Service-Layer --> Data-Store-Layer

@@ -15,7 +15,7 @@
 - unauthenticated token-based account maintenance, with email notification
 
 #### User Profile  / Hierarchical Group Management
-- maintains contact information, quota, and role assignments
+- user profile maintains contact information, quota, and role assignments
 - supports inheritance of quotas / roles from group to their members
 - Enable activation / deactivation of a linked login account.
 

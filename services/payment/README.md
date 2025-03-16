@@ -1,5 +1,82 @@
 # Payment service
 ## Features
+#### Charge management
+- allow buyers to create charges on checkout and track charge progress to see whether the purchases are completed
+- synchronizes order details between this application and the order-processing application to ensure accurate charge validation
+- enables merchants to capture their funds from a successful pay-in, receives their earnings securely
+- supports partial charges for buyers, allow multiple payments per order
+- handles multi-currency transaction, estimates conversion for both buyers and merchants
+#### Merchant Onboarding
+- ensures merchants correctly configure (at least one of) supported third-party payment processors, before they can process checkouts and refunds.
+#### Refund management
+- return requests synchronization from the order-processing system, ensuring up-to-date refund information.
+- processes return requests by validating order details, charge records, and refund eligibility.
+- supports partial refunds, allowing merchants to refund only a portion of a charge
+- tracks multiple refund rounds and ensures accurate calculations of refunded and remaining amounts.
+#### Third-Party Processor Support
+- integrates merchant onboarding, charge, refund operations with third-party payment processors
+- currently supports Stripe
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph Authenticated-Clients
+      STORESTAFF(["👤 Store Staff"])
+      BUYER(["👤 Buyer"])
+    end
+    subgraph Internal-Apps
+      STORE_AP(["Storefront application"])
+      ORDERPROC_AP(["Order-Processing application"])
+    end
+    subgraph CronJob
+    end
+    
+    subgraph Web-Service-Layer
+      subgraph Charge-Management
+        CHARGE_INIT[Create Charge]
+        CHARGE_TRACK_PROG[Track Charge Progress]
+        PAYOUT[Payout / Capture Fund]
+        FIN_REPORT[Report]
+      end
+      subgraph Merchant-Onboarding
+        ONBOARD_INIT[initialize configuration]
+        ONBOARD_TRACK_STATUS[Track onboarding status]
+      end
+      FINALIZE_REFUND[Finalize Refund]
+    end
+    
+    subgraph Inner-Service-Layer
+      ORDER_SYNC[Order Detail Sync]
+      RETURN_REQ_SYNC[Return Request Sync]
+    end
+
+    subgraph Data-Store-Layer
+      MARIA[MariaDB]
+    end
+
+    subgraph External-3rd-Party
+      PSP_STRIPE[payment processor - Stripe]
+    end
+
+    BUYER --> CHARGE_INIT
+    BUYER --> CHARGE_TRACK_PROG
+    STORESTAFF --> PAYOUT
+    STORESTAFF --> FIN_REPORT
+    STORESTAFF --> Merchant-Onboarding
+    STORESTAFF --> FINALIZE_REFUND
+    CHARGE_INIT --> ORDER_SYNC
+    CHARGE_TRACK_PROG --> ORDER_SYNC
+    CronJob --> RETURN_REQ_SYNC
+    ONBOARD_INIT --> |RPC| STORE_AP
+    ORDER_SYNC --> |RPC| ORDERPROC_AP
+    RETURN_REQ_SYNC --> |RPC| ORDERPROC_AP
+
+    Web-Service-Layer --> Data-Store-Layer
+    Inner-Service-Layer --> Data-Store-Layer
+    Web-Service-Layer --> External-3rd-Party
+```
+
 ## Essential Environment Variables
 |variable|description|example|
 |--------|-----------|-------|
