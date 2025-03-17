@@ -1,21 +1,73 @@
-# Media service
+# Media application
 ## Features
-- video transcoding
-  - currently support only mp4 (input) and HLS (output)
-- image transformng
-  - currently support JPG/GIF/PNG/TIFF
-- video streaming
-  - currently support only HLS
-  - optional reverse proxy / load balancing
-- multi-part file upload
-- user-defined file access control
+#### Multi-Part File Upload
+- with limit of maximum allowed active upload requests
+- media file spliting to smaller chunks, keep track of the chunks uploaded
+- currently support only local file system on Linux server
+#### Access Control List (ACL) Management
+- File resource owner can modify file-level ACL, whether a transcoded file is visible to everyone
+- Privileged users and the owner can modify user-level ACL, which users can transcode the file, view a transcoded file, or edit access permission on other users
+#### Transcoding
+- For video, currently support only mp4 (input) to HLS (output)
+- For image, currently support JPG / GIF / PNG / TIFF
+- configurable limit for custom quality resolutions
+- asynchronous job for long-running transcoding tasks, with progress monitor
+- concurrent transcoding of multiple files is supported
+#### video streaming
+- currently support only HLS
+- optional caching file-streaming elements in reverse proxy (currnetly Nginx)
 
-## Build
-### Prerequisite 
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph Clients
+      PUBU(["👤 Public Users"])
+      subgraph PrivilegedClients
+        FRESO(["👤 File Resource Owner"])
+        PRIVU(["👤 Privileged Users"])
+      end
+    end
+    
+    subgraph caching
+        CACHE_NGINX[Nginx]
+    end
+
+    subgraph RPC-comsumer
+        TRANS_ASYNC_JOB[Asynchronous Transcoding Job]
+    end
+
+    subgraph Web-Service-Layer
+        MPFU[Multipart File Upload]
+        ACLMGT[Access-Control List management]
+        subgraph "Transcoding"
+          TRANS_INIT[Initialization]
+          TRANS_PROG_MON[Progress Monitor]
+        end
+        subgraph Transcoded-File-Fetch
+          IMG_FETCH[Image]
+          VID_STREAM[Video Streaming]
+        end
+    end
+
+    subgraph Data-Store-Layer
+      MARIA[MariaDB]
+    end
+    
+    FRESO --> MPFU
+    PrivilegedClients --> ACLMGT
+    PrivilegedClients --> TRANS_INIT
+    PrivilegedClients --> TRANS_PROG_MON
+    TRANS_INIT --> TRANS_ASYNC_JOB
+    Clients --> CACHE_NGINX --> Transcoded-File-Fetch
+    Web-Service-Layer --> Data-Store-Layer
+    RPC-comsumer --> Data-Store-Layer
+```
+
+## Prerequisite 
 | type | name | version required |
 |------|------|------------------|
-| Database | MariaDB | `10.3.22` |
-| Message Queue | RabbitMQ | `3.2.4` |
+| Database | MariaDB | `11.2.3` |
 | Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.21.0` |
 | | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
 | Dependency | [H2O](https://github.com/h2o/h2o) | after 2024 Dec |
@@ -29,7 +81,7 @@
 | | [p11-kit](https://github.com/p11-glue/p11-kit) | `>= 0.24.0` |
 | | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.4.1` |
 | | [Rabbitmq/C](https://github.com/alanxz/rabbitmq-c) | `>= 0.11.0` |
-| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.3` |
+| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.8` |
 | | [libcurl](https://github.com/curl/curl) | `>= 7.69.1` |
 | Test | [nghttp2](https://github.com/nghttp2/nghttp2) | `>= 1.46.0` |
 | | [cgreen](https://github.com/cgreen-devs/cgreen) | `>= 2.14` |
@@ -42,6 +94,9 @@
 Note: 
 * `Nettle` is automatically built when building `gnutls` 
 * `nghttp2` enables http/2 protocol in `libcurl` for testing
+
+## Build
+For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/media-ci.yaml)
 
 ### Database setup
 #### Grant access to Database

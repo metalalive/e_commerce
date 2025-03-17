@@ -1,18 +1,74 @@
-# Store-Front service
+# Store-Front Application
 ## Features
-- manage price of available products for sale
+- store profile management, such as staff, business hour, and available products for sale, while enforcing role-based access control (RBAC) and quota limits
+- store staff can maintain pricing plan for each product with multi-currency support
+
+## High-Level Architecture
+
+```mermaid
+flowchart TD
+    %% Clients subgraph with human icons
+    subgraph Clients
+      OIA(["👤 Other Internal Applications"])
+      PU(["👤 Public Users"])
+      ASS(["👤 Authorized Store Staff"])
+      PS(["👤 Platform Staff"])
+    end
+
+    %% API Endpoints subgraph with only two nodes: Web and RPC
+    subgraph API_Endpoints
+      RPC[RPC]
+      WEB[Web]
+      WEBAUTH[Web authorised]
+    end
+
+    %% Service Layer subgraph with separated Saleable Item services
+    subgraph Service_Layer
+      BPROF[Store Basic Profile]
+      PP[Product Price]
+      SSU[Store Staff]
+      BHU[Business Hour]
+    end
+
+    %% Data Store Layer subgraph
+    subgraph Data_Store_Layer
+      MARIA[MariaDB]
+    end
+
+    %% Connections from Clients to API Endpoints
+    PU --> WEB
+    ASS --> WEBAUTH
+    PS --> WEBAUTH
+    OIA --> RPC
+
+    %% Connections from API Endpoints to Service Layer
+    WEB --> BPROF
+    WEBAUTH --> BPROF
+    WEBAUTH --> PP
+    WEBAUTH --> SSU
+    WEBAUTH --> BHU
+    RPC --> BPROF
+
+    %% Connections from Service Layer to Data Store Layer
+    BPROF --> MARIA
+    PP --> MARIA
+    SSU --> MARIA
+    BHU --> MARIA
+```
+
+Note :
+- currently, payment application may send request to this RPC endpoint through AMQP protocol
 
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
 |Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
 |MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/) |
-|RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
 |pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
 |pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
-|OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
 ## Build
+For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/storefront-ci.yaml)
 ### For this application
 First time to build / install modules for this application in per-project virtual environment:
 ```bash

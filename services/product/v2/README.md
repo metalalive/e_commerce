@@ -1,4 +1,73 @@
-# Product service
+# Product Application
+
+## Features
+This application is designed for managing the following resources:
+
+#### Saleable Items Update & Search
+- Updates are subject to quota limits, permission checks, and ownership validation.
+- The application ensures that:
+  - Users are not allowed to create more saleable items than their assigned quota.
+  - Users can only modify or delete their own items.
+- Public users can search for visible items.
+- Authorized sellers can search for both visible and invisible items they own.
+
+#### Product Attribute Labels
+- Editable only by authorized platform staff; labels can be applied to all saleable items.
+- A saleable item may contain multiple identical attribute labels, each holding different values for specific sales requirements.
+
+#### Hierarchical Tags
+- Authorized platform staff can organize tag tree structures.
+- Existing tags can be attached to saleable items to enhance search functionality.
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    %% Clients subgraph with human icons
+    subgraph Clients
+      OIA(["👤 Other Internal Applications"])
+      PU(["👤 Public Users"])
+      AS(["👤 Authorized Sellers"])
+      PS(["👤 Platform Staff"])
+    end
+
+    %% API Endpoints subgraph with only two nodes: Web and RPC
+    subgraph API_Endpoints
+      RPC[RPC]
+      WEBAUTH[Web authorised]
+      WEB[Web]
+    end
+
+    %% Service Layer subgraph with separated Saleable Item services
+    subgraph Service_Layer
+      SIS[Saleable Item Search]
+      SIU[Saleable Item Update]
+      PAL[Product Attribute Labels]
+      HT[Hierarchical Tags]
+    end
+
+    %% Data Store Layer subgraph
+    subgraph Data_Store_Layer
+      ES[ElasticSearch Cluster]
+    end
+
+    %% Connections from Clients to API Endpoints
+    PU --> WEB
+    AS --> WEBAUTH
+    PS --> WEBAUTH
+    OIA --> RPC
+
+    %% Connections from API Endpoints to Service Layer
+    WEB --> SIS
+    RPC --> SIS
+    WEBAUTH --> Service_Layer
+
+    %% Connections from Service Layer to Data Store Layer
+    Service_Layer --> Data_Store_Layer
+```
+
+Note :
+- currently, the internal applications like storefront application may send request to this RPC endpoint through AMQP protocol
 
 ## Pre-requisite
 | software | version | installation/setup guide |
@@ -8,7 +77,12 @@
 |pip| 24.3.1 | [see here](https://pip.pypa.io/en/stable/) |
 |Elasticsearch| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/tree/master/elasticsearch/5.6) | 
 
+## Documentation
+- [Open API documentation](./doc/api/openapi.yaml)
+
 ## Build
+For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/productmgt-ci.yaml)
+
 ### Dependency update
 Update all dependency packages specified in the configuration file `v1.0.1/pyproject.toml`
 ```bash

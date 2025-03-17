@@ -1,16 +1,74 @@
 # Order Processing service
 ## Features
-- saleable products policy, e.g. reservation expiry, warranty, max number of items reserved ... etc.
-- support custom product-attribute pricing plan
-- multi-currency support
-- place orders
-- order-line returns
-- permission model and quota resource control
+#### Saleable Product Polices
+- each product defines policies including reservation limit, warranty duration, auto-cancel time
+- policies will be applied to each new order once created
+#### Product Pricing Rules
+- including base pricing, custom attribute pricing, and multi-currency support
+- implements time-Based Pricing, it ensures price validity within specified start and end times
+- synchronizes pricing update made by store staff from storefront application
+#### Cart Management
+- maintains cart content for authenticated users
+#### Order Lifecycle Management
+- creates order with respect to permission model, quota limit, inventory reservation
+- supports returns for individual order lines with appropriate validation
+- synchronizes order payment status with payment application
+- updates stock level with inventory application, to maintain accurate product availability.
 
-This service interacts with other services to ensure data synchronization :
-- stock level and order reservation, with inventory service
-- product attributes (e.g. price) , with store-front service
-- payment and refund, with payment service
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph Authenticated-Clients
+      STORESTAFF(["👤 Store Staff"])
+      BUYER(["👤 Buyer"])
+    end
+    subgraph Internal-Apps
+      STORE_AP(["Storefront application"])
+      IVTRY_AP(["Inventory application"])
+      PAYM_AP(["Payment application"])
+    end
+    
+    subgraph RPC-Consumer-Layer
+      PRICE_SYNC[Sync Product Pricing]
+      STOCKLVL_SYNC[Sync inventory stock level]
+      PAYM_SYNC[Sync Order Payment]
+      CURREX_SYNC[Sync Currency exchange rate]
+      AUTO_CANCEL[Auto-Cancel Order Lines]
+    end
+
+    subgraph Web-Service-Layer
+      PROD_POLICY[Product Policy]
+      CART_MGT[Cart management]
+      subgraph Order-Lifecycle
+        ORDER_CREATE[Create]
+        ORDER_RETURN[Return Lines]
+      end
+    end
+
+    subgraph Data-Store-Layer
+      MARIA[MariaDB]
+    end
+
+    subgraph CronJob
+    end
+
+    subgraph 3party-CurrencyEx-provider
+    end
+    
+    STORESTAFF --> PROD_POLICY
+    BUYER --> CART_MGT
+    BUYER --> ORDER_CREATE
+    BUYER --> ORDER_RETURN
+    STORE_AP --> PRICE_SYNC
+    IVTRY_AP --> STOCKLVL_SYNC
+    PAYM_AP --> PAYM_SYNC
+    CronJob --> AUTO_CANCEL
+    CronJob --> CURREX_SYNC
+    CURREX_SYNC --> 3party-CurrencyEx-provider
+    RPC-Consumer-Layer --> Data-Store-Layer
+    Web-Service-Layer --> Data-Store-Layer
+```
 
 ## Essential Environment Variables
 |variable|description|example|
@@ -22,11 +80,14 @@ This service interacts with other services to ensure data synchronization :
 
 
 ## Build
+For full build / test instructions please refer to this github action workflow script :
+- [`orderproc-ci.yaml`](../../.github/workflows/orderproc-ci.yaml)
+- [`orderproc-3pty-currencyex.yaml`](../../.github/workflows/orderproc-3pty-currencyex.yaml)
+
 ### Pre-requisite
 | type | name | version required |
 |------|------|------------------|
 | SQL Database | MariaDB | `11.2.3` |
-| AMQP broker | RabbitMQ | `3.2.4` |
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
 
