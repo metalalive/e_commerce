@@ -1,0 +1,3 @@
+[submodule "services/product/v1.0.1"]
+	path = services/product/v1.0.1
+	url = https://github.com/metalalive/ecomm-product-catalog-v1.git

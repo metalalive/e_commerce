@@ -1,6 +1,0 @@
-poetry run python3 ./manage.py test  tests.tag.models       --settings  settings.test --keepdb --verbosity=2
-poetry run python3 ./manage.py test  tests.ingredient.models  --settings settings.test --keepdb --verbosity=2
-poetry run python3 ./manage.py test  tests.saleitem.models    --settings settings.test --keepdb --verbosity=2
-poetry run python3 ./manage.py test  tests.salepkg.models     --settings settings.test --keepdb --verbosity=2
-poetry run python3 ./manage.py test  tests.attrtype.models    --settings settings.test --keepdb --verbosity=2
-
