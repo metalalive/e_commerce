@@ -15,7 +15,9 @@ This project is currently for learning purpose and not production-ready system.
 
 ## Architecture and Design
 - Service-Oriented Architecture, where each application operates independently.
-- API-Driven Communication, applicaions communicate through REST APIs, and asynchronous messaging through RPC API where needed.
+- API-Driven Communication
+  - frontend applications can access these backend applicaions through web API endpoints
+  - communications between the backend applications can be achieved with asynchronous messaging through RPC API whenever needed.
 - Hexagonal Architecture in Product-catalogue, Media-Processing, order-processing, and payment applications.
 - Test-Driven Development, unit / integration tests cover all primary features of the applications
 
