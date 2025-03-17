@@ -64,12 +64,11 @@ Note :
 |-----|-----|-----|
 |Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
 |MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/) |
-|RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
 |pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
 |pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
 
 ## Build
-For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/storefront-ci.yaml)
+For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/storefront-ci.yaml)
 ### For this application
 First time to build / install modules for this application in per-project virtual environment:
 ```bash

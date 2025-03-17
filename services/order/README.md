@@ -80,11 +80,14 @@ flowchart LR
 
 
 ## Build
+For full build / test instructions please refer to this github action workflow script :
+- [`orderproc-ci.yaml`](../../.github/workflows/orderproc-ci.yaml)
+- [`orderproc-3pty-currencyex.yaml`](../../.github/workflows/orderproc-3pty-currencyex.yaml)
+
 ### Pre-requisite
 | type | name | version required |
 |------|------|------------------|
 | SQL Database | MariaDB | `11.2.3` |
-| AMQP broker | RabbitMQ | `3.2.4` |
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
 

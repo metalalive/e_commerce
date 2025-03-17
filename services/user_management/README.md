@@ -1,4 +1,4 @@
-# User-Management service
+# User-Management Application
 ## Features
 #### Role-Based Access Control
 - each user can be assigned a custom set of roles, with each role containing specific set of low-level permissions
@@ -79,13 +79,14 @@ flowchart LR
 |-----|-----|-----|
 |Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
 |MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/server_setup_11.2.md) |
-|RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
 |pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
 |pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
 
 ## Build
+For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/usermgt-ci.yaml)
+
 ### Virtual Environment
 You can create per-project virtual environment using the command:
 ```bash

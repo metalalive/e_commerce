@@ -86,6 +86,10 @@ flowchart LR
 ||||
 
 ## Build
+For full build / test instructions please refer to this github action workflow script :
+- [`payment-ci.yaml`](../../.github/workflows/payment-ci.yaml)
+- [`payment-3pty-stripe.yaml`](../../.github/workflows/payment-3pty-stripe.yaml)
+
 ### Pre-requisite
 | type | name | version required |
 |------|------|------------------|
@@ -119,8 +123,6 @@ Note :
 - the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_payment.xml`
 
 
-### Optional features
-### Commands for build
 ## Run
 ### Development API server
 ```bash

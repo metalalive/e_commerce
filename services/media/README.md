@@ -68,7 +68,6 @@ flowchart LR
 | type | name | version required |
 |------|------|------------------|
 | Database | MariaDB | `11.2.3` |
-| Message Queue | RabbitMQ | `3.2.4` |
 | Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.21.0` |
 | | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
 | Dependency | [H2O](https://github.com/h2o/h2o) | after 2024 Dec |
@@ -97,7 +96,7 @@ Note:
 * `nghttp2` enables http/2 protocol in `libcurl` for testing
 
 ## Build
-For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/media-ci.yaml)
+For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/media-ci.yaml)
 
 ### Database setup
 #### Grant access to Database
