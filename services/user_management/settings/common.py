@@ -69,32 +69,28 @@ WSGI_APPLICATION = "ecommerce_common.util.django.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
+# Note, `mysqlclient` defaults to UNIX socket and will look
+# for socket file in local file system, while such file does not exist in
+# dockerized database server
 DATABASES = {  # will be update with secrets at the bottom of file
     "default": {  # only give minimal privilege to start django app server
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt",
         "CONN_MAX_AGE": 0,  # set 0 only for debugging purpose
-        "TEST": {"NAME": "test_ecommerce_usermgt"},
+        "TEST": {"NAME": os.environ["DB_NAME"]},
     },
-    "site2_dba": {  # apply this setup only when you run management commands at backend server
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt",
-        "CONN_MAX_AGE": 0,
-    },
-    "test_site2_dba": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "test_ecommerce_usermgt",
-        "CONN_MAX_AGE": 0,
-    },
+    # apply this setup only when you run management commands at backend server
+    "site2_dba": {"CONN_MAX_AGE": 45},
+    "test_site2_dba": {"CONN_MAX_AGE": 0},
     "usermgt_service": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt",
-        "CONN_MAX_AGE": 0,
-        "reversed_app_label": [
-            "user_management",
-        ],  # 'auth',
+        "CONN_MAX_AGE": 57,
+        "reversed_app_label": ["user_management"],  # 'auth',
     },
 }  # end of database settings
+
+for v in DATABASES.values():
+    v["ENGINE"] = "django.db.backends.mysql"
+    v["NAME"] = os.environ["DB_NAME"]
+    v["HOST"] = os.environ["DB_HOST"]
+    v["PORT"] = os.environ["DB_PORT"]
 
 DATABASE_ROUTERS = ["ecommerce_common.models.db.ServiceModelRouter"]
 
@@ -105,14 +101,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
     },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 AUTH_USER_MODEL = "user_management.LoginAccount"
@@ -123,17 +115,10 @@ AUTHENTICATION_BACKENDS = ["user_management.backends.ExtendedModelBackend"]
 CACHES = {
     "default": {
         "TIMEOUT": 3600,
-        "OPTIONS": {
-            "MAX_ENTRIES": 512,
-            # TODO, figure out how to use KEY_PREFIX and KEY_FUNCTION
-        },
+        # TODO, figure out how to use KEY_PREFIX and KEY_FUNCTION
+        "OPTIONS": {"MAX_ENTRIES": 512},
     },
-    "log_level_change": {
-        "TIMEOUT": None,
-        "OPTIONS": {
-            "MAX_ENTRIES": 1024,
-        },
-    },
+    "log_level_change": {"TIMEOUT": None, "OPTIONS": {"MAX_ENTRIES": 1024}},
 }
 
 AUTH_KEYSTORE = {
@@ -414,10 +399,3 @@ setup_secrets(
     portal_type="staff",
     interface_type="usermgt",
 )
-
-# Force TCP connection, `mysqlclient` defaults to UNIX socket and will look
-# for socket file in local file system, while such file does not exist in
-# dockerized database server
-for d in DATABASES.values():
-    if "mysql" in d["ENGINE"] and d["HOST"] == "localhost":
-        d["HOST"] = "127.0.0.1"

@@ -1,0 +1,30 @@
+services:
+  mariadb:
+    container_name: usrmgt-test-mariadb
+    env_file:
+      - ./test.env
+    restart: no
+    networks:
+      - net1
+    volumes:
+      # Mounts the custom configuration file into the container.
+      # The source path is relative to this compose file.
+      - ./mariadb-cfg/usrmgt-test.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro      
+      # Mounts the host directory for persistent data storage.
+      # This is a bind mount to a specific path on your host machine.
+      - /data/db/test/mariadb/e-comm/usrmgt:/var/lib/mysql
+      # mount log / error files for troubleshooting
+      - /var/log/mariadb/test/e-comm/usrmgt:/var/log/mysql
+
+networks:
+  net1:
+    name: ec-usrmgt-test-net
+    # auto-create network on start the containers,
+    # auto-delete it on stop (and no other containers are attached to the network)
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.1.0/24
+          ip_range: 172.19.1.0/25
+          gateway: 172.19.1.254
+

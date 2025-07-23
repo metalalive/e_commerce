@@ -1,0 +1,14 @@
+services:
+  mariadb:
+    # options can be overwritten by successive docker compose file for
+    # multiple runtime environments, e.g. dev / test / production
+    image: mariadb:11-noble
+    container_name: usrmgt-generic-mariadb
+    environment:
+      - DB_NAME=ecommerce_usermgt
+    ports:
+      # Maps port 3306 on the host to port 3307 in the container
+      - "3306:3307"
+    volumes:
+      - ./mariadb-cfg/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh:ro
+

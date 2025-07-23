@@ -18,7 +18,7 @@ from tests.common import _fixtures
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
-MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath("user_management/data/mail")
+MAIL_DATA_BASEPATH = django_settings.APP_DIR.joinpath("data/mail")
 
 
 class BaseTestCase(TransactionTestCase):

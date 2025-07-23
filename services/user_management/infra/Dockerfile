@@ -1,0 +1,92 @@
+# FROM python:3.13-slim
+FROM ubuntu:24.04 AS builder0
+
+# Install OS-level dependency , python dependency management tool (pipenv).
+# and python dependencies for virtual env,
+
+# RUN apt update \
+#     && apt install -y --no-install-recommends ca-certificates \
+#     && echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list \
+#     && apt update \
+#     && apt install -y python3.13-dev  mariadb-client  libmariadb-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+RUN apt update \
+    && apt install --no-install-suggests -y software-properties-common  \
+    && add-apt-repository ppa:deadsnakes/ppa  \
+    && apt update \
+    && apt install -y python3.13 python3.13-dev python3.13-venv \
+       mariadb-client  libmariadb-dev \
+    && apt install --no-install-suggests -y gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# use the pip bound to specific python version , instead of system-level
+# `python3-pip` from APT
+
+RUN python3.13 -m ensurepip --default-pip \
+    && python3.13 -m pip install --upgrade pip \
+    && python3.13 -m pip install pipenv
+
+# switch between working directories
+WORKDIR /app/common/data
+COPY common/data  .
+# TODO, switch to docker secret for better security
+
+WORKDIR /app/common/python
+COPY common/python/Pipfile  common/python/pyproject.toml \
+     common/python/README.md .
+
+COPY common/python/tests   ./tests
+
+# according to dockerdoc, If the source is a directory, the contents of the directory are
+# copied, including filesystem metadata. The directory itself isn't copied, only its contents
+WORKDIR /app/common/python/src
+COPY common/python/src/ecommerce_common ./ecommerce_common
+COPY common/python/src/softdelete ./softdelete
+
+WORKDIR /app/common/python/c_exts
+COPY common/python/c_exts/pyproject.toml \
+     common/python/c_exts/*.c \
+     common/python/c_exts/*.py \
+     .
+
+WORKDIR /app/usermgt
+RUN python3.13 -m venv /app/usermgt/.venv
+ENV PATH="/app/usermgt/.venv/bin:$PATH"
+
+# the command below does not work, `source` is not included in base image
+# source /app/usermgt/.venv/bin/activate
+
+# from here python virtual enviroment should be started , it is required since my
+# application is built by non-default python version (3.13) and I try to avoid
+# breaking OS-default python (3.12)
+
+WORKDIR /app/common/python/c_exts
+RUN python3.13 -m pip install build==1.2.2
+RUN python3.13 -m build ./
+
+WORKDIR /app/usermgt
+COPY user_management/Pipfile  user_management/Pipfile.lock \
+     user_management/README.md  user_management/devtools.py \
+     user_management/pyproject.toml  user_management/manage.py \
+     .
+
+COPY user_management/data  ./data
+COPY user_management/src   ./src
+COPY user_management/tests ./tests
+COPY user_management/settings ./settings
+
+RUN pipenv install
+RUN pipenv run pip install /app/common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp313-cp313-linux_x86_64.whl
+
+#FROM ubuntu:24.04 AS test0
+#WORKDIR /app/usermgt
+#COPY --from=builder0 /app/usermgt/.venv /app/usermgt/.venv
+
+WORKDIR /app/log
+WORKDIR /app/entry
+VOLUME ["/app/log", "/app/entry"]
+
+WORKDIR /app/usermgt
+CMD ["/bin/sh", "/app/entry/run_my_app"]
+

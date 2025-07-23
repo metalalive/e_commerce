@@ -1,3 +1,17 @@
+mkdir -p /app/tmp/log/test/
+cd /app/usermgt
+
+export DB_NAME=ecommerce_usermgt
+export DB_HOST=usrmgt-test-mariadb
+export DB_PORT=3307
+
+pipenv run python ./manage.py test  tests.middlewares.cors  --settings settings.test  --verbosity=2  
+pipenv run python ./manage.py test  tests.middlewares.csrf  --settings settings.test  --verbosity=2
+pipenv run python ./manage.py test  tests.util   --settings settings.test  --verbosity=2
+pipenv run python -m unittest  tests.keystore.keygen  -v
+SYS_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.persistence  -v
+SYS_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.manager  -v
+
 pipenv run python ./manage.py test tests.login  --settings settings.test  --keepdb --verbosity=2
 pipenv run python ./manage.py test tests.role.views   --settings settings.test --keepdb --verbosity=2
 pipenv run python ./manage.py test tests.group.models --settings settings.test --keepdb --verbosity=2
