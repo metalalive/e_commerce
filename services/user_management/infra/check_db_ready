@@ -1,0 +1,15 @@
+wait_for_db() {
+    local interval_seconds=$1
+    local timeout_minutes=$2
+    local end_time=$(( $(date +%s) + timeout_minutes * 60 ))
+
+    # Continuously ping the MariaDB server until it's ready to accept connections.
+    until mariadb-admin ping --host=$DB_HOST --port=$DB_PORT --user=$SITEDBA_UNAME --password=$SITEDBA_PASSWORD --silent; do
+        if [ $(date +%s) -gt $end_time ]; then
+            echo "Error: Timeout waiting for the MariaDB server to be available." >&2
+            exit 1
+        fi
+        echo "Waiting for the MariaDB server to be available..."
+        sleep "$interval_seconds"
+    done
+}

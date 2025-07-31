@@ -12,4 +12,3 @@ ks_cfg["filepath"] = BASE_DIR.joinpath(  # noqa : F405
 # TODO, separate accounts in DB server
 DATABASES.pop("test_site2_dba")  # noqa : F405
 DATABASES["default"].update(DATABASES["usermgt_service"])  # noqa : F405
-render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/dev"))  # noqa : F405

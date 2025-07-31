@@ -98,16 +98,22 @@ docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-
 docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  down  --volumes
 ```
 
-- the development environment can be built by similar command `docker compose` shown above, except configuration file has to be `docker-compose-dev.yml`
+For development environment
+- it can be built by similar command `docker compose` above, with different configuration file `docker-compose-dev.yml`
+- add option `--profile initialschema` to run database schema migration
+- add option `--profile initialdata` to set up minimal user data for initial application launch after database schema migration
+
 
 ### Container for Common Environment
 ```bash
 cd /path/to/project-home/services
 
-docker build --tag=usrmgt-backend-app --file=user_management/infra/Dockerfile  .
+docker build --tag=usrmgt-backend-base --file=user_management/infra/Dockerfile  .
+
+docker image rm <your-image-tag-name>
 ```
 
-After custom image `usrmgt-backend-app` is built successfully, run development server or test cases with command `docker run` , the image `usrmgt-backend-app` , and the corresponding script file under `./infra`
+After custom image `usrmgt-backend-base` is built successfully, run development server or test cases with command `docker run` , the image `usrmgt-backend-base` , and the corresponding script file under `./infra`
 
 ---
 
@@ -210,7 +216,7 @@ cd /path/to/project-home/services
 
 docker --debug run --interactive --tty  --network=ec-usrmgt-test-net \
   --volume "$PWD/user_management/infra/run_test_container:/app/entry/run_my_app" \
-  --name usrmgt-backend-testapp-0  usrmgt-backend-app:latest
+  --name usrmgt-backend-testapp-0  usrmgt-backend-base:latest
 ```
 
 ## Development

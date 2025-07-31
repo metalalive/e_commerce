@@ -1,9 +1,14 @@
-mkdir -p /app/tmp/log/test/
-cd /app/usermgt
-
 export DB_NAME=ecommerce_usermgt
 export DB_HOST=usrmgt-test-mariadb
 export DB_PORT=3307
+export APP_LOG_PATH=tmp/log/test
+
+# wait for DB server to be ready, test interval = 10 sec, timeout = 5 min
+. infra/check_db_ready
+wait_for_db 10 5
+
+mkdir -p /app/$APP_LOG_PATH/
+cd /app/usermgt
 
 pipenv run python ./manage.py test  tests.middlewares.cors  --settings settings.test  --verbosity=2  
 pipenv run python ./manage.py test  tests.middlewares.csrf  --settings settings.test  --verbosity=2

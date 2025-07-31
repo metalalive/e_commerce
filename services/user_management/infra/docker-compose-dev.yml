@@ -1,0 +1,59 @@
+services:
+  mariadb:
+    container_name: usrmgt-dev-mariadb
+    env_file:
+      - ./dev.env
+    restart: on-failure:3
+    stop_grace_period: 40s
+    volumes:
+      # Mounts the custom configuration file into the container.
+      # The source path is relative to this compose file.
+      - ./mariadb-cfg/usrmgt-dev.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro      
+      # Mounts the host directory for persistent data storage.
+      # This is a bind mount to a specific path on your host machine.
+      - /data/db/dev/mariadb/e-comm/usrmgt:/var/lib/mysql
+      # mount log / error files for troubleshooting
+      - /var/log/mariadb/dev/e-comm/usrmgt:/var/log/mysql
+    networks:
+      - net1
+
+  db-schema-migration:
+    container_name: usrmgt-dev-db-schema-migrate
+    env_file:
+      - ./dev.env
+    networks:
+      - net1
+
+  db-initial-data-import:
+    container_name: usrmgt-dev-db-data-migrate
+    env_file:
+      - ./dev.env
+    networks:
+      - net1
+
+  api-server-after-init-data:
+    container_name: usrmgt-dev-init-apisrv
+    env_file:
+      - ./dev.env
+    restart: no
+    #on-failure:2
+    # Django server recognizes only SIGINT as shutdown signal
+    stop_signal: SIGINT
+    stop_grace_period: 1m15s
+    volumes:
+      - ./api_server_dev:/app/entry/run_my_app
+      - ../../tmp/log/dev:/app/tmp/log/dev
+    networks:
+      - net1
+
+
+networks:
+  net1:
+    name: ec-usrmgt-dev-net
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.2.0/24
+          ip_range: 172.19.2.0/25
+          gateway: 172.19.2.254
+

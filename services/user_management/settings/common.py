@@ -28,8 +28,9 @@ os.environ["SYS_BASE_PATH"] = str(BASE_DIR)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+extra_hosts = os.environ.get("SERVER_EXTRA_ALLOWED_ADDRS", "").split(",")
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-
+ALLOWED_HOSTS.extend(extra_hosts)
 
 # Application definition
 
@@ -82,7 +83,7 @@ DATABASES = {  # will be update with secrets at the bottom of file
     "test_site2_dba": {"CONN_MAX_AGE": 0},
     "usermgt_service": {
         "CONN_MAX_AGE": 57,
-        "reversed_app_label": ["user_management"],  # 'auth',
+        "reversed_app_label": ['auth', "user_management"],  # 
     },
 }  # end of database settings
 
@@ -206,6 +207,7 @@ _LOG_FMT_DBG_BASE = [
 ]
 _LOG_FMT_DBG_VIEW = ["{req_ip}", "{req_mthd}", "{uri}"] + _LOG_FMT_DBG_BASE
 
+AP_LOG_FULLPATH = BASE_DIR.joinpath(os.environ["APP_LOG_PATH"])
 
 LOGGING = {
     "version": 1,
@@ -231,8 +233,44 @@ LOGGING = {
             "class": "logging.StreamHandler",
             #'stream': 'ext://sys.stdout',
         },
+        "default_file": {
+            "level": "WARNING",
+            "formatter": "shortened_fmt",
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": str(os.path.join(AP_LOG_FULLPATH, "usermgt_default.log")),
+            # daily log, keep all log files for one year
+            "backupCount": 366,
+            # new file is created every 0 am (local time)
+            "atTime": time(hour=0, minute=0, second=0),
+            "encoding": "utf-8",
+            "delay": True,  # lazy creation
+        },
+        "dbg_base_file": {
+            "level": "INFO",
+            "formatter": "dbg_base_fmt",
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": str(os.path.join(AP_LOG_FULLPATH, "usermgt_base.log")),
+            "backupCount": 190,
+            "atTime": time(hour=0, minute=0, second=0),
+            "encoding": "utf-8",
+            "delay": True,  # lazy creation
+        },
+        "dbg_views_file": {
+            "level": "INFO",
+            "formatter": "dbg_view_fmt",
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": str(os.path.join(AP_LOG_FULLPATH, "usermgt_views.log")),
+            "backupCount": 150,
+            "atTime": time(hour=0, minute=0, second=0),
+            "encoding": "utf-8",
+            "delay": True,  # lazy creation
+        },
     },
     "loggers": {
+        "ecommerce_common.cors.middleware": {
+            "level": "DEBUG",
+            "handlers": ["dbg_base_file"],
+        },
         "ecommerce_common.views.api": {
             "level": "INFO",
             "handlers": ["dbg_views_file", "err_console"],
@@ -343,46 +381,6 @@ LOGGING = {
         "handlers": ["default_file"],
     },
 }  # end of LOGGING
-
-
-def render_logging_handler_localfs(log_dir):
-    _log_base_dir = os.path.join(BASE_DIR, log_dir)
-    handlers = {
-        "default_file": {
-            "level": "WARNING",
-            "formatter": "shortened_fmt",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": str(os.path.join(_log_base_dir, "usermgt_default.log")),
-            # daily log, keep all log files for one year
-            "backupCount": 366,
-            # new file is created every 0 am (local time)
-            "atTime": time(hour=0, minute=0, second=0),
-            "encoding": "utf-8",
-            "delay": True,  # lazy creation
-        },
-        "dbg_views_file": {
-            "level": "INFO",
-            "formatter": "dbg_view_fmt",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": str(os.path.join(_log_base_dir, "usermgt_views.log")),
-            "backupCount": 150,
-            "atTime": time(hour=0, minute=0, second=0),
-            "encoding": "utf-8",
-            "delay": True,  # lazy creation
-        },
-        "dbg_base_file": {
-            "level": "INFO",
-            "formatter": "dbg_base_fmt",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "filename": str(os.path.join(_log_base_dir, "usermgt_base.log")),
-            "backupCount": 190,
-            "atTime": time(hour=0, minute=0, second=0),
-            "encoding": "utf-8",
-            "delay": True,  # lazy creation
-        },
-    }
-    LOGGING["handlers"].update(handlers)
-
 
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",

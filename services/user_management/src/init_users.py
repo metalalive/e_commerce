@@ -68,6 +68,11 @@ def data_migration():
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.migration")
     setup()
     import user_management
+    from user_management.models import LoginAccount
+
+    if LoginAccount.objects.exists():
+        print("[INFO] User accounts already exist, skipping initial data migration.")
+        return
 
     dst_path = os.path.dirname(user_management.__file__)
     renderred_fixture_path = render_fixture(

@@ -15,6 +15,21 @@ services:
       - /data/db/test/mariadb/e-comm/usrmgt:/var/lib/mysql
       # mount log / error files for troubleshooting
       - /var/log/mariadb/test/e-comm/usrmgt:/var/log/mysql
+  
+  run-test:
+    container_name: usrmgt-backend-testapp-0
+    image: usrmgt-backend-base:latest
+    pull_policy: never
+    env_file:
+      - ./test.env
+    restart: no
+    volumes:
+      - ./run_test_container:/app/entry/run_my_app
+    depends_on:
+      mariadb:
+        condition: service_started
+    networks:
+      - net1
 
 networks:
   net1:

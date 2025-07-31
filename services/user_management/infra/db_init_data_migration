@@ -1,0 +1,5 @@
+mkdir -p /app/$APP_LOG_PATH/
+cd /app/usermgt
+
+pipenv run python3 -m  user_management.init_users
+

@@ -1,0 +1,12 @@
+mkdir -p /app/$APP_LOG_PATH/
+cd /app/usermgt
+
+# wait for DB server to be ready, test interval = 10 sec, timeout = 6 min
+. infra/check_db_ready
+wait_for_db 10 6
+
+echo "MariaDB server is available. Proceeding with database migrations."
+
+pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
+pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
+

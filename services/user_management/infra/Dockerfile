@@ -75,6 +75,7 @@ COPY user_management/data  ./data
 COPY user_management/src   ./src
 COPY user_management/tests ./tests
 COPY user_management/settings ./settings
+COPY user_management/infra/check_db_ready ./infra/
 
 RUN pipenv install
 RUN pipenv run pip install /app/common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp313-cp313-linux_x86_64.whl
