@@ -1,0 +1,1 @@
+{"vhosts":[{"name":"/"},{"name":"/integration_test"}],"exchanges":[{"name":"rpc-default-allapps","vhost":"/","type":"direct","durable":true,"auto_delete":false,"internal":false,"arguments":{}}, {"name":"rpc-default-allapps","vhost":"/integration_test","type":"direct","durable":true,"auto_delete":false,"internal":false,"arguments":{}}],"queues":[],"bindings":[]}

@@ -1,0 +1,11 @@
+services:
+  rabbitmq-server:
+    image: rabbitmq-custom-init:3.13-management
+    container_name: inter-apps-msgq-generic
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - NUM_SECS_WAIT4READY=16
+    restart: on-failure:2
+

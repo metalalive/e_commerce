@@ -1,4 +1,5 @@
 .aider*
+infra/dev.env
 services/common/data/secrets.json
 services/common/python/Pipfile
 services/common/python/poetry.lock
