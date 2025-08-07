@@ -1,3 +1,5 @@
+# Note , docker does not support reference block configuration
+# across different files
 services:
   mariadb:
     container_name: usrmgt-dev-mariadb
@@ -15,21 +17,25 @@ services:
       # mount log / error files for troubleshooting
       - /var/log/mariadb/dev/e-comm/usrmgt:/var/log/mysql
     networks:
-      - net1
+      - net11
 
   db-schema-migration:
     container_name: usrmgt-dev-db-schema-migrate
     env_file:
       - ./dev.env
+    volumes:
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
     networks:
-      - net1
+      - net11
 
   db-initial-data-import:
     container_name: usrmgt-dev-db-data-migrate
     env_file:
       - ./dev.env
+    volumes:
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
     networks:
-      - net1
+      - net11
 
   api-server-after-init-data:
     container_name: usrmgt-dev-init-apisrv
@@ -42,13 +48,32 @@ services:
     stop_grace_period: 1m15s
     volumes:
       - ./api_server_dev:/app/entry/run_my_app
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
       - ../../tmp/log/dev:/app/tmp/log/dev
+      - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
     networks:
-      - net1
+      - net11
+      - net12
 
+  rpc-consumer:
+    container_name: usrmgt-dev-rpcconsumer
+    env_file:
+      - ./dev.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=settings.development
+    restart: no
+    stop_grace_period: 18s
+    volumes:
+      - ./run_rpc_consumer:/app/entry/run_my_app
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../tmp/log/dev:/app/tmp/log/dev
+      - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks
+    networks:
+      - net11
+      - net12
 
 networks:
-  net1:
+  net11:
     name: ec-usrmgt-dev-net
     external: false
     ipam:
@@ -56,4 +81,7 @@ networks:
         - subnet: 172.19.2.0/24
           ip_range: 172.19.2.0/25
           gateway: 172.19.2.254
+  net12:
+    name: ec-intersrvs-dev-net
+    external: true
 

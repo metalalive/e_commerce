@@ -29,14 +29,16 @@ RUN python3.13 -m ensurepip --default-pip \
 
 # switch between working directories
 WORKDIR /app/common/data
-COPY common/data  .
-# TODO, switch to docker secret for better security
+COPY common/data/app_code.json \
+     common/data/dsl_clean_useraction_log.json \
+     common/data/dsl_clean_xpack_monitoring_log.json \
+     common/data/nationality_code.json \
+     common/data/unit_of_measurement.json \
+     .
 
 WORKDIR /app/common/python
 COPY common/python/Pipfile  common/python/pyproject.toml \
      common/python/README.md .
-
-COPY common/python/tests   ./tests
 
 # according to dockerdoc, If the source is a directory, the contents of the directory are
 # copied, including filesystem metadata. The directory itself isn't copied, only its contents
@@ -49,6 +51,9 @@ COPY common/python/c_exts/pyproject.toml \
      common/python/c_exts/*.c \
      common/python/c_exts/*.py \
      .
+
+WORKDIR  /app/common/python/tests
+COPY common/python/tests .
 
 WORKDIR /app/usermgt
 RUN python3.13 -m venv /app/usermgt/.venv
@@ -73,7 +78,6 @@ COPY user_management/Pipfile  user_management/Pipfile.lock \
 
 COPY user_management/data  ./data
 COPY user_management/src   ./src
-COPY user_management/tests ./tests
 COPY user_management/settings ./settings
 COPY user_management/infra/check_db_ready ./infra/
 

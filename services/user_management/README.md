@@ -87,33 +87,18 @@ flowchart LR
 ## Build
 For full build / test instructions please refer to [github action workflow script](../../.github/workflows/usermgt-ci.yaml)
 
-### Initialize infrastructure
-infrastructure including database is running in docker container, check following command :
-
-```bash
-# build up database, docker network ... etc.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  up --detach
-
-# stop database, docker network ... etc then remove them.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  down  --volumes
-```
-
-For development environment
-- it can be built by similar command `docker compose` above, with different configuration file `docker-compose-dev.yml`
-- add option `--profile initialschema` to run database schema migration
-- add option `--profile initialdata` to set up minimal user data for initial application launch after database schema migration
-
-
-### Container for Common Environment
+### Base Image for Application Environment
 ```bash
 cd /path/to/project-home/services
 
-docker build --tag=usrmgt-backend-base --file=user_management/infra/Dockerfile  .
+docker build --tag=usrmgt-backend-base:latest --file=user_management/infra/Dockerfile  .
 
-docker image rm <your-image-tag-name>
+docker image rm  usrmgt-backend-base:latest
 ```
 
-After custom image `usrmgt-backend-base` is built successfully, run development server or test cases with command `docker run` , the image `usrmgt-backend-base` , and the corresponding script file under `./infra`
+After custom image `usrmgt-backend-base:latest` is built successfully, use it for one of following tasks
+- run application in development ensironment
+- run all test cases
 
 ---
 
@@ -191,6 +176,23 @@ pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings
 ---
 
 ## Run
+### development environment
+database server and migration process are encapsulated in docker container, check following command :
+
+```bash
+# build up database, docker network ... etc.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml  up --detach
+
+# stop database, docker network ... etc then remove them.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml  down  --volumes
+```
+
+- database server is always started by default.
+- consider extra options when starting application:
+  - `--profile serverstart`: perform database schema migration, start API server, and RPC consumer database 
+  - `--profile initialstart`: set up minimal user data for initial application launch after database schema migration
+
+---
 ### application server
 ```bash
 pipenv run python3 ./manage.py runserver --settings  settings.development  8008 \
@@ -217,7 +219,20 @@ cd /path/to/project-home/services
 docker --debug run --interactive --tty  --network=ec-usrmgt-test-net \
   --volume "$PWD/user_management/infra/run_test_container:/app/entry/run_my_app" \
   --name usrmgt-backend-testapp-0  usrmgt-backend-base:latest
+
+docker stop usrmgt-backend-testapp-0
 ```
+
+alternatively you can use `docker compose` :
+
+```bash
+# build up database, docker network ... etc.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  up --detach
+
+# stop database, docker network ... etc then remove them.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  down  --volumes
+```
+
 
 ## Development
 ### Code Formatter
