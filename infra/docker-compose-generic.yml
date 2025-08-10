@@ -9,3 +9,16 @@ services:
       - NUM_SECS_WAIT4READY=16
     restart: on-failure:2
 
+  common-cronjob-publisher:
+    image: ecom-common-py:latest
+    container_name: ecom-cronjob-assigner
+    restart: no
+    environment:
+      SYS_BASE_PATH: /app
+    working_dir: /app/common/python
+    volumes:
+      - ./run_cron_job:/app/entry/run_my_app
+    depends_on:
+      rabbitmq-server:
+        condition: service_started
+
