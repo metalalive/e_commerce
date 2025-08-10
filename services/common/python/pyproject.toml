@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ecommerce-common"
-version = "0.1.3"
+version = "0.1.4"
 description = "common python modules shared among applications"
 authors = ["T.H."]
 license = "MIT"
@@ -11,7 +11,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 #python-logstash-async = "2.5.0"
 celery = "^5.4.0"
 

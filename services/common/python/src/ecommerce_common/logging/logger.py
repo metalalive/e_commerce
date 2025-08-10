@@ -74,7 +74,7 @@ class ExtendedLogger(logging.Logger):
         stacklevel += 1
         rv = super().findCaller(stack_info=stack_info, stacklevel=stacklevel)
         rv = list(rv)
-        base_path = type(self).sys_base_path
+        base_path = type(self).sys_base_path()
         fullpath = rv[0]
         if fullpath.find(base_path, 0, len(fullpath)) == 0:
             rv[0] = fullpath[len(base_path) :]
@@ -88,7 +88,6 @@ class ExtendedLogger(logging.Logger):
         return rv
 
     @classmethod
-    @property
     def sys_base_path(cls):
         if not hasattr(cls, "_sys_base_path"):
             _acquireLock()

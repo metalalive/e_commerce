@@ -110,7 +110,10 @@ class IdGapNumberFinder:
             rand_value = random.randrange(max_value)
             setattr(instance, id_field_name, rand_value)
 
-    # TODO: rename to `refresh-gap-ranges`
+    # TODO
+    # - rename to `refresh-gap-ranges`
+    # - abstract this method , the classes in applications are NOT always stick to
+    #   relational database (it could be no-sql database)
     def get_gap_ranges(self, max_value):
         """
         return pairs of range value available for assigning numeric ID to new instance
@@ -131,7 +134,10 @@ class IdGapNumberFinder:
             self._gap_ranges = self.low_lvl_get_gap_range(raw_sql_queries)
         return self._gap_ranges
 
-    # TODO: rename to `async-refresh-gap-ranges`
+    # TODO
+    # - rename to `async-refresh-gap-ranges`
+    # - abstract this method , the classes in applications are NOT always stick to
+    #   relational database (it could be no-sql database)
     async def async_get_gap_ranges(self, max_value):
         model_cls = self.orm_model_class
         db_table = self.get_db_table_name(model_cls)

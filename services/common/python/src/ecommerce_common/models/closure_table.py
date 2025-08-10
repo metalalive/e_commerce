@@ -45,7 +45,7 @@ def filter_closure_nodes_recovery(records_in, app_label, model_name):
     node_ct = record.changeset.content_type
     node_cls = node_ct.model_class()
     del_node = node_cls.objects.get(pk=record.changeset.object_id)
-    path_ct = ContentType.objects.get(app_label=app_label, model=model_name)
+    path_ct = ContentType.objects.get(app_label=app_label, model=model_name.lower())
     cset_path_ids = records_in.filter(content_type=path_ct.pk).values_list(
         "object_id", flat=True
     )

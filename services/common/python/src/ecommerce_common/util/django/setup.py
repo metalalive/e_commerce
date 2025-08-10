@@ -18,6 +18,7 @@ def _refresh_test_enable():
 
 
 def setup_secrets(secrets_path, module_path, portal_type, interface_type):
+    # TODO, remove needless argument portal-type
     _module = sys.modules[module_path]
     secrets = None
     with open(secrets_path, "r") as f:
