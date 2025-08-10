@@ -37,8 +37,8 @@ services:
     networks:
       - net11
 
-  api-server-after-init-data:
-    container_name: usrmgt-dev-init-apisrv
+  api-server:
+    container_name: usrmgt-dev-apisrv
     env_file:
       - ./dev.env
     restart: no
@@ -66,11 +66,42 @@ services:
     volumes:
       - ./run_rpc_consumer:/app/entry/run_my_app
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
-      - ../../tmp/log/dev:/app/tmp/log/dev
+      - ../../tmp/log/dev:/app/log
       - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks
     networks:
       - net11
       - net12
+
+  smoke-test:
+    container_name: usrmgt-dev-smoketest
+    image: usrmgt-backend-base:latest
+    pull_policy: never
+    env_file:
+      - ./dev.env
+    environment:
+      - DB_NAME=ecommerce_usermgt
+      - DB_PORT=3307
+      - API_HOST=usrmgt-dev-apisrv
+      - API_PORT=8008
+    restart: no
+    volumes:
+      - ../tests/smoke_test.py:/app/usermgt/tests/smoke_test.py:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+    working_dir: /app/usermgt
+    command: pipenv run python3 -m tests.smoke_test
+    profiles:
+      - initialstart
+      - serverstart
+    depends_on:
+      db-initial-data-import:
+        condition: service_completed_successfully
+      api-server:
+        condition: service_started
+      rpc-consumer:
+        condition: service_started
+    networks:
+      - net11
 
 networks:
   net11:

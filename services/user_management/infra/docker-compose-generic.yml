@@ -52,17 +52,15 @@ services:
       db-schema-migration:
         condition: service_completed_successfully
 
-  api-server-after-init-data:
+  api-server:
     <<: *reuse-basesrv-cfg
-    container_name: usrmgt-unknown-init-apisrv
-    profiles:
-      - initialstart
-      - serverstart
+    container_name: usrmgt-unknown-apisrv
     ports:
       - "8008:8008"
+    profiles:
+      - serverstart
     depends_on:
-      # TODO, reconsider whether to depend on initial data migration
-      db-initial-data-import:
+      db-schema-migration:
         condition: service_completed_successfully
 
   rpc-consumer:

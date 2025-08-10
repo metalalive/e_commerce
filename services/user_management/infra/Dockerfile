@@ -4,13 +4,6 @@ FROM ubuntu:24.04 AS builder0
 # Install OS-level dependency , python dependency management tool (pipenv).
 # and python dependencies for virtual env,
 
-# RUN apt update \
-#     && apt install -y --no-install-recommends ca-certificates \
-#     && echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list \
-#     && apt update \
-#     && apt install -y python3.13-dev  mariadb-client  libmariadb-dev \
-#     && rm -rf /var/lib/apt/lists/*
-
 RUN apt update \
     && apt install --no-install-suggests -y software-properties-common  \
     && add-apt-repository ppa:deadsnakes/ppa  \
