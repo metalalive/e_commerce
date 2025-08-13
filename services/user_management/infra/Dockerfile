@@ -1,4 +1,3 @@
-# FROM python:3.13-slim
 FROM ubuntu:24.04 AS builder0
 
 # Install OS-level dependency , python dependency management tool (pipenv).
@@ -8,8 +7,8 @@ RUN apt update \
     && apt install --no-install-suggests -y software-properties-common  \
     && add-apt-repository ppa:deadsnakes/ppa  \
     && apt update \
-    && apt install -y python3.13 python3.13-dev python3.13-venv \
-       mariadb-client  libmariadb-dev \
+    && apt install --no-install-suggests -y python3.13 python3.13-dev \
+       python3.13-venv  mariadb-client  libmariadb-dev \
     && apt install --no-install-suggests -y gcc \
     && rm -rf /var/lib/apt/lists/*
 
@@ -71,20 +70,37 @@ COPY user_management/Pipfile  user_management/Pipfile.lock \
 
 COPY user_management/data  ./data
 COPY user_management/src   ./src
-COPY user_management/settings ./settings
 COPY user_management/infra/check_db_ready ./infra/
 
 RUN pipenv install
 RUN pipenv run pip install /app/common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp313-cp313-linux_x86_64.whl
+RUN find /app/usermgt/.venv -depth -type d -name "__pycache__" -exec rm -rf {} +
 
-#FROM ubuntu:24.04 AS test0
-#WORKDIR /app/usermgt
-#COPY --from=builder0 /app/usermgt/.venv /app/usermgt/.venv
+
+FROM python:3.13-slim AS final0
+RUN apt update && apt install -y --no-install-recommends mariadb-client libmariadb-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/log
 WORKDIR /app/entry
 VOLUME ["/app/log", "/app/entry"]
 
-WORKDIR /app/usermgt
-CMD ["/bin/sh", "/app/entry/run_my_app"]
 
+WORKDIR /app/common/data
+COPY --from=builder0 /app/common/data  .
+
+WORKDIR /app/usermgt
+COPY --from=builder0 /app/usermgt/.venv ./.venv
+COPY --from=builder0 /app/usermgt/data  ./data
+COPY --from=builder0 /app/usermgt/src   ./src
+COPY --from=builder0 /app/usermgt/infra/check_db_ready ./infra/
+COPY --from=builder0 /app/usermgt/devtools.py  /app/usermgt/manage.py ./
+
+# Ubuntu installs non-system python under `/usr/bin` , however `python:3.13-slim`
+# installs default python under `/usr/local/bin` .
+# change the symbolic link to resolve path error
+RUN unlink ./.venv/bin/python3.13 &&  \
+    ln -s /usr/local/bin/python3  ./.venv/bin/python3.13
+
+ENV PATH="/app/usermgt/.venv/bin:$PATH"
+CMD ["/bin/sh", "/app/entry/run_my_app"]

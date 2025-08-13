@@ -26,8 +26,11 @@ services:
     volumes:
       - ./run_test_container:/app/entry/run_my_app
       - ../tests:/app/usermgt/tests:ro
+      - ../settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../settings/test.py:/app/usermgt/settings/test.py:ro
       - ../../common/data/cors-test.json:/app/common/data/cors.json:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/python/tests/gmail-crt-chain.pem:/app/common/python/tests/gmail-crt-chain.pem:ro
     depends_on:
       mariadb:
         condition: service_started

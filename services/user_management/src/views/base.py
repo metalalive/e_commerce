@@ -50,7 +50,7 @@ from .constants import _PRESERVED_ROLE_IDS, WEB_HOST
 #   after parsing logging configuration at settings.py
 _logger = logging.getLogger(__name__)
 
-MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath("user_management/data/mail")
+MAIL_DATA_BASEPATH = django_settings.APP_DIR.joinpath("data/mail")
 
 
 class RoleAPIView(AuthCommonAPIView):
@@ -159,9 +159,10 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
         return self.destroy(request, *args, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        modelname = self.serializer_class.Meta.model.__name__
         kwargs["return_data_after_done"] = True
         kwargs["resource_content_type"] = ContentType.objects.get(
-            app_label="user_management", model=self.serializer_class.Meta.model.__name__
+            app_label="user_management", model=modelname.lower()
         )
         return self.recovery(
             request=request, profile_id=request.user.profile.id, *args, **kwargs
@@ -242,9 +243,10 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
         return response
 
     def patch(self, request, *args, **kwargs):
+        modelname = self.serializer_class.Meta.model.__name__
         kwargs["return_data_after_done"] = True
         kwargs["resource_content_type"] = ContentType.objects.get(
-            app_label="user_management", model=self.serializer_class.Meta.model.__name__
+            app_label="user_management", model=modelname.lower()
         )
         return self.recovery(
             request=request, profile_id=request.user.profile.id, *args, **kwargs

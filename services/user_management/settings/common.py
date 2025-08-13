@@ -83,7 +83,7 @@ DATABASES = {  # will be update with secrets at the bottom of file
     "test_site2_dba": {"CONN_MAX_AGE": 0},
     "usermgt_service": {
         "CONN_MAX_AGE": 57,
-        "reversed_app_label": ['auth', "user_management"],  # 
+        "reversed_app_label": ["auth", "user_management"],  #
     },
 }  # end of database settings
 
@@ -268,7 +268,11 @@ LOGGING = {
     },
     "loggers": {
         "ecommerce_common.cors.middleware": {
-            "level": "DEBUG",
+            "level": "WARNING",
+            "handlers": ["dbg_base_file"],
+        },
+        "ecommerce_common.csrf.middleware": {
+            "level": "INFO",
             "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.views.api": {
@@ -325,6 +329,10 @@ LOGGING = {
         },
         "ecommerce_common.util.async_tasks": {
             "level": "INFO",
+            "handlers": ["dbg_base_file"],
+        },
+        "user_management.backends": {
+            "level": "WARNING",
             "handlers": ["dbg_base_file"],
         },
         "user_management.views.auth": {

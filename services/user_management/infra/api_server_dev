@@ -1,6 +1,3 @@
-mkdir -p /app/$APP_LOG_PATH/
-cd /app/usermgt
-
 # wait for DB server to be ready, test interval = 7 sec, timeout = 3 min
 . infra/check_db_ready
 wait_for_db 7 3

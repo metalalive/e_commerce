@@ -1,6 +1,5 @@
-# TODO, celery consumer in one conainer updates jwks to file on host machine
-# then api server in another container retrieves the content from the same file
-cd /app/usermgt
+# Note Celery consumer in one conainer updates jwks to file on host machine
+# then api server in another container refers to the content from the same jwks file
 
 # wait for DB server to be ready, test interval = 15 sec, timeout = 5 min
 . infra/check_db_ready

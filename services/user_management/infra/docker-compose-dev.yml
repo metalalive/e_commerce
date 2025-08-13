@@ -24,6 +24,7 @@ services:
     env_file:
       - ./dev.env
     volumes:
+      - ../settings/migration.py:/app/usermgt/settings/migration.py:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
     networks:
       - net11
@@ -32,7 +33,10 @@ services:
     container_name: usrmgt-dev-db-data-migrate
     env_file:
       - ./dev.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=settings.migration
     volumes:
+      - ../settings/migration.py:/app/usermgt/settings/migration.py:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
     networks:
       - net11
@@ -46,8 +50,10 @@ services:
     # Django server recognizes only SIGINT as shutdown signal
     stop_signal: SIGINT
     stop_grace_period: 1m15s
+    working_dir: /app/usermgt
     volumes:
       - ./api_server_dev:/app/entry/run_my_app
+      - ../settings/development.py:/app/usermgt/settings/development.py:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
       - ../../tmp/log/dev:/app/tmp/log/dev
       - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
@@ -63,10 +69,13 @@ services:
       - DJANGO_SETTINGS_MODULE=settings.development
     restart: no
     stop_grace_period: 18s
+    working_dir: /app/usermgt
     volumes:
       - ./run_rpc_consumer:/app/entry/run_my_app
+      - ../settings/development.py:/app/usermgt/settings/development.py:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
       - ../../tmp/log/dev:/app/log
+      - ../../tmp/log/dev:/app/tmp/log/dev
       - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks
     networks:
       - net11
@@ -85,11 +94,13 @@ services:
       - API_PORT=8008
     restart: no
     volumes:
+      - ../settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../settings/development.py:/app/usermgt/settings/development.py:ro
       - ../tests/smoke_test.py:/app/usermgt/tests/smoke_test.py:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
     working_dir: /app/usermgt
-    command: pipenv run python3 -m tests.smoke_test
+    command: python3 -m tests.smoke_test
     profiles:
       - initialstart
       - serverstart

@@ -7,6 +7,7 @@ x-base-service-common: &reuse-basesrv-cfg
     DB_NAME: ecommerce_usermgt
     DB_PORT: 3307
   volumes:
+    - ../settings/common.py:/app/usermgt/settings/common.py:ro
     - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
     # TODO, switch to Docker Secret or Vault for better security
   
@@ -27,13 +28,15 @@ services:
   db-schema-migration:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-db-schema-migrate
+    profiles:
+      - serverstart
+    working_dir: /app/usermgt
     volumes:
       # volumes from anchor `x-base-service-common` will be replaced with
       # items below, not merged into the volume set here.
       - ./db_schema_migration:/app/entry/run_my_app
+      - ../settings/common.py:/app/usermgt/settings/common.py:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
-    profiles:
-      - serverstart
     depends_on:
       # condition cannot be specified here because mariaDB container requires extra time to
       # get real database server ready for accepting inbound connections , neither
@@ -45,8 +48,10 @@ services:
     container_name: usrmgt-unknown-db-data-migrate
     profiles:
       - initialstart
+    working_dir: /app/usermgt
     volumes:
       - ./db_init_data_migration:/app/entry/run_my_app
+      - ../settings/common.py:/app/usermgt/settings/common.py:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
     depends_on:
       db-schema-migration:

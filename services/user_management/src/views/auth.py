@@ -48,7 +48,7 @@ from .constants import WEB_HOST
 
 _logger = logging.getLogger(__name__)
 
-MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath("user_management/data/mail")
+MAIL_DATA_BASEPATH = django_settings.APP_DIR.joinpath("data/mail")
 
 
 class PermissionView(AuthCommonAPIReadView):
