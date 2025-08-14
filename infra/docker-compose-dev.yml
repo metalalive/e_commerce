@@ -13,6 +13,15 @@ services:
     networks:
       - net1
 
+  common-asyncjob-consumer:
+    container_name: ecom-commonjob-consumer-dev
+    stop_grace_period: 14s
+    volumes:
+      - ../services/tmp/log/dev/:/app/log/
+      - ../services/common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+
   common-cronjob-publisher:
     container_name: ecom-cronjob-assigner-dev
     stop_grace_period: 11s

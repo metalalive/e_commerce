@@ -1,7 +1,7 @@
 {
     "ALLOWED_ORIGIN": {
         "web" : "http://localhost:8006",
-        "user_management" : "http://usrmgt-dev-init-apisrv:8008",
+        "user_management" : "http://usrmgt-dev-apisrv:8008",
         "product" : "http://localhost:8009",
         "payment" : "http://localhost:8015",
         "store"   : "http://localhost:8011",

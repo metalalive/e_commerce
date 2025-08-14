@@ -25,6 +25,8 @@ services/tmp/log/*/*.log
 services/tmp/log/*/*.log.*
 services/tmp/proc/*.pid
 services/user_management/build/
-services/user_management/infra/dev.env
-services/user_management/infra/test.env
+services/user_management/infra/container-dev.env
+services/user_management/infra/container-test.env
+services/user_management/infra/interpolation-dev.env
+services/user_management/infra/interpolation-test.env
 

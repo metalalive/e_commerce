@@ -1,8 +1,6 @@
 python3 --version
 
-pip list
-
-exec celery --workdir ./src \
-  --app=ecommerce_common.util  --config=ecommerce_common.util.celerybeatconfig \
-  beat --loglevel=INFO --logfile=/app/log/celery-beat-common.log;
+exec celery --workdir ./src --app=ecommerce_common.util \
+    --config=ecommerce_common.util.celerybeatconfig  beat --loglevel=INFO \
+    --logfile=/app/log/celery-beat-common.log;
 

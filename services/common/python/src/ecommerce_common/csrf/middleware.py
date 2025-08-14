@@ -10,6 +10,8 @@ from django.core.exceptions import NON_FIELD_ERRORS
 from ecommerce_common.util import get_header_name, accept_mimetypes_lookup
 from ecommerce_common.auth.django.utils import _determine_expiry
 
+_logger = logging.getLogger(__name__)
+
 # header name for CSRF token authentication
 csrf_header_name = get_header_name(name=django_settings.CSRF_HEADER_NAME)
 
@@ -72,10 +74,9 @@ class ExtendedCsrfViewMiddleware(CsrfViewMiddleware):
         result = accept_mimetypes_lookup(
             http_accept=request.headers.get("accept", ""), expected_types=json_mimetypes
         )
+        _logger.debug(None, "result", str(result), "reason", str(reason))
         if any(result):  # json
-            data = {
-                NON_FIELD_ERRORS: [reason],
-            }
+            data = {  NON_FIELD_ERRORS: [reason]            }
             response = JsonResponse(data=data, status=403)  # forbidden access
         else:  # fall back to django default HTML response on CSRF failure
             response = super()._reject(request=request, reason=reason)
