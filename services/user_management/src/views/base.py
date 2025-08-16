@@ -303,7 +303,6 @@ class AccountActivationView(AuthCommonAPIView):
         resource_path.pop()  # last one should be <slug:token>
         kwargs["many"] = True
         kwargs["return_data_after_done"] = True
-        kwargs["status_ok"] = RestStatus.HTTP_202_ACCEPTED
         kwargs["pk_src"] = LimitQuerySetMixin.REQ_SRC_BODY_DATA
         kwargs["serializer_kwargs"] = {
             "msg_template_path": MAIL_DATA_BASEPATH.joinpath(

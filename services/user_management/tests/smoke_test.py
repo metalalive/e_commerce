@@ -5,7 +5,7 @@ import string
 import logging
 import json
 from datetime import datetime, UTC, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from urllib import request
 from urllib.error import URLError
 from unittest.mock import Mock
@@ -23,7 +23,7 @@ DB_PORT = os.environ["DB_PORT"]
 sys.path.insert(0, os.path.abspath("./src"))
 sys.path.insert(0, os.path.abspath("."))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.development")
-import django
+import django  # noqa : E402
 
 try:
     django.setup()
@@ -46,23 +46,28 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 
-from django.conf import settings as django_settings
-from django.middleware.csrf import get_token as csrf_get_token
-from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
+# the django modules should be running after `django.setup()`
+from django.conf import settings as django_settings  # noqa : E402
+from django.middleware.csrf import get_token as csrf_get_token  # noqa : E402
+from django.contrib.auth.models import Permission  # noqa : E402
+from django.contrib.contenttypes.models import ContentType  # noqa : E402
 
-from ecommerce_common.cors.middleware import conf as cors_conf
-from ecommerce_common.models.constants import ROLE_ID_STAFF
-from ecommerce_common.util import get_header_name
-from user_management.models.base import (
+from ecommerce_common.cors.middleware import conf as cors_conf  # noqa : E402
+from ecommerce_common.models.constants import ROLE_ID_STAFF  # noqa : E402
+from ecommerce_common.util import get_header_name  # noqa : E402
+from user_management.models.base import (  # noqa : E402
     GenericUserProfile,
     GenericUserGroup,
     GenericUserAppliedRole,
     UserQuotaRelation,
     QuotaMaterial,
 )
-from user_management.models.auth import LoginAccount, Role
-from user_management.models.common import _atomicity_fn, DB_ALIAS_APPLIED
+from user_management.models.auth import (  # noqa : E402
+    LoginAccount,
+    Role,
+    UnauthResetAccountRequest,
+)
+from user_management.models.common import _atomicity_fn, DB_ALIAS_APPLIED  # noqa : E402
 
 # --- Helper Functions ---
 
@@ -126,7 +131,14 @@ def create_test_user(
 
         # Create a role and assign necessary permissions for management tasks
         permissions = get_permissions_for_models(
-            [Role, UserQuotaRelation, GenericUserGroup, GenericUserProfile],
+            [
+                Role,
+                UserQuotaRelation,
+                GenericUserGroup,
+                GenericUserProfile,
+                UnauthResetAccountRequest,
+                LoginAccount,
+            ],
             using=db_alias,
         )
         test_role, _ = Role.objects.using(db_alias).get_or_create(
@@ -505,6 +517,44 @@ def test_query_usrprof(auth_info: Dict[str, Any], profile_id: int):
     logging.info("Successfully validated updated profile.")
 
 
+def test_account_activation(
+    auth_info: Dict[str, Any], profile_to_activate: dict
+) -> Tuple[int, int]:
+    """
+    Tests requesting account activation for a user profile.
+    """
+    logging.info("Testing account activation request...")
+    api_endpoint = "/account/activate"
+    base_url = f"http://{API_HOST}:{API_PORT}{api_endpoint}"
+    headers = _get_request_headers()
+    headers["Authorization"] = f"Bearer {auth_info['access_token']}"
+
+    if not profile_to_activate.get("emails"):
+        raise AssertionError("Profile for activation must have an email address.")
+
+    # Use the first email for activation request
+    email_id = profile_to_activate["emails"][0]["id"]
+    profile_id = profile_to_activate["id"]
+    logging.info(
+        f"Requesting activation for profile ID {profile_id} via email ID {email_id}"
+    )
+
+    payload = [{"profile": profile_id, "email": email_id}]
+    data = json.dumps(payload).encode("utf-8")
+    req = request.Request(base_url, data=data, headers=headers, method="POST")
+
+    with request.urlopen(req) as response:
+        if response.status != 201:
+            body = response.read().decode("utf-8")
+            raise AssertionError(
+                f"Account activation request failed with status {response.status}, "
+                f"body: {body}"
+            )
+
+    logging.info("Account activation request sent successfully.")
+    return (profile_id, email_id)
+
+
 def test_api_login(username: str, password: str) -> str:
     """
     Attempts to log in via API, validates the response, and returns the
@@ -638,6 +688,9 @@ def main():
         profile_to_update = created_profiles_for_cleanup[0]
         test_update_usrprof(auth_info, profile_to_update)
         test_query_usrprof(auth_info, profile_to_update["id"])
+
+        profile_to_activate = created_profiles_for_cleanup[1]
+        test_account_activation(auth_info, profile_to_activate)
 
         # TODO
         # test email notification with following cases , each works with specific API endpoint.

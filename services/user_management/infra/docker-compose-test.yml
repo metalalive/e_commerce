@@ -2,26 +2,21 @@ services:
   mariadb:
     container_name: usrmgt-test-mariadb
     env_file:
-      - ./test.env
+      - ./container-test.env
     restart: no
     networks:
       - net1
     volumes:
       # Mounts the custom configuration file into the container.
       # The source path is relative to this compose file.
-      - ./mariadb-cfg/usrmgt-test.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro      
-      # Mounts the host directory for persistent data storage.
-      # This is a bind mount to a specific path on your host machine.
-      - /data/db/test/mariadb/e-comm/usrmgt:/var/lib/mysql
-      # mount log / error files for troubleshooting
-      - /var/log/mariadb/test/e-comm/usrmgt:/var/log/mysql
+      - ./mariadb-cfg/usrmgt-test.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro
   
   run-test:
     container_name: usrmgt-backend-testapp-0
     image: usrmgt-backend-base:latest
     pull_policy: never
     env_file:
-      - ./test.env
+      - ./container-test.env
     restart: no
     volumes:
       - ./run_test_container:/app/entry/run_my_app

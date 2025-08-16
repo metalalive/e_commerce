@@ -4,25 +4,20 @@ services:
   mariadb:
     container_name: usrmgt-dev-mariadb
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     restart: on-failure:3
     stop_grace_period: 40s
     volumes:
       # Mounts the custom configuration file into the container.
       # The source path is relative to this compose file.
       - ./mariadb-cfg/usrmgt-dev.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro      
-      # Mounts the host directory for persistent data storage.
-      # This is a bind mount to a specific path on your host machine.
-      - /data/db/dev/mariadb/e-comm/usrmgt:/var/lib/mysql
-      # mount log / error files for troubleshooting
-      - /var/log/mariadb/dev/e-comm/usrmgt:/var/log/mysql
     networks:
       - net11
 
   db-schema-migration:
     container_name: usrmgt-dev-db-schema-migrate
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     volumes:
       - ../settings/migration.py:/app/usermgt/settings/migration.py:ro
       - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
@@ -32,7 +27,7 @@ services:
   db-initial-data-import:
     container_name: usrmgt-dev-db-data-migrate
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     environment:
       - DJANGO_SETTINGS_MODULE=settings.migration
     volumes:
@@ -44,7 +39,7 @@ services:
   api-server:
     container_name: usrmgt-dev-apisrv
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     restart: no
     #on-failure:2
     # Django server recognizes only SIGINT as shutdown signal
@@ -64,7 +59,7 @@ services:
   rpc-consumer:
     container_name: usrmgt-dev-rpcconsumer
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     environment:
       - DJANGO_SETTINGS_MODULE=settings.development
     restart: no
@@ -86,7 +81,7 @@ services:
     image: usrmgt-backend-base:latest
     pull_policy: never
     env_file:
-      - ./dev.env
+      - ./container-dev.env
     environment:
       - DB_NAME=ecommerce_usermgt
       - DB_PORT=3307

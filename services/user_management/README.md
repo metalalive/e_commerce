@@ -181,10 +181,12 @@ database server and migration process are encapsulated in docker container, chec
 
 ```bash
 # build up database, docker network ... etc.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml  up --detach
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  up --detach
 
 # stop database, docker network ... etc then remove them.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml  down  --volumes
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  down  --volumes
 ```
 
 - database server is always started by default.
@@ -227,10 +229,12 @@ alternatively you can use `docker compose` :
 
 ```bash
 # build up database, docker network ... etc.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  up --detach
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env  up --detach
 
 # stop database, docker network ... etc then remove them.
-docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml  down  --volumes
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env down  --volumes
 ```
 
 

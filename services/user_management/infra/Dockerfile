@@ -85,9 +85,12 @@ WORKDIR /app/log
 WORKDIR /app/entry
 VOLUME ["/app/log", "/app/entry"]
 
-
 WORKDIR /app/common/data
 COPY --from=builder0 /app/common/data  .
+
+WORKDIR /app/common/python/src
+COPY --from=builder0 /app/common/python/src/ecommerce_common ./ecommerce_common
+COPY --from=builder0 /app/common/python/src/softdelete ./softdelete
 
 WORKDIR /app/usermgt
 COPY --from=builder0 /app/usermgt/.venv ./.venv
