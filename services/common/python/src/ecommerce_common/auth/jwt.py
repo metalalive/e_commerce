@@ -185,29 +185,20 @@ class JwkRsaKeygenHandler(RSAKeygenHandler):
 
         # each value in components is string that represent very-large number
         # , but JWK requires the key components are encoded with Base64
-        def _big_decimal_to_base64(k, comp):
+        def big_decimal_to_base64(k, comp):
             if comp.get(k, None):
                 if isinstance(comp[k], str):
                     bignum = int(comp[k])
                     comp[k] = to_base64url_uint(bignum).decode("utf-8")
                 elif isinstance(comp[k], list):
                     for item in comp[k]:
-                        list(
-                            map(partial(_big_decimal_to_base64, comp=item), item.keys())
-                        )
+                        bound = staticmethod(partial(big_decimal_to_base64, comp=item))
+                        list(map(bound, item.keys()))
 
-        list(
-            map(
-                partial(_big_decimal_to_base64, comp=components["private"]),
-                components["private"].keys(),
-            )
-        )
-        list(
-            map(
-                partial(_big_decimal_to_base64, comp=components["public"]),
-                components["public"].keys(),
-            )
-        )
+        bound = staticmethod(partial(big_decimal_to_base64, comp=components["private"]))
+        list(map(bound, components["private"].keys()))
+        bound = staticmethod(partial(big_decimal_to_base64, comp=components["public"]))
+        list(map(bound, components["public"].keys()))
 
         def _privkey_parser(self, item):
             item.update(components["private"])

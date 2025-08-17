@@ -1,0 +1,44 @@
+services:
+  rabbitmq-server:
+    container_name: inter-apps-msgq-dev
+    stop_grace_period: 47s
+    env_file:
+      - ./dev.env
+    volumes:
+      - /data/rabbitmq/dev/e-comm:/var/lib/rabbitmq 
+      - /var/log/rabbitmq/dev/e-comm:/var/log/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbit-defs.json:/app/rabbit-defs.json:ro
+      - ./rabbitmq-custom-init.sh:/init.sh:ro
+    networks:
+      - net1
+
+  common-asyncjob-consumer:
+    container_name: ecom-commonjob-consumer-dev
+    stop_grace_period: 14s
+    volumes:
+      - ../services/tmp/log/dev/:/app/log/
+      - ../services/common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+
+  common-cronjob-publisher:
+    container_name: ecom-cronjob-assigner-dev
+    stop_grace_period: 11s
+    volumes:
+      - ../services/tmp/log/dev/:/app/log/
+      - ../services/common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+
+networks:
+  net1:
+    name: ec-intersrvs-dev-net
+    driver: bridge
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.253.0/24
+          ip_range: 172.19.253.0/28
+          gateway: 172.19.253.254
+

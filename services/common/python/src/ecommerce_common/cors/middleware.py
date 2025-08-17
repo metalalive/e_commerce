@@ -1,4 +1,7 @@
+import logging
 from . import config as conf
+
+_logger = logging.getLogger(__name__)
 
 ACCESS_CONTROL_REQUEST_METHOD = "access-control-request-method"
 ACCESS_CONTROL_REQUEST_HEADERS = "access-control-request-headers"
@@ -27,6 +30,10 @@ class CorsHeaderMiddleware:
         is_options_req = request.method == "OPTIONS"
         is_cross_site_req = origin is not None and origin != host
 
+        _logger.debug(
+            None, "is_cross_site_req", is_cross_site_req, "is_options_req",
+            is_options_req,"host", host, "origin", origin
+        )
         if is_cross_site_req:
             host_allowed, host_label = _is_request_allowed(host=host, origin=origin)
             if is_options_req:  # circuit-break the preflight (OPTIONS request)
@@ -58,6 +65,7 @@ class CorsHeaderMiddleware:
 
     def _gen_second_flight_response(self, request, host_allowed, host_label):
         req_mthd_allowed = request.method in conf.ALLOWED_METHODS
+        _logger.debug(None, "req_mthd_allowed", req_mthd_allowed, "host_allowed", host_allowed)
         if host_allowed and req_mthd_allowed:
             request.cors_host_label = host_label
             response = self.get_response(request)

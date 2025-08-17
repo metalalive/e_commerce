@@ -24,7 +24,7 @@ This project is currently for learning purpose and not production-ready system.
 > Note: Currently, this project has not been deployed in any production environment. Further refinements may be needed based on real-world scaling and performance observations.
 
 ## Build, Test, and Development
-- setup for [inter-service communication](./INTER_SERVICE.md)
+- setup for [inter-service communication](./infra/README.md)
 - each application comes with its own build, test processes, and technology stack details, please refer to `README` of these application
 
 ## License

@@ -1,0 +1,12 @@
+# wait for DB server to be ready, test interval = 7 sec, timeout = 3 min
+. infra/check_db_ready
+wait_for_db 7 3
+
+# - FIXME, docker does not forward OS signal to python application if it is
+#   running without using `exec` , figure out the root causes
+# - start Django app server listening all interfaces , this is ONLY for
+#   development server.
+# - `pipenv run` is not required , in the base image `./infra/Dockerfile`,
+#   local virtual environment is configured as default python environment.
+exec python3 ./manage.py runserver --settings  settings.development  0.0.0.0:8008
+

@@ -1,0 +1,37 @@
+services:
+  rabbitmq-server:
+    image: rabbitmq-custom-init:3.13-management
+    container_name: inter-apps-msgq-generic
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - NUM_SECS_WAIT4READY=16
+    restart: on-failure:2
+
+  common-asyncjob-consumer:
+    image: ecom-common-py:latest
+    container_name: ecom-commonjob-consumer
+    restart: no
+    environment:
+      SYS_BASE_PATH: /app
+    working_dir: /app/common/python
+    volumes:
+      - ./run_common_asyncworker:/app/entry/run_my_app
+    depends_on:
+      rabbitmq-server:
+        condition: service_started
+
+  common-cronjob-publisher:
+    image: ecom-common-py:latest
+    container_name: ecom-cronjob-assigner
+    restart: no
+    environment:
+      SYS_BASE_PATH: /app
+    working_dir: /app/common/python
+    volumes:
+      - ./run_cron_job:/app/entry/run_my_app
+    depends_on:
+      common-asyncjob-consumer:
+        condition: service_started
+

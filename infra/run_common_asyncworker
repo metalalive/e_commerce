@@ -1,0 +1,7 @@
+python3 --version
+
+exec celery --workdir ./src --app=ecommerce_common.util \
+    --config=ecommerce_common.util.celeryconfig  worker --loglevel=INFO \
+    -n common@%h  --concurrency=2 --logfile=/app/log/celery-consumer-common.log \
+    -E -Q mailing,periodic_default
+

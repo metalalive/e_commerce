@@ -18,4 +18,3 @@ DATABASES["default"]["NAME"] = DATABASES["default"]["TEST"]["NAME"]  # noqa : F4
 ## does NOT work for testing
 ##DATABASES['usermgt_service'].update(secrets)
 DATABASE_ROUTERS.clear()  # noqa : F405
-render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/test"))  # noqa : F405

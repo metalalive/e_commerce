@@ -1,0 +1,16 @@
+{
+    "ALLOWED_ORIGIN": {
+        "web" : "http://localhost:8006",
+        "user_management" : "http://usrmgt-dev-apisrv:8008",
+        "product" : "http://localhost:8009",
+        "payment" : "http://localhost:8015",
+        "store"   : "http://localhost:8011",
+        "order"   : "http://localhost:8012",
+        "media"   : "http://localhost:8010"
+    },
+    "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
+    "ALLOWED_HEADERS": ["authorization","content-type", "x-anti-csrf-tok", "accept"],
+    "ALLOW_CREDENTIALS": true,
+    "PREFLIGHT_MAX_AGE": 8
+}
+

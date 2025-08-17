@@ -5,7 +5,7 @@ import copy
 import operator
 import shutil
 from datetime import datetime, timedelta, UTC
-from functools import partial, reduce
+from functools import reduce
 
 from ecommerce_common.util import ExtendedList, import_module_string
 from ecommerce_common.auth.keystore import (

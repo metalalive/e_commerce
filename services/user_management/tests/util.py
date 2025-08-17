@@ -4,12 +4,12 @@ import unittest
 
 from user_management.util import render_mail_content
 
-srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
+app_basepath = Path(os.environ["APP_BASE_PATH"]).resolve(strict=True)
 
 
 class RenderMailContentTestCase(unittest.TestCase):
     def setUp(self):
-        self._example_path = srv_basepath.joinpath("user_management/tests/examples")
+        self._example_path = app_basepath.joinpath("tests/examples")
 
     def test_ok(self):
         msg_template_path = self._example_path.joinpath("mail_content_template.html")

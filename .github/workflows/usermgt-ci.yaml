@@ -11,82 +11,137 @@ on:
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
 jobs:
-    init-env-db-migration:
+    lint-check:
       if: startsWith(github.head_ref, 'usermgt-dev/')
       runs-on: ubuntu-24.04
-      services:
-        mariadb_v11:
-          image: mariadb:11.2.6
-          # official docker image only exposes default port 3306 to external world
-          # map any non-default port external clients will use to 3306
-          ports:
-            - 3307:3306
-          env:
-            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-            MARIADB_ROOT_PASSWORD: 'syscidba'
-            MARIADB_ROOT_HOST: 'localhost'
-            MARIADB_DATABASE: 'ecommerce_usermgt'
-            MARIADB_USER: 'DB_USERNAME'
-            MARIADB_PASSWORD: 'DB_PASSWORD'
-
       steps:
-      - uses: actions/checkout@v4 # checkout codebase from github
-      - name: set up python packages
-        uses: ./.github/actions/usermgt
+        - uses: actions/checkout@v4
+        - name: Set up Python 3.13
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.13.5'
+        - name: Install ruff linter
+          run: python3.13 -m pip install ruff==0.12.5
+        - name: lint check
+          working-directory: services/user_management
+          run: |
+              ruff check  ./src/ ./tests/  ./settings/
 
-      - name: mariadb database migration
-        working-directory: services/user_management
-        run: |
-            pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
-            pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
-            pipenv run python3 -m  user_management.init_users
-            pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings settings.development -v 2  remoteapps_quota_perm_fixtures.json
+    build-docker-image:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      needs: lint-check
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+        - name: Build Docker image and export to tar
+          uses: docker/build-push-action@v5
+          with:
+            context: services
+            file: services/user_management/infra/Dockerfile
+            outputs: type=docker,dest=${{ runner.temp }}/usrmgt-backend-base.tar
+            tags: usrmgt-backend-base:latest
+            push: false
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+        - name: Upload artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: usrmgt-docker-image
+            path: ${{ runner.temp }}/usrmgt-backend-base.tar
+            retention-days: 1
+    
+    init-env-db-migration:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      needs: build-docker-image
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Download docker image artifact
+          uses: actions/download-artifact@v4
+          with:
+            name: usrmgt-docker-image
+            path: ${{ runner.temp }}
+        - name: Load docker image
+          run: |
+              docker load --input ${{ runner.temp }}/usrmgt-backend-base.tar
+              docker image ls -a
+        - name: Create dev environment file
+          working-directory: services/user_management/infra
+          run: |
+            sed \
+              -e 's/your-domain-ip-or-container-name/usrmgt-dev-mariadb/' \
+              -e 's|tmp/log/unknown|tmp/log/dev|' \
+              -e "s/dbrootpswd/DB_PASSWORD/" \
+              -e "s/your-site-dba/DB_USERNAME/" \
+              -e "s/your-dba-pswd/DB_PASSWORD/" \
+              -e "s/your-db4app/DB_USERNAME/" \
+              -e "s/pswd-db-app/DB_PASSWORD/" \
+              -e 's/local-ip-range/172.19.2.%/' \
+              ./container-sample.env > ./container-dev.env
 
-      # Note / TODO
-      # Unfortunately , following step does not work well in github action workflow
-      # , when attempting to connect to mariadb server container using `mariadb` command,
-      #  it always returns following error even with simplest SQL `SHOW DATABASES` :
-      #     ERROR 1045 (28000): Access denied for user 'root'@'172.18.0.1' (using password: YES)
-      #
-      # official suggestion does not seem to work well
-      # https://mariadb.com/kb/en/installing-and-using-mariadb-via-docker/#connecting-to-mariadb-from-outside-the-container
-      #
-      # Current workaround is to duplicate most of steps for running test in another job
+            echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-dev.env
+            echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-dev.env
 
-      # - name: grant permission on test database
-      #   run: |
-      #       sudo apt update
-      #       sudo apt install mariadb-client
-      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
-      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
+        - name: set up credential for test
+          working-directory: services/common/data
+          shell: bash
+          run: |
+              ln -s ./secrets_template.json  ./secrets.json
+        - name: Start services and run migration
+          working-directory: services/user_management
+          run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env  --profile migrateonly up --abort-on-container-exit
+        - name: Clean up containers and volumes
+          if: always()
+          working-directory: services/user_management
+          run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env  --profile migrateonly  down --volumes
 
 
     init-env-then-test:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
       runs-on: ubuntu-24.04
-      services:
-        mariadb_v11:
-          image: mariadb:11.2.6
-          ports:
-            - 3307:3306
-          env:
-            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-            MARIADB_ROOT_PASSWORD: 'syscidba'
-            MARIADB_ROOT_HOST: 'localhost'
-            MARIADB_DATABASE: 'test_ecommerce_usermgt'
-            MARIADB_USER: 'DB_USERNAME'
-            MARIADB_PASSWORD: 'DB_PASSWORD'
-
+      needs: init-env-db-migration
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-      - name: set up python packages
-        uses: ./.github/actions/usermgt
-      - name: lint check
-        working-directory: services/user_management
+      - name: Download docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: usrmgt-docker-image
+          path: ${{ runner.temp }}
+      - name: Load docker image
         run: |
-            pipenv run ruff check  ./src/ ./tests/  ./settings/
+            docker load --input ${{ runner.temp }}/usrmgt-backend-base.tar
+            docker image ls -a
+      - name: Create dev environment file
+        working-directory: services/user_management/infra
+        run: |
+          sed \
+            -e 's/your-domain-ip-or-container-name/usrmgt-test-mariadb/' \
+            -e 's|tmp/log/unknown|tmp/log/test|' \
+            -e "s/dbrootpswd/DB_PASSWORD/" \
+            -e "s/your-site-dba/DB_USERNAME/" \
+            -e "s/your-dba-pswd/DB_PASSWORD/" \
+            -e "s/your-db4app/DB_USERNAME/" \
+            -e "s/pswd-db-app/DB_PASSWORD/" \
+            -e 's/local-ip-range/172.19.1.%/' \
+            ./container-sample.env > ./container-test.env
+
+          echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
+          echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
+
+      - name: set up credential for test
+        working-directory: services/common/data
+        shell: bash
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
       - name: run test
         working-directory: services/user_management
         run: |
-            ./run_unit_test
-            ./run_integration_test
+            docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  up --abort-on-container-exit
+        
+      - name: Clean up containers and volumes
+        if: always()
+        working-directory: services/user_management
+        run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  down --volumes
 

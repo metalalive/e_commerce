@@ -1,28 +1,10 @@
 [project]
 name = "user-management"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
     {name="T.H.", email="xxx@somemail.com"}
 ]
-requires-python = ">=3.12"
-dependencies = [
-    "django >= 5.1.0",
-    "djangorestframework >= 3.15.0",
-    "ijson >= 3.1.4",
-    "PyJWT == 2.8.0",
-    "bcrypt >= 3.1.7",
-    "cryptography >= 3.4.6",
-    
-    # TODO, solve installation issues, it becomes difficult to install after v2.2
-    "mysqlclient == 2.1.1",
-
-    # `pip` not allow relative path to local dependency
-    #"ecommerce_common @ file:///path/to/project/service"
-
-    # - `setuptools` can be used for those old packages which still rely
-    #   on`distutils`, which is removed since python 3.12
-    "setuptools >= 75.2.0",
-] # end of dependencies
+requires-python = ">=3.13"
 
 [tool.setuptools.package-dir]
 user_management = "./src"

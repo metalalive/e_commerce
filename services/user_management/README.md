@@ -77,23 +77,37 @@ flowchart LR
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
-|Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
-|MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/server_setup_11.2.md) |
-|pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
-|pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
+|Python | 3.13.5 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
+|MariaDB| 11.8.2 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/server_setup_11.2.md) |
+|pipenv | 2025.0.4 | [see here](https://pip.pypa.io/en/stable/) |
+|pip| 25.1 | [see here](https://pip.pypa.io/en/stable/) |
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
 
 ## Build
-For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/usermgt-ci.yaml)
+For full build / test instructions please refer to [github action workflow script](../../.github/workflows/usermgt-ci.yaml)
 
-### Virtual Environment
+### Base Image for Application Environment
+```bash
+cd /path/to/project-home/services
+
+docker build --tag=usrmgt-backend-base:latest --file=user_management/infra/Dockerfile  .
+
+docker image rm  usrmgt-backend-base:latest
+```
+
+After custom image `usrmgt-backend-base:latest` is built successfully, use it for one of following tasks
+- run application in development ensironment
+- run all test cases
+
+### Local Environment Setup
 You can create per-project virtual environment using the command:
 ```bash
-PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+PIPENV_VENV_IN_PROJECT=1 pipenv run python -m venv ./.venv
 ```
 A virtual environment folder `.venv` will be created under the application folder `./user_management`
-### Common Python modules
+
+#### Common Python modules
 Note in this application the building process on [common python modules](../common/python) is automated , see the `[packages]` section in [`Pipfile`](./Pipfile).
 
 First time to initialize
@@ -106,56 +120,26 @@ If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual env
 pipenv update  <optional-specific-package>
 ```
 
-Clean up dependencies in current virtual environment
-```shell
-pipenv uninstall --all
-
-pipenv uninstall <optional-specific-package>
-```
-
-### C extension modules
-Manually install it by following command :
-```bash
-pipenv run pip install ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-xxxxx.whl
-```
-
-The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
-```bash
-pipenv run pip uninstall my-c-extention-lib
-```
-
-See [the documentation](../common/python/README.md) for build process.
-
-### Database Migration
-#### Avoid unused Django models built in database
-- Developers can set `managed = False` to the model class `User` and `Group` in module `django.contrib.auth.models`, this service does not need the 2 Django models.
-- Alternatively, developers can manually drop the tables `auth_user` or `auth_group` after they are created.
-
-#### Initial migration
-For schema update, use Django migration script
-```bash
-pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
-
-pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site2_dba
-```
-
-##### default user setup
-For default user setup (staff, superuser) to the schema, run following script
-```bash
-pipenv run python3 -m  user_management.init_users
-```
-which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application.
-
-##### Permissions / quota code setup
-Permissions / quota code setup for other remote applications can be done with following command
-
-```bash
-pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings settings.development
-    [-v {0,1,2,3}]  fixture  remoteapps_quota_perm_fixtures.json
-```
-
-
 ## Run
+### development environment
+database server and migration process are encapsulated in docker container, check following command :
+
+```bash
+# build up database, docker network ... etc.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  up --detach
+
+# stop database, docker network ... etc then remove them.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  down  --volumes
+```
+
+- database server is always started by default.
+- consider extra options when starting application:
+  - `--profile serverstart`: perform database schema migration, start API server, and RPC consumer database 
+  - `--profile initialstart`: set up minimal user data for initial application launch after database schema migration
+
+---
 ### application server
 ```bash
 pipenv run python3 ./manage.py runserver --settings  settings.development  8008 \
@@ -176,14 +160,28 @@ Note:
 
 
 ## Test
-### Unit Test
 ```bash
-./run_unit_test
+cd /path/to/project-home/services
+
+docker --debug run --interactive --tty  --network=ec-usrmgt-test-net \
+  --volume "$PWD/user_management/infra/run_test_container:/app/entry/run_my_app" \
+  --name usrmgt-backend-testapp-0  usrmgt-backend-base:latest
+
+docker stop usrmgt-backend-testapp-0
 ```
-### Integration Test
+
+alternatively you can use `docker compose` :
+
 ```bash
-./run_integration_test
+# build up database, docker network ... etc.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env  up --detach
+
+# stop database, docker network ... etc then remove them.
+docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env down  --volumes
 ```
+
 
 ## Development
 ### Code Formatter

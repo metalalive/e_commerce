@@ -2,13 +2,14 @@ import os
 import json
 import secrets
 from pathlib import Path
+from typing import Any, Callable, Dict, List
 from datetime import datetime, UTC
 
 from django import setup
 from django.core.management import call_command
 
 
-def _render_usermgt_fixture(src):
+def _render_usermgt_fixture(src: List[Dict[str, Any]]) -> None:
     from django.contrib.contenttypes.models import ContentType
     from django.contrib.auth.hashers import make_password
     from user_management.models import (
@@ -49,7 +50,9 @@ def _render_usermgt_fixture(src):
             print(info_msg)
 
 
-def render_fixture(src_path, detail_fn):
+def render_fixture(
+    src_path: Path, detail_fn: Callable[[List[Dict[str, Any]]], None]
+) -> Path:
     dst_filename = "renderred_%s" % src_path.name
     dst_path = src_path.parent.joinpath(dst_filename)
     with open(src_path, "r") as f:
@@ -64,10 +67,15 @@ def render_fixture(src_path, detail_fn):
     return dst_path
 
 
-def data_migration():
+def data_migration() -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.migration")
     setup()
     import user_management
+    from user_management.models import LoginAccount
+
+    if LoginAccount.objects.exists():
+        print("[INFO] User accounts already exist, skipping initial data migration.")
+        return
 
     dst_path = os.path.dirname(user_management.__file__)
     renderred_fixture_path = render_fixture(

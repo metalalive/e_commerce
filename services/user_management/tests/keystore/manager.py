@@ -131,7 +131,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
         self.assertTrue(any(result["evict"]))
         self.assertTrue(any(result["new"]))
         evicted_kids = tuple(map(lambda item: item["kid"], result["evict"]))
-        bound_fn = partial(filter_key_fn, keytype="secret")
+        bound_fn = staticmethod(partial(filter_key_fn, keytype="secret"))
         filtered = filter(bound_fn, self._keys_metadata)
         self._keys_metadata = list(
             filter(lambda item: item["kid"] not in evicted_kids, filtered)
@@ -160,7 +160,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
         self.assertTrue(any(result["new"]))
         evicted_kids = tuple(map(lambda item: item["kid"], result["evict"]))
         for keytype in ("secret", "pubkey"):
-            bound_fn = partial(filter_key_fn, keytype=keytype)
+            bound_fn = staticmethod(partial(filter_key_fn, keytype=keytype))
             filtered = filter(bound_fn, self._keys_metadata)
             self._keys_metadata = list(
                 filter(lambda item: item["kid"] not in evicted_kids, filtered)

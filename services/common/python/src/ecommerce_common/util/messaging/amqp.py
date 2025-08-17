@@ -1,6 +1,5 @@
 import socket
 import logging
-from functools import partial
 from contextlib import contextmanager
 from typing import Optional
 
