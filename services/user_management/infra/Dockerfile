@@ -22,8 +22,6 @@ RUN python3.13 -m ensurepip --default-pip \
 # switch between working directories
 WORKDIR /app/common/data
 COPY common/data/app_code.json \
-     common/data/dsl_clean_useraction_log.json \
-     common/data/dsl_clean_xpack_monitoring_log.json \
      common/data/nationality_code.json \
      common/data/unit_of_measurement.json \
      .

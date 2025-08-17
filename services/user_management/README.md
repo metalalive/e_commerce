@@ -100,12 +100,7 @@ After custom image `usrmgt-backend-base:latest` is built successfully, use it fo
 - run application in development ensironment
 - run all test cases
 
----
-
-### Deprecated Build Flow
-Following build flow is deprecated and no longer maintained.
-
-#### Virtual Environment
+### Local Environment Setup
 You can create per-project virtual environment using the command:
 ```bash
 PIPENV_VENV_IN_PROJECT=1 pipenv run python -m venv ./.venv
@@ -124,56 +119,6 @@ If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual env
 ```shell
 pipenv update  <optional-specific-package>
 ```
-
-Clean up dependencies in current virtual environment
-```shell
-pipenv uninstall --all
-
-pipenv uninstall <optional-specific-package>
-```
-
-#### C extension modules
-Manually install it by following command :
-```bash
-pipenv run pip install ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-xxxxx.whl
-```
-
-The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
-```bash
-pipenv run pip uninstall my-c-extention-lib
-```
-
-See [the documentation](../common/python/README.md) for build process.
-
-#### Database Migration
-##### Avoid unused Django models built in database
-- Developers can set `managed = False` to the model class `User` and `Group` in module `django.contrib.auth.models`, this service does not need the 2 Django models.
-- Alternatively, developers can manually drop the tables `auth_user` or `auth_group` after they are created.
-
-##### Initial migration
-For schema update, use Django migration script
-```bash
-pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
-
-pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site2_dba
-```
-
-###### default user setup
-For default user setup (staff, superuser) to the schema, run following script
-```bash
-pipenv run python3 -m  user_management.init_users
-```
-which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application.
-
-###### Permissions / quota code setup
-Permissions / quota code setup for other remote applications can be done with following command
-
-```bash
-pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings settings.development
-    [-v {0,1,2,3}]  fixture  remoteapps_quota_perm_fixtures.json
-```
-
----
 
 ## Run
 ### development environment
