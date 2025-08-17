@@ -73,17 +73,22 @@ jobs:
             sed \
               -e 's/your-domain-ip-or-container-name/usrmgt-dev-mariadb/' \
               -e 's|tmp/log/unknown|tmp/log/dev|' \
-              -e "s/dbrootpswd/$(openssl rand -hex 12)/" \
-              -e "s/your-site-dba/ci_sitedba_$(openssl rand -hex 4)/" \
-              -e "s/your-dba-pswd/$(openssl rand -hex 12)/" \
-              -e "s/your-db4app/ci_dbapp_$(openssl rand -hex 4)/" \
-              -e "s/pswd-db-app/$(openssl rand -hex 12)/" \
+              -e "s/dbrootpswd/DB_PASSWORD/" \
+              -e "s/your-site-dba/DB_USERNAME/" \
+              -e "s/your-dba-pswd/DB_PASSWORD/" \
+              -e "s/your-db4app/DB_USERNAME/" \
+              -e "s/pswd-db-app/DB_PASSWORD/" \
               -e 's/local-ip-range/172.19.2.%/' \
               ./container-sample.env > ./container-dev.env
 
             echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-dev.env
             echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-dev.env
 
+        - name: set up credential for test
+          working-directory: services/common/data
+          shell: bash
+          run: |
+              ln -s ./secrets_template.json  ./secrets.json
         - name: Start services and run migration
           working-directory: services/user_management
           run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env  --profile migrateonly up --abort-on-container-exit
@@ -114,17 +119,22 @@ jobs:
           sed \
             -e 's/your-domain-ip-or-container-name/usrmgt-test-mariadb/' \
             -e 's|tmp/log/unknown|tmp/log/test|' \
-            -e "s/dbrootpswd/$(openssl rand -hex 12)/" \
-            -e "s/your-site-dba/ci_sitedba_$(openssl rand -hex 4)/" \
-            -e "s/your-dba-pswd/$(openssl rand -hex 12)/" \
-            -e "s/your-db4app/ci_dbapp_$(openssl rand -hex 4)/" \
-            -e "s/pswd-db-app/$(openssl rand -hex 12)/" \
+            -e "s/dbrootpswd/DB_PASSWORD/" \
+            -e "s/your-site-dba/DB_USERNAME/" \
+            -e "s/your-dba-pswd/DB_PASSWORD/" \
+            -e "s/your-db4app/DB_USERNAME/" \
+            -e "s/pswd-db-app/DB_PASSWORD/" \
             -e 's/local-ip-range/172.19.1.%/' \
             ./container-sample.env > ./container-test.env
 
           echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
           echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
 
+      - name: set up credential for test
+        working-directory: services/common/data
+        shell: bash
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
       - name: run test
         working-directory: services/user_management
         run: |
