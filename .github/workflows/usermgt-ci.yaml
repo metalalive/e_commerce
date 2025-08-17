@@ -49,7 +49,7 @@ jobs:
           uses: actions/upload-artifact@v4
           with:
             name: usrmgt-docker-image
-            path: /tmp/usrmgt-backend-base.tar
+            path: ./usrmgt-backend-base.tar
             retention-days: 1
     
     init-env-db-migration:
@@ -62,9 +62,9 @@ jobs:
           uses: actions/download-artifact@v4
           with:
             name: usrmgt-docker-image
-            path: /tmp
+            path: .
         - name: Load docker image
-          run: docker load --input usrmgt-docker-image/usrmgt-backend-base.tar
+          run: docker load --input ./usrmgt-backend-base.tar
         - name: Create dev environment file
           working-directory: services/user_management/infra
           run: |
@@ -101,9 +101,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: usrmgt-docker-image
-          path: /tmp
+          path: .
       - name: Load docker image
-        run: docker load --input usrmgt-docker-image/usrmgt-backend-base.tar
+        run: docker load --input ./usrmgt-backend-base.tar
 
       - name: Create dev environment file
         working-directory: services/user_management/infra
