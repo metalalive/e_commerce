@@ -1,0 +1,80 @@
+services:
+  elasticsearch:
+    image: elasticsearch:8.19.2
+    pull_policy: never
+    container_name: productmgt-generic-elastic
+    restart: no
+    ports:
+      - 9200:9201
+      - 9300:9300
+    environment:
+      # Cluster and node settings
+      node.roles: "master,data,ingest,ml,remote_cluster_client"
+      network.host: "0.0.0.0"
+      http.port: 9201
+      transport.port: 9300
+      # Index and shard settings
+      action.auto_create_index: "false"
+      # declare application-specific attribute `zone` for shard placement,
+      # all shards are spreading across these `zones`
+      cluster.routing.allocation.awareness.attributes: "zone"
+      # each ES node has to specify a label for `zone`, otherwise ES inner
+      # allocation decider won't allocate any shard to this node , which causes
+      # the node unable to create any index / document
+      node.attr.zone: zone1
+      # Snapshots and backups
+      path.repo: "/usr/share/elasticsearch/backup"
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+      # disable cloud / AWS features
+      #discovery.ec2.enabled: false 
+      # Disable automatic attribute setting based on cloud metadata
+      #cloud.node.auto_attributes: false
+      logger.level: WARN
+
+    volumes:
+      - ${ELASTIC_DATA_MAIN_VOL}:/usr/share/elasticsearch/data
+      - ${ELASTIC_DATA_BAK_VOL}:/usr/share/elasticsearch/backup
+      - ${ELASTIC_LOG_VOL}:/usr/share/elasticsearch/logs
+
+    healthcheck:
+      # figure out why timeout  in ES healthcheck API endpoint omits the health check
+      test: ["CMD-SHELL", "curl --fail --silent --user elastic:$${ELASTIC_PASSWORD} -X GET http://localhost:9201/_cluster/health?wait_for_status=yellow || exit 1"]
+      interval: 30s
+      timeout: 7s
+      retries: 5
+      start_period: 60s
+
+  db-schema-migration:
+    container_name: productmgt-unknown-db-schema-migrate
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    profiles:
+      - serverstart
+      - migrateonly
+    working_dir: /app/productmgt/v2.x
+    volumes:
+      - ./db_schema_migration:/app/entry/run_my_app
+      - ../settings/elastic_curator.yaml:/app/productmgt/v2.x/settings/elastic_curator.yaml
+      - ../src/product/migrations:/app/productmgt/v2.x/src/product/migrations
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  api-server:
+    container_name: productmgt-unknown-apisrv
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    ports:
+      - 8009:8009
+    profiles:
+      - serverstart
+    restart: no
+    working_dir: /app/productmgt/v2.x
+    volumes:
+      - ./run_api_server:/app/entry/run_my_app
+      - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
+    depends_on:
+      db-schema-migration:
+        condition: service_completed_successfully
+

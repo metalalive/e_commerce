@@ -4,14 +4,12 @@ actions:
     description: "Create an index for storing saleable items"
     options:
       name: "product-saleable-items-v0.0.1"
-      continue_if_exception: False
       disable_action: False
       extra_settings:
         settings:
           number_of_shards: 1
           number_of_replicas: 1
         mappings:
-          the-only-type:
             properties:
               name:
                 type: text
@@ -70,17 +68,20 @@ actions:
               last_update:
                 type: date
                 format: "yyyy-MM-dd HH:mm:ss" # auto convert to UTC timezone at app tier
+      continue_if_exception: False
+      ignore_existing: True
   2:
     action: reindex
     description: "Create an index for snapshot of saleable items at update points in time"
     options:
       wait_interval: 9
-      max_wait: 38
+      max_wait: 58
       request_body:
         source:
           index: "product-saleable-items"
         dest:
           index: "product-saleable-items-v0.0.1"
+      wait_for_completion: True
     filters:
       - filtertype: none
   3:
@@ -89,6 +90,7 @@ actions:
     options:
       timeout_override: 65
       continue_if_exception: True
+      ignore_empty_list: True
     filters:
       - filtertype: pattern
         kind: regex

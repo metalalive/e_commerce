@@ -1,0 +1,93 @@
+services:
+  elasticsearch:
+    container_name: productmgt-dev-elastic
+    environment:
+      cluster.name: "dev-es-cluster0"
+      node.name: "es-dev-node-0"
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms256m -Xmx256m -Dlog4j2.formatMsgNoLookups=true"
+      indices.query.bool.max_clause_count: "1025"
+      cluster.routing.allocation.disk.watermark.low: "51%"
+      cluster.routing.allocation.disk.watermark.high: "75%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "80%"
+    
+    env_file:
+      - ./container-dev.env
+    networks:
+      - net1
+
+    ulimits:
+      # localed-in memory space in kilobytes
+      memlock:
+        soft: 570400
+        hard: 572000
+      nofile:
+        soft: 64000
+        hard: 65536
+  
+  db-schema-migration:
+    container_name: productmgt-dev-db-schema-migrate
+    env_file:
+      - ./container-dev.env
+    networks:
+      - net1
+  
+  run-test:
+    container_name: productmgt-itest-0
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    profiles:
+      - serverstart
+    env_file:
+      - ./container-dev.env
+    environment:
+      APP_SETTINGS: settings.development
+    networks:
+      - net1
+    restart: no
+    working_dir: /app/productmgt/v2.x
+    volumes:
+      - ./run_integration_test:/app/entry/run_my_app
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../settings/development.py:/app/productmgt/v2.x/settings/development.py
+      - ../settings/elastic_curator.yaml:/app/productmgt/v2.x/settings/elastic_curator.yaml
+      - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
+      - ../tests/integration:/app/productmgt/v2.x/tests/integration
+      - ../../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks
+    depends_on:
+      db-schema-migration:
+        condition: service_completed_successfully
+
+  api-server:
+    container_name: productmgt-dev-apisrv
+    env_file:
+      - ./container-dev.env
+    environment:
+      APP_SETTINGS: settings.development
+    stop_signal: SIGINT
+    stop_grace_period: 17s
+    volumes:
+      - ../settings/development.py:/app/productmgt/v2.x/settings/development.py
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../../tmp/log/dev:/app/tmp/log/dev
+    networks:
+      - net1
+      - net2
+
+
+networks:
+  net1:
+    name: ec-productmgt-dev-net
+    external: false
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.5.0/24
+          ip_range: 172.19.5.0/25
+          gateway: 172.19.5.254
+  net2:
+    name: ec-usrmgt-dev-net
+    external: true
+

@@ -1,0 +1,70 @@
+services:
+  elasticsearch:
+    container_name: productmgt-test-elastic
+    environment:
+      cluster.name: "test-es-cluster0"
+      node.name: "es-test-node-0"
+      discovery.type: single-node
+
+      # for other nodes that will join the same cluster.
+      #discovery.seed_hosts: "es-test-node-2,es-test-node-1"
+      
+      # available only in multi-node discovery
+      #cluster.initial_master_nodes: "es-test-node-0"
+      
+      # Heap and JVM
+      ES_JAVA_OPTS: "-Xms128m -Xmx128m -Dlog4j2.formatMsgNoLookups=true"
+      indices.query.bool.max_clause_count: "1023"
+      cluster.routing.allocation.disk.watermark.low: "66%"
+      cluster.routing.allocation.disk.watermark.high: "85%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "95%"
+    
+    env_file:
+      - ./container-test.env
+    networks:
+      - net1
+
+    ulimits:
+      # localed-in memory space in kilobytes
+      memlock:
+        soft: 404800
+        hard: 409600
+      nofile:
+        soft: 63000
+        hard: 65536
+  
+  run-test:
+    container_name: productmgt-utest-0
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    env_file:
+      - ./container-test.env
+    environment:
+      APP_SETTINGS: settings.test
+    networks:
+      - net1
+    restart: no
+    working_dir: /app/productmgt/v2.x
+    volumes:
+      - ./run_unit_test:/app/entry/run_my_app
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../settings/test.py:/app/productmgt/v2.x/settings/test.py
+      - ../settings/elastic_curator.yaml:/app/productmgt/v2.x/settings/elastic_curator.yaml
+      - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
+      - ../tests/unit:/app/productmgt/v2.x/tests/unit
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+
+networks:
+  net1:
+    name: ec-productmgt-test-net
+    external: false
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.4.0/24
+          ip_range: 172.19.4.0/25
+          gateway: 172.19.4.254
+

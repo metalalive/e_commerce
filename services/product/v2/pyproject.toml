@@ -17,6 +17,8 @@ aiohttp = "~3.10.0"
 PyJWT = "^2.10.0"
 cryptography = "^44.0.0"
 celery = "^5.4.0"
+# note poetry does not support parameter overwrite from external tools
+# e.g. OS-level environment variable
 ecommerce-common = {path = "../../common/python"}
 my-c-extension-lib = {path = "../../common/python/c_exts"}
 

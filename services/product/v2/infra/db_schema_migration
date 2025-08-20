@@ -1,0 +1,13 @@
+# pass error exit code for any failure
+
+MIGRATIONS_BASE_PATH="./src/product/migrations/elastic_curator"
+
+for action_file in \
+  "$MIGRATIONS_BASE_PATH/tag/action_0001.yaml" \
+  "$MIGRATIONS_BASE_PATH/attri_label/action_0001.yaml" \
+  "$MIGRATIONS_BASE_PATH/saleable_item/action_0001.yaml" \
+  "$MIGRATIONS_BASE_PATH/saleable_item/action_0002.yaml"
+do
+  curator --hosts http://$DB_ES_HOST:$DB_ES_PORT --username elastic --password $ELASTIC_PASSWORD --config ./settings/elastic_curator.yaml "$action_file"
+done
+

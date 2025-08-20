@@ -83,18 +83,18 @@ Note :
 ## Build
 For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/productmgt-ci.yaml)
 
-### Dependency update
-Update all dependency packages specified in the configuration file `v1.0.1/pyproject.toml`
+Here is Docker image build for base environment of this backend application.
 ```bash
-POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT='true' poetry update
-```
-Note
-- `POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT` is required for current `poetry` version, the CA cert path setup has some unresolved issues between `poetry` and its upstream packages `dulwich`, `urllib3`.
+cd /path/to/this-project/services
 
+docker build --file product/v2/infra/Dockerfile --tag productmgt-backend-base:latest .
+```
+
+### Dependency update
 
 To update specific dependency downloaded from pip server :
 ```bash
-POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT='true' poetry update <WHATEVER-3RD-PARTY-PACKAGE-NAME>
+poetry update <WHATEVER-3RD-PARTY-PACKAGE-NAME>
 ```
 
 To update local dependency `ecommerce-common` :
@@ -133,6 +133,13 @@ poetry run curator --config ./settings/elastic_curator.yaml \
 ## Run
 ### application server
 ```bash
+docker compose --file ./infra/docker-compose-generic.yml \
+    --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-test.env \
+    --profile serverstart  up --detach
+```
+
+```bash
 APP_SETTINGS="settings.development" poetry run granian --host 127.0.0.1 --port 8009 \
     --interface asgi  product.entry.web:app
 ```
@@ -145,6 +152,13 @@ SERVICE_BASE_PATH="${PWD}/../.."  poetry run celery --app=ecommerce_common.util 
 ```
 
 ## Test
+```bash
+docker compose --file ./infra/docker-compose-generic.yml \
+    --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env \
+    up --detach
+```
+
 ```bash
 APP_SETTINGS="settings.test"  ./run_unit_test
 APP_SETTINGS="settings.test"  ./run_integration_test
