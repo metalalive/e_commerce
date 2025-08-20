@@ -72,10 +72,10 @@ Note :
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
-|Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
-|Poetry| 1.8.4 | [see here](https://python-poetry.org/docs) |
-|pip| 24.3.1 | [see here](https://pip.pypa.io/en/stable/) |
-|Elasticsearch| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/tree/master/elasticsearch/5.6) | 
+|Python | 3.13.7 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
+|Poetry| 2.1.4 | [see here](https://python-poetry.org/docs) |
+|pip| 25.2 | [see here](https://pip.pypa.io/en/stable/) |
+|Elasticsearch| 8.19.2 | [see here](https://www.elastic.co/guide/en/elasticsearch/reference/current/release-notes-8.19.0.html) | 
 
 ## Documentation
 - [Open API documentation](./doc/api/openapi.yaml)

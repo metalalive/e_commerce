@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "product"
-version = "2.0.0"
+version = "2.1.0"
 description = "product management service"
 authors = ["T.H."]
 license = "MIT"
@@ -8,11 +8,11 @@ readme = "README.md"
 packages = [{include="product", from="./src"}, {include="settings", from="."}, {include="tests", from="."}]
 
 [tool.poetry.dependencies]
-python = "^3.12.0"
+python = "^3.13.7"
 granian = "1.5.2"
-blacksheep = "2.0.6"
+blacksheep = "2.0.8"
 pydantic = "2.10.1"
-elasticsearch-curator = {git = "https://github.com/metalalive/curator.git",  branch = "5.5"}
+elasticsearch-curator = "8.0.21"
 aiohttp = "~3.10.0"
 PyJWT = "^2.10.0"
 cryptography = "^44.0.0"
