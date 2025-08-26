@@ -33,9 +33,7 @@ shr_ctx = evtloop.run_until_complete(shr_ctx_cls.init(setting=_settings))
 )
 @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
 def get_product(item_ids: List[int], profile: int) -> Dict:
-    routine = get_saleitems_data(
-        item_ids, profile, repo=shr_ctx.datastore.saleable_item
-    )
+    routine = get_saleitems_data(item_ids, profile, repo=shr_ctx.datastore.saleable_item)
     result = evtloop.run_until_complete(routine)
     return {"result": result}
 

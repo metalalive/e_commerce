@@ -83,9 +83,7 @@ class TestSaleableItem:
         }
         attri_val_ms = [
             SaleItemAttriModel(
-                label=AttrLabelModel(
-                    id_="xuy1", name="Color", dtype=AttrDataTypeDto.String
-                ),
+                label=AttrLabelModel(id_="xuy1", name="Color", dtype=AttrDataTypeDto.String),
                 value="violet",
             )
         ]
@@ -93,9 +91,7 @@ class TestSaleableItem:
         id_ = 67890
 
         item1 = SaleableItemModel.from_req(req, tag_ms_map, attri_val_ms, usr_prof)
-        item2 = SaleableItemModel.from_req(
-            req, tag_ms_map, attri_val_ms, usr_prof, id_=id_
-        )
+        item2 = SaleableItemModel.from_req(req, tag_ms_map, attri_val_ms, usr_prof, id_=id_)
 
         assert item1.id_ > 0
         assert item2.id_ == id_

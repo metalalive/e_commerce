@@ -167,7 +167,7 @@ APP_SETTINGS="settings.test"  ./run_integration_test
 ## Development
 ### code formatter
 ```bash
-poetry run black ./src/ ./tests/ ./settings/
+poetry run black --line-length 100 ./src/ ./tests/ ./settings/
 ```
 
 ### linter

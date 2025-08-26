@@ -82,9 +82,7 @@ class TagController(APIController):
 
     @auth(PriviledgeLevel.AuthedUser.value)
     @router.delete("/tag/{tag_id}")
-    async def remove(
-        self, shr_ctx: SharedContext, authed_user: AuthUser, tag_id: str
-    ) -> Response:
+    async def remove(self, shr_ctx: SharedContext, authed_user: AuthUser, tag_id: str) -> Response:
         perm_err = permission_check(authed_user.claims, ["delete_producttag"])
         if perm_err:
             return forbidden(message=perm_err)

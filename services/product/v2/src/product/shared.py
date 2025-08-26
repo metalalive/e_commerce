@@ -39,9 +39,7 @@ class AppDataStore:
             return (k, repo)
 
         repo_kv_pairs = [
-            await init_one_repo(k, v)
-            for k, v in setting.DATABASES.items()
-            if isinstance(v, Dict)
+            await init_one_repo(k, v) for k, v in setting.DATABASES.items() if isinstance(v, Dict)
         ]
         return AppDataStore(repo_map=dict(repo_kv_pairs))
 
@@ -81,9 +79,7 @@ class SharedContext:
 
 class ExtendedKeysProvider(KeysProvider):
     def __init__(self, ks_setting: Dict):
-        self._kstore = create_keystore_helper(
-            cfg=ks_setting, import_fn=import_module_string
-        )
+        self._kstore = create_keystore_helper(cfg=ks_setting, import_fn=import_module_string)
 
     async def get_keys(self) -> JWKS:
         keyset: List[PyJWK] = self._kstore.all_pubkeys()

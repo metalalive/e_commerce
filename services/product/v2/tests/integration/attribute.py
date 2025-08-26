@@ -101,9 +101,7 @@ class TestAttribute:
             return cls.setup_update_req((d["id_"], d["name"], d["dtype"]))
 
         headers: Dict[str, str] = {}
-        add_auth_header(
-            mock_client, headers, mock_usr_id, ["change_productattributetype"]
-        )
+        add_auth_header(mock_client, headers, mock_usr_id, ["change_productattributetype"])
         reqbody = list(map(_setup_update_data, respbody))
         resp = await mock_client.put(
             path="/attributes",
@@ -137,9 +135,7 @@ class TestAttribute:
         ]
         query = {"ids": ",".join(ids_to_delete)}
         headers: Dict[str, str] = {}
-        add_auth_header(
-            mock_client, headers, mock_usr_id, ["delete_productattributetype"]
-        )
+        add_auth_header(mock_client, headers, mock_usr_id, ["delete_productattributetype"])
         resp = await mock_client.delete(
             path="/attributes",
             headers=headers,

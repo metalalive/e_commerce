@@ -47,9 +47,7 @@ def init_app(setting) -> Application:
     )
     _app.use_authentication().add(jwtauth)
     authorization = _app.use_authorization()
-    authorization += Policy(
-        PriviledgeLevel.AuthedUser.value, AuthenticatedRequirement()
-    )
+    authorization += Policy(PriviledgeLevel.AuthedUser.value, AuthenticatedRequirement())
     return _app
 
 

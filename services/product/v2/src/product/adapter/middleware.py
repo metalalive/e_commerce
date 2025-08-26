@@ -16,9 +16,7 @@ class RateLimiter:
         self, request: Request, handler: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         curr_time = time.time()
-        while (
-            self._timestamps and self._timestamps[0] < curr_time - self._interval_secs
-        ):
+        while self._timestamps and self._timestamps[0] < curr_time - self._interval_secs:
             self._timestamps.popleft()
         if len(self._timestamps) < self._max_reqs:
             self._timestamps.append(curr_time)

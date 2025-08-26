@@ -53,9 +53,7 @@ class TestSaleableItem:
                 "maxnum": num_items_limit,
             }
         ]
-        add_auth_header(
-            client, headers, usr_id, ["add_saleableitem"], quotas=quota_required
-        )
+        add_auth_header(client, headers, usr_id, ["add_saleableitem"], quotas=quota_required)
         resp = await client.post(
             path="/item",
             headers=headers,
@@ -89,9 +87,7 @@ class TestSaleableItem:
         cls = type(self)
         mock_usr_id = 110
         total_tags = []
-        tags = await cls.create_tag_bulk(
-            mock_client, mock_usr_id, [("consumer electronics", None)]
-        )
+        tags = await cls.create_tag_bulk(mock_client, mock_usr_id, [("consumer electronics", None)])
         total_tags.extend(tags)
 
         chosen_tag = tags[0]["id_"]
@@ -155,9 +151,7 @@ class TestSaleableItem:
         assert "resource-video-id-999" in respdata["media_set"]
         assert "resource-image-id-888" in respdata["media_set"]
         assert any(filter(lambda t: t["name"] == "smartphones", respdata["tags"]))
-        assert any(
-            filter(lambda t: t["name"] == "consumer electronics", respdata["tags"])
-        )
+        assert any(filter(lambda t: t["name"] == "consumer electronics", respdata["tags"]))
         assert len(respdata["attributes"]) > 0
 
         existing_saleitem_id = respdata["id_"]
@@ -226,15 +220,11 @@ class TestSaleableItem:
         assert resp.status == 404
         headers: Dict[str, str] = {}
         add_auth_header(mock_client, headers, mock_another_usr_id, ["add_saleableitem"])
-        resp = await mock_client.get(
-            f"/item/{created_item_id}/private", headers=headers
-        )
+        resp = await mock_client.get(f"/item/{created_item_id}/private", headers=headers)
         assert resp.status == 403
         headers: Dict[str, str] = {}
         add_auth_header(mock_client, headers, mock_usr_id, ["add_saleableitem"])
-        resp = await mock_client.get(
-            f"/item/{created_item_id}/private", headers=headers
-        )
+        resp = await mock_client.get(f"/item/{created_item_id}/private", headers=headers)
         assert resp.status == 200
         readback = await resp.json()
         assert readback["name"] == "Flight Simulator Panel"
@@ -294,9 +284,7 @@ class TestSaleableItem:
 
         headers: Dict[str, str] = {}
         add_auth_header(mock_client, headers, mock_usr_id, ["delete_saleableitem"])
-        delete_resp = await mock_client.delete(
-            f"/item/{created_item_id}", headers=headers
-        )
+        delete_resp = await mock_client.delete(f"/item/{created_item_id}", headers=headers)
         assert delete_resp.status == 204
         await asyncio.sleep(1)
 
@@ -323,9 +311,7 @@ class TestSaleableItem:
     async def test_create_invalid_attribute(self, mock_client):
         cls = type(self)
         mock_usr_id = 114
-        total_tags = await cls.create_tag_bulk(
-            mock_client, mock_usr_id, [("healthcare", None)]
-        )
+        total_tags = await cls.create_tag_bulk(mock_client, mock_usr_id, [("healthcare", None)])
         chosen_tag = total_tags[0]["id_"]
         reqdata = SaleItemCreateReqDto(
             name="no-magic mushr0om",

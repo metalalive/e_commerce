@@ -58,9 +58,7 @@ class SaleItemController(APIController):
                 "limit": num_allowed,
                 "num_used": num_items_saved,
             }
-        num_allowed = QuotaMaterial.find_maxnum(
-            quotas, QuotaMaterialCode.NumAttributesPerItem
-        )
+        num_allowed = QuotaMaterial.find_maxnum(quotas, QuotaMaterialCode.NumAttributesPerItem)
         num_attris_req = len(reqbody.attributes)
         if num_attris_req > num_allowed:
             return {
@@ -70,9 +68,7 @@ class SaleItemController(APIController):
             }
 
     @staticmethod
-    async def load_tags(
-        shr_ctx: SharedContext, tag_ids: List[str]
-    ) -> Dict[str, List[TagModel]]:
+    async def load_tags(shr_ctx: SharedContext, tag_ids: List[str]) -> Dict[str, List[TagModel]]:
         out: Dict[str, List[TagModel]] = {}
         ids_not_found: Dict[str, List[int]] = {}
         id_decomposed = defaultdict(list)
@@ -124,17 +120,13 @@ class SaleItemController(APIController):
             return forbidden(message=perm_err)
         reqbody = reqbody.value
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
-        perm_err = await SaleItemController.quota_check(
-            repo, authed_user.claims, reqbody
-        )
+        perm_err = await SaleItemController.quota_check(repo, authed_user.claims, reqbody)
         if perm_err:
             return forbidden(message=perm_err)
         usr_prof_id: int = authed_user.claims.get("profile", -1)
         try:
             tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
-            attri_val_ms = await SaleItemController.resolve_attributes(
-                shr_ctx, reqbody.attributes
-            )
+            attri_val_ms = await SaleItemController.resolve_attributes(shr_ctx, reqbody.attributes)
         except (TagErrorModel, AttriLabelError) as e:
             return bad_request(message=e.detail)
         item_m = SaleableItemModel.from_req(
@@ -164,9 +156,7 @@ class SaleItemController(APIController):
         reqbody = reqbody.value
         try:
             tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
-            attri_val_ms = await SaleItemController.resolve_attributes(
-                shr_ctx, reqbody.attributes
-            )
+            attri_val_ms = await SaleItemController.resolve_attributes(shr_ctx, reqbody.attributes)
         except (TagErrorModel, AttriLabelError) as e:
             return bad_request(message=e.detail)
         item_m = SaleableItemModel.from_req(
@@ -199,9 +189,7 @@ class SaleItemController(APIController):
 
     @auth(PriviledgeLevel.AuthedUser.value)
     @router.delete("/item/{item_id}")
-    async def delete(
-        self, shr_ctx: SharedContext, item_id: int, authed_user: AuthUser
-    ) -> Response:
+    async def delete(self, shr_ctx: SharedContext, item_id: int, authed_user: AuthUser) -> Response:
         perm_err = permission_check(authed_user.claims, ["delete_saleableitem"])
         if perm_err:
             return forbidden(message=perm_err)
@@ -219,9 +207,7 @@ class SaleItemController(APIController):
         repo: AbstractSaleItemRepo, item_id: int, visible_only: bool
     ) -> Response:
         try:
-            item_m: SaleableItemModel = await repo.fetch(
-                item_id, visible_only=visible_only
-            )
+            item_m: SaleableItemModel = await repo.fetch(item_id, visible_only=visible_only)
             item_d = item_m.to_dto()
             return ok(message=item_d.model_dump())
         except AppRepoError as e:
@@ -249,9 +235,7 @@ class SaleItemController(APIController):
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
         match = await SaleItemController.validate_maintainer(repo, item_id, authed_user)
         if match:
-            return await SaleItemController.get_by_id_common(
-                repo, item_id, visible_only=False
-            )
+            return await SaleItemController.get_by_id_common(repo, item_id, visible_only=False)
         else:
             return forbidden()
 
