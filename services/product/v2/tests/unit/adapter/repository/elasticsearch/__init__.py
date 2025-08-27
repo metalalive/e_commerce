@@ -32,7 +32,7 @@ async def es_mapping_init(app_setting):
                 str(actionfile_path),  # action_file argument (positional)
             ],
         )
-        # print("Exit Code:", result.exit_code)
+        print("Exit Code:", result.exit_code)
         # print(result.output)
 
     list(map(_run_curator, action_file_rel_paths))

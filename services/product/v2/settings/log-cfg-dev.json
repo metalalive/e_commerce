@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "detailed": {
+      "format": "[%(asctime)s] %(levelname)s %(name)s %(module)s:%(lineno)d: %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S%z"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "level": "WARNING",
+      "formatter": "detailed",
+      "stream": "ext://sys.stdout"
+    },
+    "localfile": {
+      "class": "logging.handlers.TimedRotatingFileHandler",
+      "level": "DEBUG",
+      "formatter": "detailed",
+      "filename": "/app/log/productmgt-base.log",
+      "when": "midnight",
+      "backupCount": 7
+    }
+  },
+  "loggers": {
+    "_granian": {
+      "level": "WARNING",
+      "handlers": ["console"],
+      "propagate": false
+    },
+    "granian.access": {
+      "level": "INFO",
+      "handlers": ["console"],
+      "propagate": false
+    },
+    "blacksheep.server": {
+      "level": "DEBUG",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "blacksheep.server.authentication.jwt": {
+      "level": "DEBUG",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "guardpost.jwts": {
+      "level": "INFO",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "ecommerce_common.auth.jwt": {
+      "level": "WARNING",
+      "handlers": ["console", "localfile"],
+      "propagate": false
+    },
+    "ecommerce_common.auth.keystore": {
+      "level": "WARNING",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.adapter.repository.elasticsearch": {
+      "level": "WARNING",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.adapter.repository.elasticsearch.tag": {
+      "level": "INFO",
+      "handlers": ["console", "localfile"],
+      "propagate": false
+    },
+    "product.adapter.repository.elasticsearch.attribute": {
+      "level": "ERROR",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.adapter.repository.elasticsearch.saleable_item": {
+      "level": "DEBUG",
+      "handlers": ["console", "localfile"],
+      "propagate": false
+    },
+    "product.entry.web": {
+      "level": "DEBUG",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.api.dto": {
+      "level": "INFO",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.api.rpc": {
+      "level": "WARNING",
+      "handlers": ["console", "localfile"],
+      "propagate": false
+    },
+    "product.api.web": {
+      "level": "DEBUG",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.api.web.tag": {
+      "level": "INFO",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.api.web.saleable": {
+      "level": "WARNING",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.model.tag": {
+      "level": "INFO",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "product.shared": {
+      "level": "WARNING",
+      "handlers": ["localfile"],
+      "propagate": false
+    }
+  },
+  "root": {
+    "level": "WARNING",
+    "handlers": ["console", "localfile"]
+  }
+}

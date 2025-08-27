@@ -48,6 +48,14 @@ def init_app(setting) -> Application:
     _app.use_authentication().add(jwtauth)
     authorization = _app.use_authorization()
     authorization += Policy(PriviledgeLevel.AuthedUser.value, AuthenticatedRequirement())
+
+    def init_excpt_hdlr(cls_path: str, fn_path: str):
+        cls0 = import_module_string(cls_path)
+        fn0 = import_module_string(fn_path)
+        _app.exceptions_handlers[cls0] = fn0
+
+    for k, v in setting.EXCEPTION_HANDLING_FUNCTIONS.items():
+        init_excpt_hdlr(k, v)
     return _app
 
 

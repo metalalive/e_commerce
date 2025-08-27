@@ -22,7 +22,7 @@ _logger = logging.getLogger(__name__)
 
 class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
     def __init__(self, setting: Dict, loop: AbstractEventLoop):
-        cfdntl = setting["cfdntl"]
+        # TODO , use credential from setting["cfdntl"] once XPACK plugin is available
         address = setting["db_addr"]
 
         self._index_primary_name = setting["db_names"]["latest"]

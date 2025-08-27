@@ -27,6 +27,10 @@ MIDDLEWARES = OrderedDict(
     ]
 )
 
+EXCEPTION_HANDLING_FUNCTIONS = {
+    "product.model.TagErrorModel": "product.api.web.tag.exception_handler"
+}
+
 REPO_PKG_BASE = "product.adapter.repository"
 
 # TODO, improve the database address setup

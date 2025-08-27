@@ -1,17 +1,30 @@
 from typing import Optional
+import logging
 
 from blacksheep import FromJSON, Response
+from blacksheep.server.responses import bad_request, not_found
 from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, forbidden, ok, no_content
 from guardpost import User as AuthUser
 
-from product.model import TagModel, TagTreeModel
+from product.model import TagModel, TagTreeModel, TagErrorModel, TagErrorReason
 from product.shared import SharedContext
 from product.util import PriviledgeLevel, permission_check
 
 from . import router
 from ..dto import TagCreateReqDto, TagUpdateReqDto, TagReadRespDto
+
+_logger = logging.getLogger(__name__)
+
+
+async def exception_handler(self, request, e: TagErrorModel) -> Response:
+    if e.reason in (TagErrorReason.MissingTree, TagErrorReason.UnknownTree):
+        return not_found(message=e.detail)
+    elif e.reason == TagErrorReason.DecodeInvalidId:
+        return bad_request(message=e.detail)
+    _logger.error("Unhandled TagErrorModel, reason: %s, detail: %s", e.reason, e.detail)
+    return Response(500, content=bytes("unexpected server error occurred.", "utf-8"))
 
 
 class TagController(APIController):
@@ -52,6 +65,7 @@ class TagController(APIController):
     ) -> Response:
         perm_err = permission_check(authed_user.claims, ["change_producttag"])
         if perm_err:
+            _logger.info("perm-err: %s", perm_err)
             return forbidden(message=perm_err)
         reqbody = reqbody.value
         repo = shr_ctx.datastore.tag

@@ -26,8 +26,15 @@ async def read_one_tag(
     )
     assert resp.status == expect_status
     respbody = await resp.json()
-    assert respbody["curr_node"]["id_"] == tag_id
+    if respbody.get("curr_node"):
+        assert respbody["curr_node"]["id_"] == tag_id
     return respbody
+
+
+class TestReadTag:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_read_empty(self, mock_client):
+        _ = await read_one_tag(mock_client, "xx12345", None, 1, expect_status=400)
 
 
 class TestCreateTag:
