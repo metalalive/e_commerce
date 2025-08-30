@@ -46,6 +46,13 @@ def init_app(setting) -> Application:
         keys_provider=key_provider_cls(setting.KEYSTORE),
     )
     _app.use_authentication().add(jwtauth)
+    # `JWTBearerAuthentication` hard-coded INFO level and vague name to its inner logger,
+    # replace it with well-named logger instead.
+    authlogger = logging.getLogger(JWTBearerAuthentication.__module__)
+    jwtauth.logger = authlogger
+    authlogger = logging.getLogger("guardpost.jwts")
+    jwtauth._validator.logger = authlogger
+
     authorization = _app.use_authorization()
     authorization += Policy(PriviledgeLevel.AuthedUser.value, AuthenticatedRequirement())
 

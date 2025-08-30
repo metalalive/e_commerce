@@ -25,14 +25,14 @@ services:
         soft: 64000
         hard: 65536
   
-  db-schema-migration:
+  db-schema-migration-prodmgt:
     container_name: productmgt-dev-db-schema-migrate
     env_file:
       - ./container-dev.env
     networks:
       - net1
   
-  run-test:
+  run-test-prodmgt:
     container_name: productmgt-itest-0
     image: productmgt-backend-base:latest
     pull_policy: never
@@ -48,25 +48,25 @@ services:
     working_dir: /app/productmgt/v2.x
     volumes:
       - ./run_integration_test:/app/entry/run_my_app
-      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
-      - ../../../common/data/cors-dev.json:/app/common/data/cors.json:ro
       - ../settings/development.py:/app/productmgt/v2.x/settings/development.py
       - ../settings/elastic_curator.yaml:/app/productmgt/v2.x/settings/elastic_curator.yaml
       - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
       - ../tests/integration:/app/productmgt/v2.x/tests/integration
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../../common/data/cors-dev.json:/app/common/data/cors.json:ro
       - ../../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks
     depends_on:
-      db-schema-migration:
+      db-schema-migration-prodmgt:
         condition: service_completed_successfully
 
-  api-server:
+  api-server-prodmgt:
     container_name: productmgt-dev-apisrv
     env_file:
       - ./container-dev.env
     environment:
       APP_SETTINGS: settings.development
     stop_signal: SIGINT
-    stop_grace_period: 17s
+    stop_grace_period: 13s
     volumes:
       - ../settings/development.py:/app/productmgt/v2.x/settings/development.py:ro
       - ../settings/log-cfg-dev.json:/app/productmgt/v2.x/settings/log-cfg.json:ro

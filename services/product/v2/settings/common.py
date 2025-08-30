@@ -28,7 +28,9 @@ MIDDLEWARES = OrderedDict(
 )
 
 EXCEPTION_HANDLING_FUNCTIONS = {
-    "product.model.TagErrorModel": "product.api.web.tag.exception_handler"
+    "product.model.TagErrorModel": "product.api.web.tag.exception_handler",
+    "guardpost.authorization.UnauthorizedError": "product.api.web.unauthorized_handler",
+    "guardpost.authorization.ForbiddenError": "product.api.web.forbidden_handler",
 }
 
 REPO_PKG_BASE = "product.adapter.repository"
@@ -74,9 +76,10 @@ KEYSTORE = {
     "persist_pubkey_handler": {
         "module_path": "ecommerce_common.auth.jwt.RemoteJWKSPersistHandler",
         "init_kwargs": {
-            "url": f"{USRMGT_SERVER_BASEADDR}:8008/jwks",
+            "url": f"{USRMGT_SERVER_BASEADDR}/jwks",
             "name": "remote_pubkey",
             "lifespan_hrs": 13,
+            "max_cached_keys": 59,
         },
     },
 }

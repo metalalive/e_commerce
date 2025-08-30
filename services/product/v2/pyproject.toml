@@ -11,7 +11,7 @@ packages = [{include="product", from="./src"}, {include="settings", from="."}, {
 python = "^3.13.7"
 granian = "1.5.2"
 blacksheep = "2.0.8"
-pydantic = "2.10.1"
+pydantic = "~2.10.1"
 elasticsearch-curator = "8.0.21"
 aiohttp = "~3.10.0"
 PyJWT = "^2.10.0"
