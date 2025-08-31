@@ -1,0 +1,3 @@
+exec celery --app=ecommerce_common.util --config=$APP_SETTINGS  --workdir ./src \
+    worker --concurrency 1 --loglevel=INFO --hostname=productmgt@%h  -E \
+    --logfile=/app/log/productmgt-celery.log

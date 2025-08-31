@@ -31,7 +31,7 @@
     },
     "granian.access": {
       "level": "INFO",
-      "handlers": ["console"],
+      "handlers": ["localfile","console"],
       "propagate": false
     },
     "blacksheep.server": {

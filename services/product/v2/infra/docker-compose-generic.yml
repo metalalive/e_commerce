@@ -74,7 +74,18 @@ services:
     volumes:
       - ./run_api_server:/app/entry/run_my_app
       - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
-    depends_on:
-      db-schema-migration-prodmgt:
-        condition: service_completed_successfully
+
+  rpc-consumer-prodmgt:
+    container_name: productmgt-unknown-rpcconsumer
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    profiles:
+      - serverstart
+    restart: no
+    environment:
+      SYS_BASE_PATH: /app
+    working_dir: /app/productmgt/v2.x
+    volumes:
+      - ./run_rpc_consumer:/app/entry/run_my_app
+      - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py
 
