@@ -47,9 +47,9 @@ async def get_saleitems_data(
     ms: List[SaleableItemModel] = await repo.fetch_many(
         ids=item_ids, usrprof=profile, visible_only=True
     )
-    data = [m.to_dto().model_dump() for m in ms]
-    discard_fields = ["usrprof", "name", "visible", "tags", "media_set"]
-    # reserved fields: id_ , attributes, last_update
+    data = [m.to_dto().model_dump(mode="json") for m in ms]
+    discard_fields = ["usrprof", "visible", "tags", "media_set"]
+    # reserved fields: id_, name , attributes, last_update
     for d in data:
         for fname in discard_fields:
             d.pop(fname)
