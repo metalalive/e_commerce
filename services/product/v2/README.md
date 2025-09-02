@@ -83,6 +83,7 @@ Note :
 ## Build
 For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/productmgt-ci.yaml)
 
+### Docker Build
 Here is Docker image build for base environment of this backend application.
 ```bash
 cd /path/to/this-project/services
@@ -105,29 +106,6 @@ To update local dependency `ecommerce-common` :
 
 These steps does not seem efficient, but it does force the update, if you simply run `poetry update ecommerce-common` with version change, then poetry will internally ignore the update without any hint / warning message.
 
-### specify local paths to source code packages
-It is essential to run `install` command to let virtual environment know the local paths to source code packages
-```bash
-poetry install
-```
-After that you should be able to import the packages of the development code
-```bash
-poetry run python
-
-> import sys
-> sys.path
-['/PATH/TO/PACKAGE1', '/PATH/TO/PROJ_HOME', '/PATH/TO/PROJ_HOME/src' ....]
-> import product
-> import settings
->
-```
-
-### Data schema migration
-ElasticSearch is applied as datastore, the mapping type / fields for each index can be maintained using the tool [elastic curator](https://www.elastic.co/guide/en/elasticsearch/client/curator/5.6/about-features.html).
-```bash
-poetry run curator --config ./settings/elastic_curator.yaml \
-    ./src/product/migrations/elastic_curator/*/action_VERSION_NUMBER.yaml
-```
 
 
 ## Run
@@ -135,21 +113,15 @@ poetry run curator --config ./settings/elastic_curator.yaml \
 ```bash
 docker compose --file ./infra/docker-compose-generic.yml \
     --file ./infra/docker-compose-dev.yml \
-    --env-file ./infra/interpolation-test.env \
+    --file ./infra/docker-compose-smoketest4dev.yaml \
+    --env-file ./infra/interpolation-dev.env \
     --profile serverstart  up --detach
 ```
 
-```bash
-APP_SETTINGS="settings.development" poetry run granian --host 127.0.0.1 --port 8009 \
-    --interface asgi  product.entry.web:app
-```
-
-### RPC consumer
-```bash
-SERVICE_BASE_PATH="${PWD}/../.."  poetry run celery --app=ecommerce_common.util  \
-    --config=settings.development  --workdir ./src  worker --concurrency 1 --loglevel=INFO \
-    --hostname=productmgt@%h  -E
-```
+- the compose file `docker-compose-smoketest4dev.yaml` will run optional smoke test
+  - smoke test can be omitted if unecessary in your application use cases.
+  - smoke test requires RPC consumer, inter-application message borker (RabbitMQ), and another application server in `user-management` up and running.
+- to stop and remove all running services in this application, replace subcommand `up --detach` with `down --volumes`
 
 ## Test
 ```bash
@@ -157,11 +129,6 @@ docker compose --file ./infra/docker-compose-generic.yml \
     --file ./infra/docker-compose-test.yml \
     --env-file ./infra/interpolation-test.env \
     up --detach
-```
-
-```bash
-APP_SETTINGS="settings.test"  ./run_unit_test
-APP_SETTINGS="settings.test"  ./run_integration_test
 ```
 
 ## Development
@@ -174,4 +141,3 @@ poetry run black --line-length 100 ./src/ ./tests/ ./settings/
 ```bash
 poetry run ruff check ./src/ ./tests/ ./settings/
 ```
-
