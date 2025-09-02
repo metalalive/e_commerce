@@ -127,9 +127,10 @@ jobs:
       
       - name: run integration test
         working-directory: services/product/v2
-        # create a network in user-management app here, all other applications regularly retrieve
+        # create networks for mocking user-management app here, all other applications regularly retrieve
         # JWKS from user-management app server.
         run: |
+          docker network create --driver bridge --subnet 172.19.253.0/24 --ip-range 172.19.253.0/28 --gateway 172.19.253.254 ec-intersrvs-dev-net
           docker network create --driver bridge --subnet 172.19.2.0/24 --ip-range 172.19.2.0/25 --gateway 172.19.2.254 ec-usrmgt-dev-net
           docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile serverstart up --abort-on-container-exit
         
