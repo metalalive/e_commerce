@@ -132,10 +132,10 @@ jobs:
         run: |
           docker network create --driver bridge --subnet 172.19.253.0/24 --ip-range 172.19.253.0/28 --gateway 172.19.253.254 ec-intersrvs-dev-net
           docker network create --driver bridge --subnet 172.19.2.0/24 --ip-range 172.19.2.0/25 --gateway 172.19.2.254 ec-usrmgt-dev-net
-          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile serverstart up --abort-on-container-exit
+          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up
         
       - name: Clean up containers and volumes
         if: always()
         working-directory: services/product/v2
-        run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile serverstart  down --volumes
+        run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  down --volumes
 

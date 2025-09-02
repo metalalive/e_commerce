@@ -36,8 +36,6 @@ services:
     container_name: productmgt-itest-0
     image: productmgt-backend-base:latest
     pull_policy: never
-    profiles:
-      - serverstart
     env_file:
       - ./container-dev.env
     environment:
