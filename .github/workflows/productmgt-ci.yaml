@@ -71,6 +71,12 @@ jobs:
         run: |
             docker load --input ${{ runner.temp }}/productmgt-backend-base.tar
             docker image ls -a
+
+      - name: set up database persistence path
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p installed/es/data  installed/es/backup installed/es/log
+
       - name: Create test environment file
         working-directory: services/product/v2/infra
         run: |
@@ -99,10 +105,11 @@ jobs:
         working-directory: services/product/v2
         run: |
           docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  down --volumes
-          rm -rf ${{ github.workspace }}/installed/*
 
-      - name: Clean previous test environment files
+      - name: clean up previous persistence data
+        working-directory: ${{ github.workspace }}/installed/es
         run: |
+          rm -rf data/*  backup/*  log/*
 
       - name: Create dev environment file
         working-directory: services/product/v2/infra
