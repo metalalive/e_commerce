@@ -111,7 +111,7 @@ jobs:
       - name: clean up previous persistence data
         working-directory: ${{ github.workspace }}/installed/es
         run: |
-          rm -rf data/*  backup/*  log/*
+          sudo rm -rf data/*  backup/*  log/*
 
       - name: Create dev environment file
         working-directory: services/product/v2/infra
