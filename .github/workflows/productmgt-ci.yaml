@@ -127,13 +127,18 @@ jobs:
       
       - name: run integration test
         working-directory: services/product/v2
-        # create networks for mocking user-management app here, all other applications regularly retrieve
-        # JWKS from user-management app server.
+        # - create networks for mocking user-management app here, all other applications regularly retrieve
+        #   JWKS from user-management app server.
+        # - explcitly run each service sequentially , docker compose does not support exit on
+        #   specific service in the middle, this will cause github action workflow hangs forever.
         run: |
           docker network create --driver bridge --subnet 172.19.253.0/24 --ip-range 172.19.253.0/28 --gateway 172.19.253.254 ec-intersrvs-dev-net
           docker network create --driver bridge --subnet 172.19.2.0/24 --ip-range 172.19.2.0/25 --gateway 172.19.2.254 ec-usrmgt-dev-net
-          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up
-        
+          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up --no-start
+          docker start productmgt-dev-elastic
+          docker start --attach productmgt-dev-db-schema-migrate
+          docker start --attach productmgt-itest-0
+
       - name: Clean up containers and volumes
         if: always()
         working-directory: services/product/v2
