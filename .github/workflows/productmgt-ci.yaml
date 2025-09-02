@@ -77,7 +77,7 @@ jobs:
         # the user `elasticsearch` in docker container has UID 1000 and GID 1000 
         run: |
           mkdir -p installed/es/data  installed/es/backup installed/es/log
-          chown --recursive 1000:1000 installed/es
+          sudo chown --recursive 1000:1000 installed/es
 
       - name: Create test environment file
         working-directory: services/product/v2/infra
