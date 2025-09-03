@@ -134,10 +134,10 @@ jobs:
         run: |
           docker network create --driver bridge --subnet 172.19.253.0/24 --ip-range 172.19.253.0/28 --gateway 172.19.253.254 ec-intersrvs-dev-net
           docker network create --driver bridge --subnet 172.19.2.0/24 --ip-range 172.19.2.0/25 --gateway 172.19.2.254 ec-usrmgt-dev-net
-          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up --no-start
-          docker start productmgt-dev-elastic
-          docker start --attach productmgt-dev-db-schema-migrate
-          docker start --attach productmgt-itest-0
+          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up --detach
+          python3 ${{ github.workspace }}/.github/docker_wait.py  --container-name productmgt-itest-0  --target-status exited --timeout-secs 180
+          docker logs productmgt-dev-db-schema-migrate
+          docker logs productmgt-itest-0
 
       - name: Clean up containers and volumes
         if: always()
