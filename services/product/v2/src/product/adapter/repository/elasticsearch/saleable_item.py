@@ -22,7 +22,8 @@ _logger = logging.getLogger(__name__)
 
 class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
     def __init__(self, setting: Dict, loop: AbstractEventLoop):
-        cfdntl = setting["cfdntl"]
+        # TODO , use credential from setting["cfdntl"] once XPACK plugin is available
+        address = setting["db_addr"]
 
         self._index_primary_name = setting["db_names"]["latest"]
         self._index_snapshot_pattern = setting["db_names"]["history"]
@@ -35,11 +36,9 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             loop=loop,
         )
         proto = "https" if secure_conn_enable else "http"
-        domain_host = "%s://%s:%d" % (proto, cfdntl["HOST"], cfdntl["PORT"])
+        domain_host = "%s://%s:%d" % (proto, address["HOST"], address["PORT"])
         headers = {"content-type": "application/json", "accept": "application/json"}
-        self._session = ClientSession(
-            base_url=domain_host, headers=headers, connector=connector
-        )
+        self._session = ClientSession(base_url=domain_host, headers=headers, connector=connector)
         _logger.debug("ElasticSearchSaleItemRepo.init done successfully")
 
     async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
@@ -83,18 +82,12 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         }
         return out
 
-    async def save_primary(
-        self, item_m: SaleableItemModel, force_create: bool
-    ) -> Tuple[int, Dict]:
+    async def save_primary(self, item_m: SaleableItemModel, force_create: bool) -> Tuple[int, Dict]:
         cls = type(self)
         op_type = "create" if force_create else "index"
-        url = "/%s/the-only-type/%d/?op_type=%s" % (
-            self._index_primary_name,
-            item_m.id_,
-            op_type,
-        )
+        url = "/%s/_doc/%d/?op_type=%s" % (self._index_primary_name, item_m.id_, op_type)
         reqbody = cls.convert_to_primary_doc(item_m)
-        resp = await self._session.put(url, json=reqbody)
+        resp = await self._session.post(url, json=reqbody)
         async with resp:
             respbody = await resp.json()
         return (resp.status, respbody)
@@ -107,9 +100,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 if status_code == 409:
                     item_m.rotate_id()
                 else:
-                    raise AppRepoError(
-                        fn_label=AppRepoFnLabel.SaleItemCreate, reason=respbody
-                    )
+                    raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemCreate, reason=respbody)
             else:
                 break
         if idx == num_retry:
@@ -154,41 +145,33 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         cls.rawdoc_primary_to_snapshot(olditem_rawdoc)
         idx_name = self.snapshot_index_name(snapshot_ts)
         snapshot_id = self.snapshot_id(snapshot_ts, saleitem_id)
-        url = "/%s/the-only-type/%s" % (idx_name, snapshot_id)
-        resp = await self._session.put(url, json=olditem_rawdoc)
+        url = "/%s/_doc/%s" % (idx_name, snapshot_id)
+        resp = await self._session.post(url, json=olditem_rawdoc)
         _logger.debug("index:%s, id:%s, resp:%d", idx_name, snapshot_id, resp.status)
         async with resp:
             respbody = await resp.json()
             if resp.status >= 400:
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemArchiveUpdate, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemArchiveUpdate, reason=respbody)
 
     async def archive_and_update(self, item_m: SaleableItemModel):
         await self.do_archive(item_m.id_)
         status_code, respbody = await self.save_primary(item_m, force_create=False)
         if status_code >= 400:
-            raise AppRepoError(
-                fn_label=AppRepoFnLabel.SaleItemArchiveUpdate, reason=respbody
-            )
+            raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemArchiveUpdate, reason=respbody)
         _logger.debug("ElasticSearchSaleItemRepo.archive_and_update done successfully")
 
     async def delete(self, id_: int):
         await self.do_archive(id_)
-        url = "/%s/the-only-type/%d" % (self._index_primary_name, id_)
+        url = "/%s/_doc/%d" % (self._index_primary_name, id_)
         resp = await self._session.delete(url)
         async with resp:
             respbody = await resp.json()
             if resp.status >= 400:
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemDelete, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemDelete, reason=respbody)
         _logger.debug("ElasticSearchSaleItemRepo.delete done successfully")
 
-    async def fetch_doc_primary_single_id(
-        self, id_: int, fn_label: AppRepoFnLabel
-    ) -> Dict:
-        url = "/%s/the-only-type/%d" % (self._index_primary_name, id_)
+    async def fetch_doc_primary_single_id(self, id_: int, fn_label: AppRepoFnLabel) -> Dict:
+        url = "/%s/_doc/%d" % (self._index_primary_name, id_)
         resp = await self._session.get(url)
         async with resp:
             respbody = await resp.json()
@@ -205,7 +188,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         usrprof: Optional[int] = None,
     ) -> List[Tuple[int, Dict]]:
         fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
-        url = "/%s/the-only-type/_search?filter_path=%s" % (
+        url = "/%s/_search?filter_path=%s" % (
             self._index_primary_name,
             ",".join(fields_present),
         )
@@ -273,9 +256,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             last_update=last_update,
         )
 
-    async def fetch(
-        self, id_: int, visible_only: Optional[bool] = None
-    ) -> SaleableItemModel:
+    async def fetch(self, id_: int, visible_only: Optional[bool] = None) -> SaleableItemModel:
         cls = type(self)
         if visible_only:
             rawdocs = await self.fetch_doc_primary_multi_id(
@@ -288,9 +269,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                     "remote_database_done": True,
                     "num_docs_fetched": len(rawdocs),
                 }
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason)
             fetched_id, rawdoc = rawdocs[0]
             assert fetched_id == id_
         else:
@@ -303,9 +282,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         except (ValueError, ValidationError) as e:
             _logger.error("corruption detail: %s" % str(e))
             reason = {"detail": "data-corruption"}
-            raise AppRepoError(
-                fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason
-            )
+            raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason)
         _logger.debug("ElasticSearchSaleItemRepo.fetch done successfully")
         return obj
 
@@ -327,15 +304,13 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         except (ValueError, ValidationError) as e:
             _logger.error("corruption detail: %s" % str(e))
             reason = {"detail": "data-corruption"}
-            raise AppRepoError(
-                fn_label=AppRepoFnLabel.SaleItemFetchManyModel, reason=reason
-            )
+            raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemFetchManyModel, reason=reason)
         _logger.debug("ElasticSearchSaleItemRepo.fetch_many done successfully")
         return objs
 
     async def get_maintainer(self, id_: int) -> int:
         fields_present = ["_source.usr_prof", "_id"]
-        url = "/%s/the-only-type/%d?filter_path=%s" % (
+        url = "/%s/_doc/%d?filter_path=%s" % (
             self._index_primary_name,
             id_,
             ",".join(fields_present),
@@ -345,18 +320,13 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             respbody = await resp.json()
             if resp.status != 200:
                 respbody["remote_database_done"] = True
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemGetMaintainer, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemGetMaintainer, reason=respbody)
         _logger.debug("ElasticSearchSaleItemRepo.get_maintainer done successfully")
         return respbody["_source"]["usr_prof"]
 
     async def num_items_created(self, usr_id: int) -> int:
         fields_present = ["hits.total"]
-        url = "/%s/the-only-type/_search?filter_path=%s" % (
-            self._index_primary_name,
-            ",".join(fields_present),
-        )
+        url = "/%s/_search?filter_path=%s" % (self._index_primary_name, ",".join(fields_present))
         reqbody = {
             "_source": False,
             "size": 0,
@@ -368,11 +338,9 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             respbody = await resp.json()
             if resp.status != 200:
                 respbody["remote_database_done"] = True
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemNumCreated, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemNumCreated, reason=respbody)
         _logger.debug("ElasticSearchSaleItemRepo.num_items_created done successfully")
-        return respbody["hits"]["total"]
+        return respbody["hits"]["total"]["value"]
 
     @staticmethod
     def base_search_query(keywords: List[str]) -> Dict:
@@ -425,7 +393,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         cls = type(self)
         # fmt: off
         fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "hits.hits._score", "_shards"]
-        url = "/%s/the-only-type/_search?filter_path=%s" % (
+        url = "/%s/_search?filter_path=%s" % (
             self._index_primary_name, ",".join(fields_present),
         )
         # fmt: on
@@ -440,9 +408,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             respbody = await resp.json()
             if resp.status != 200:
                 respbody["remote_database_done"] = True
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.SaleItemSearch, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemSearch, reason=respbody)
         try:
             result = [
                 cls.convert_from_primary_doc(int(d["_id"]), d["_source"])

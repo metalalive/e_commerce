@@ -16,16 +16,15 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         self,
         secure_conn_enable: bool,
         cfdntl: Dict,
+        address: Dict,
         index_name: str,
         connector: TCPConnector,
         tree_id_length: int,
     ):
         proto = "https" if secure_conn_enable else "http"
-        domain_host = "%s://%s:%d" % (proto, cfdntl["HOST"], cfdntl["PORT"])
+        domain_host = "%s://%s:%d" % (proto, address["HOST"], address["PORT"])
         headers = {"content-type": "application/json", "accept": "application/json"}
-        self._session = ClientSession(
-            base_url=domain_host, headers=headers, connector=connector
-        )
+        self._session = ClientSession(base_url=domain_host, headers=headers, connector=connector)
         self._index_name = index_name
         self._tree_id_length = tree_id_length
 
@@ -43,6 +42,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             secure_conn_enable,
             cfdntl=setting["cfdntl"],
             index_name=setting["db_name"],
+            address=setting["db_addr"],
             connector=connector,
             tree_id_length=tree_id_length,
         )
@@ -52,7 +52,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         _logger.debug("ElasticSearchTagRepo.deinit done successfully")
 
     async def fetch_tree(self, t_id: str) -> TagTreeModel:
-        url = "/%s/the-only-type/%s" % (self._index_name, t_id)
+        url = "/%s/_doc/%s" % (self._index_name, t_id)
         resp = await self._session.get(url)
         async with resp:
             respbody = await resp.json()
@@ -60,9 +60,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
                 cls = type(self)
                 nodes = cls.parse_doc_tree_nodes(respbody)
             else:
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.TagFetchTree, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.TagFetchTree, reason=respbody)
         _logger.debug("ElasticSearchTagRepo.fetch_tree done")
         return TagTreeModel(_id=t_id, nodes=nodes)
 
@@ -71,9 +69,9 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             reason = {"num_nodes": 0}
             raise AppRepoError(fn_label=AppRepoFnLabel.TagSaveTree, reason=reason)
         cls = type(self)
-        url = "/%s/the-only-type/%s" % (self._index_name, tree._id)
+        url = "/%s/_doc/%s" % (self._index_name, tree._id)
         reqbody = {"nodes": list(map(cls.convert_to_doc, tree.nodes))}
-        resp = await self._session.put(url, json=reqbody)
+        resp = await self._session.post(url, json=reqbody)
         async with resp:
             if resp.status >= 400:
                 reason = await resp.json()
@@ -81,7 +79,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         _logger.debug("ElasticSearchTagRepo.save_tree done")
 
     async def delete_tree(self, tree: TagTreeModel):
-        url = "/%s/the-only-type/%s" % (self._index_name, tree._id)
+        url = "/%s/_doc/%s" % (self._index_name, tree._id)
         resp = await self._session.delete(url)
         async with resp:
             if resp.status >= 400:
@@ -91,7 +89,8 @@ class ElasticSearchTagRepo(AbstractTagRepo):
 
     async def new_tree_id(self) -> str:
         next_doc_id = None
-        url = "/%s/the-only-type/_search" % (self._index_name)
+        respbody = None
+        url = "/%s/_search" % (self._index_name)
         reqbody = {
             "_source": False,
             "stored_fields": ["_none_"],
@@ -103,11 +102,12 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             resp = await self._session.get(url, json=reqbody)
             async with resp:
                 respbody = await resp.json()
-                if respbody["hits"]["total"] == 0:
+                # print("[debug] new-tree-id, response body: %s \n" % str(respbody))
+                if respbody["hits"]["total"]["value"] == 0:
                     next_doc_id = candidate
                     break
         if not next_doc_id:
-            reason = {"detail": "too-many-conflict"}
+            reason = {"detail": "too-many-conflict", "low-level": respbody}
             raise AppRepoError(fn_label=AppRepoFnLabel.TagNewTreeID, reason=reason)
         _logger.debug("ElasticSearchTagRepo.new_tree_id  done")
         return next_doc_id

@@ -76,8 +76,7 @@ class TestCreate:
         id_: Optional[int] = None,
     ) -> SaleableItemModel:
         tag_ms_map = {
-            k: [TagModel(_id=v[0], _label=v[1]) for v in vs]
-            for k, vs in tag_data.items()
+            k: [TagModel(_id=v[0], _label=v[1]) for v in vs] for k, vs in tag_data.items()
         }
         attri_val_ms = [
             SaleItemAttriModel(
@@ -86,9 +85,7 @@ class TestCreate:
             )
             for a in attr_data
         ]
-        return SaleableItemModel.from_req(
-            req_data, tag_ms_map, attri_val_ms, usr_prof, id_=id_
-        )
+        return SaleableItemModel.from_req(req_data, tag_ms_map, attri_val_ms, usr_prof, id_=id_)
 
     @classmethod
     async def setup_create_one(
@@ -114,10 +111,7 @@ class TestCreate:
     async def test_ok(self, es_repo_saleitem):
         cls = type(self)
         expect_usr_prof = 12345
-
-        num_items_saved = await es_repo_saleitem.num_items_created(
-            usr_id=expect_usr_prof
-        )
+        num_items_saved = await es_repo_saleitem.num_items_created(usr_id=expect_usr_prof)
         assert num_items_saved == 0
 
         req_data = SaleItemCreateReqDto(
@@ -175,16 +169,12 @@ class TestCreate:
 
         await asyncio.sleep(2)  # wait for ElasticSearch refresh documents
 
-        num_items_saved = await es_repo_saleitem.num_items_created(
-            usr_id=expect_usr_prof
-        )
+        num_items_saved = await es_repo_saleitem.num_items_created(usr_id=expect_usr_prof)
         assert num_items_saved == 2
 
         readback = await es_repo_saleitem.fetch(saleitem_m_created.id_)
         verify_items_equlity(readback, saleitem_m_created)
-        read_usr_prof = await es_repo_saleitem.get_maintainer(
-            id_=saleitem_m_created.id_
-        )
+        read_usr_prof = await es_repo_saleitem.get_maintainer(id_=saleitem_m_created.id_)
         assert read_usr_prof == expect_usr_prof
 
 
@@ -222,14 +212,10 @@ class TestUpdate:
         saleitem_m.tags["xiug"].extend(new_tags)
         saleitem_m.name = "Fabulous Coat"
         saleitem_m.last_update += timedelta(seconds=5)
-        old_attr = next(
-            filter(lambda a: a.label.id_ == "attr4id", saleitem_m.attributes)
-        )
+        old_attr = next(filter(lambda a: a.label.id_ == "attr4id", saleitem_m.attributes))
         old_attr.value = 99
         new_attr = SaleItemAttriModel(
-            label=AttrLabelModel(
-                id_="ymLo", name="max-celcius", dtype=AttrDataTypeDto.Integer
-            ),
+            label=AttrLabelModel(id_="ymLo", name="max-celcius", dtype=AttrDataTypeDto.Integer),
             value=-23,
         )
         saleitem_m.attributes.append(new_attr)
@@ -358,25 +344,19 @@ class TestFetchMany:
         await asyncio.sleep(2)  # Wait for ElasticSearch refresh documents
 
         all_item_ids = [m.id_ for _, ms in saleitem_ms_created.items() for m in ms]
-        readback = await es_repo_saleitem.fetch_many(
-            all_item_ids, usrs_prof[0], visible_only=False
-        )
+        readback = await es_repo_saleitem.fetch_many(all_item_ids, usrs_prof[0], visible_only=False)
         assert len(readback) == 4
         expect_labels = product_labels[:4]
         actual_labels = [r.name for r in readback]
         assert set(expect_labels) == set(actual_labels)
 
-        readback = await es_repo_saleitem.fetch_many(
-            all_item_ids, usrs_prof[0], visible_only=True
-        )
+        readback = await es_repo_saleitem.fetch_many(all_item_ids, usrs_prof[0], visible_only=True)
         assert len(readback) == 2
         expect_labels = [product_labels[0], product_labels[2]]
         actual_labels = [r.name for r in readback]
         assert set(expect_labels) == set(actual_labels)
 
-        readback = await es_repo_saleitem.fetch_many(
-            all_item_ids, usrs_prof[1], visible_only=True
-        )
+        readback = await es_repo_saleitem.fetch_many(all_item_ids, usrs_prof[1], visible_only=True)
         assert len(readback) == 2
         expect_labels = [product_labels[4], product_labels[6]]
         actual_labels = [r.name for r in readback]
@@ -389,13 +369,9 @@ class TestFetchMany:
         assert len(readback) == 0
         readback = await es_repo_saleitem.fetch_many([], usr_prof)
         assert len(readback) == 0
-        readback = await es_repo_saleitem.fetch_many(
-            [5566], usr_prof, visible_only=True
-        )
+        readback = await es_repo_saleitem.fetch_many([5566], usr_prof, visible_only=True)
         assert len(readback) == 0
-        readback = await es_repo_saleitem.fetch_many(
-            [7788], usr_prof, visible_only=False
-        )
+        readback = await es_repo_saleitem.fetch_many([7788], usr_prof, visible_only=False)
         assert len(readback) == 0
 
 
@@ -490,9 +466,7 @@ class TestSearch:
         assert len(result) >= 3
         verify_fetched_items([solarpowerboard, chainsaw, drill], result)
 
-        result = await es_repo_saleitem.search(
-            keywords=["electronic", "smart"], usr_id=usr_prof
-        )
+        result = await es_repo_saleitem.search(keywords=["electronic", "smart"], usr_id=usr_prof)
         assert len(result) == 3
         verify_fetched_items([solarpowerboard, chainsaw, drill], result)
 

@@ -72,9 +72,7 @@ class TagErrorModel(Exception):
             tag_ids = ["%s-%d" % (tree_id, nid) for nid in node_ids]
             tag_ids_total.extend(tag_ids)
 
-        return cls(
-            reason=TagErrorReason.InvalidNodeIDs, detail={"tag_nonexist": tag_ids_total}
-        )
+        return cls(reason=TagErrorReason.InvalidNodeIDs, detail={"tag_nonexist": tag_ids_total})
 
 
 @dataclass
@@ -204,9 +202,7 @@ class TagTreeModel:
 
         return list(filter(find_by_limit, self.nodes))
 
-    def find_descendants(
-        self, curr_node: TagModel, max_desc_lvl: int
-    ) -> List[TagNodeDto]:
+    def find_descendants(self, curr_node: TagModel, max_desc_lvl: int) -> List[TagNodeDto]:
         if max_desc_lvl <= 0:
             return []
 

@@ -26,8 +26,15 @@ async def read_one_tag(
     )
     assert resp.status == expect_status
     respbody = await resp.json()
-    assert respbody["curr_node"]["id_"] == tag_id
+    if respbody.get("curr_node"):
+        assert respbody["curr_node"]["id_"] == tag_id
     return respbody
+
+
+class TestReadTag:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_read_empty(self, mock_client):
+        _ = await read_one_tag(mock_client, "xx12345", None, 1, expect_status=400)
 
 
 class TestCreateTag:
@@ -55,18 +62,15 @@ class TestCreateTag:
         )
         data = ["saw", "hammer"]
         layer1_ids = [
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, root_id)
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, root_id) for nm in data
         ]
         data = ["circular saw", "chainsaw", "jigsaw"]
         layer2_0_ids = [  # noqa: F841
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[0])
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[0]) for nm in data
         ]
         data = ["claw hammer", "sledge hammer", "tack hammer"]
         layer2_1_ids = [
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[1])
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[1]) for nm in data
         ]
 
         rootnode_id = await cls.collect_node_id(
@@ -74,18 +78,15 @@ class TestCreateTag:
         )
         data = ["multimeter", "electronic component", "sensor"]
         layer1_ids = [
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, rootnode_id)
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, rootnode_id) for nm in data
         ]
         data = ["transistor", "resistor", "capacitor", "diode"]
         layer2_1_ids = [
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[1])
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[1]) for nm in data
         ]
         data = ["ESP32", "NPK soil tester"]
         layer2_1_ids = [  # noqa: F841
-            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[2])
-            for nm in data
+            await cls.collect_node_id(mock_client, mock_usr_id, nm, layer1_ids[2]) for nm in data
         ]
 
         rd_tag = await read_one_tag(
@@ -124,13 +125,9 @@ class TestUpdateTag:
     async def test_same_tree(self, mock_client):
         mock_usr_id = 103
         fn_add_tag = TestCreateTag.collect_node_id
-        root_id = await fn_add_tag(
-            mock_client, mock_usr_id, name="household", parent_id=None
-        )
+        root_id = await fn_add_tag(mock_client, mock_usr_id, name="household", parent_id=None)
         data = ["misc", "mop"]
-        layer1_ids = [
-            await fn_add_tag(mock_client, mock_usr_id, nm, root_id) for nm in data
-        ]
+        layer1_ids = [await fn_add_tag(mock_client, mock_usr_id, nm, root_id) for nm in data]
         data = ["toilet paper", "towel"]
         layer2_0_ids = [
             await fn_add_tag(mock_client, mock_usr_id, nm, layer1_ids[0]) for nm in data
@@ -172,13 +169,9 @@ class TestUpdateTag:
     async def test_move_to_new_tree(self, mock_client):
         mock_usr_id = 104
         fn_add_tag = TestCreateTag.collect_node_id
-        root_id = await fn_add_tag(
-            mock_client, mock_usr_id, name="cooking", parent_id=None
-        )
+        root_id = await fn_add_tag(mock_client, mock_usr_id, name="cooking", parent_id=None)
         data = ["stove", "oven", "blender"]
-        layer1_ids = [
-            await fn_add_tag(mock_client, mock_usr_id, nm, root_id) for nm in data
-        ]
+        layer1_ids = [await fn_add_tag(mock_client, mock_usr_id, nm, root_id) for nm in data]
         cls = type(self)
         reqbody = TagUpdateReqDto(name="stove", parent=None)
         respbody = await cls.update_one(
@@ -209,45 +202,31 @@ class TestUpdateTag:
     async def test_different_tree(self, mock_client):
         mock_usr_id = 105
         fn_add_tag = TestCreateTag.collect_node_id
-        root1_id = await fn_add_tag(
-            mock_client, mock_usr_id, name="0r9anHarve5t", parent_id=None
-        )
-        root2_id = await fn_add_tag(
-            mock_client, mock_usr_id, name="Da1aiLLama", parent_id=None
-        )
+        root1_id = await fn_add_tag(mock_client, mock_usr_id, name="0r9anHarve5t", parent_id=None)
+        root2_id = await fn_add_tag(mock_client, mock_usr_id, name="Da1aiLLama", parent_id=None)
         data = ["kidney", "liver", "lung"]
-        t1L1_ids = [
-            await fn_add_tag(mock_client, mock_usr_id, nm, root1_id) for nm in data
-        ]
+        t1L1_ids = [await fn_add_tag(mock_client, mock_usr_id, nm, root1_id) for nm in data]
         data = ["mindful", "calm"]
         for nm in data:
             await fn_add_tag(mock_client, mock_usr_id, nm, root2_id)
         cls = type(self)
         reqbody = TagUpdateReqDto(name="liver", parent=root2_id)
-        respbody = await cls.update_one(
-            mock_client, mock_usr_id, node_id=t1L1_ids[1], body=reqbody
-        )
+        respbody = await cls.update_one(mock_client, mock_usr_id, node_id=t1L1_ids[1], body=reqbody)
         assert respbody["node"]["id_"] != t1L1_ids[1]
         assert respbody["node"]["name"] == "liver"
         t1L1_ids[1] = respbody["node"]["id_"]
-        respbody = await read_one_tag(
-            mock_client, tag_id=root1_id, desc_lvl=1, expect_status=200
-        )
+        respbody = await read_one_tag(mock_client, tag_id=root1_id, desc_lvl=1, expect_status=200)
         expect_labels = ["kidney", "lung"]
         actual_labels = [d["name"] for d in respbody["descendants"]]
         assert set(expect_labels) == set(actual_labels)
-        respbody = await read_one_tag(
-            mock_client, tag_id=root2_id, desc_lvl=1, expect_status=200
-        )
+        respbody = await read_one_tag(mock_client, tag_id=root2_id, desc_lvl=1, expect_status=200)
         expect_labels = ["mindful", "calm", "liver"]
         actual_labels = [d["name"] for d in respbody["descendants"]]
         assert set(expect_labels) == set(actual_labels)
 
 
 class TestDeleteTag:
-    async def delete_one(
-        client: ITestClient, usr_id: int, node_id: int, expect_status: int
-    ):
+    async def delete_one(client: ITestClient, usr_id: int, node_id: int, expect_status: int):
         headers: Dict[str, str] = {}
         add_auth_header(client, headers, usr_id, ["delete_producttag"])
         resp = await client.delete(
@@ -267,9 +246,7 @@ class TestDeleteTag:
         )
         data = ["bucket", "shovel"]
         layer1_ids = [  # noqa: F841
-            await TestCreateTag.collect_node_id(
-                mock_client, mock_usr_id, nm, rootnode_id
-            )
+            await TestCreateTag.collect_node_id(mock_client, mock_usr_id, nm, rootnode_id)
             for nm in data
         ]
         cls = type(self)

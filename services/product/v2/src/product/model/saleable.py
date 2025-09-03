@@ -22,9 +22,7 @@ class SaleItemAttriModel:
     value: Union[bool, NonNegativeInt, int, str]
 
     @classmethod
-    def from_req(
-        cls, labels: List[AttrLabelModel], reqs: List[SaleItemAttriReqDto]
-    ) -> List[Self]:
+    def from_req(cls, labels: List[AttrLabelModel], reqs: List[SaleItemAttriReqDto]) -> List[Self]:
         req_ids: List[str] = [r.id_ for r in reqs]
         label_ids: List[str] = [a.id_ for a in labels]
         missing_ids = list(set(req_ids) - set(label_ids))
@@ -86,9 +84,7 @@ class SaleableItemModel:
 
     def to_dto(self) -> SaleItemDto:
         tags_d = [
-            node.to_node_dto(tree_id)
-            for tree_id, nodes in self.tags.items()
-            for node in nodes
+            node.to_node_dto(tree_id) for tree_id, nodes in self.tags.items() for node in nodes
         ]
         attris_d = [a.to_dto() for a in self.attributes]
         return SaleItemDto(

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+testmodules=("./tests/unit/model/tag.py"  "./tests/unit/model/saleable.py"  "./tests/unit/adapter/repository/elasticsearch/tag.py"  "./tests/unit/adapter/repository/elasticsearch/attribute.py"  "./tests/unit/adapter/repository/elasticsearch/saleable_item.py"  "./tests/unit/adapter/middleware.py")
+
+
+for module in "${testmodules[@]}"; do
+    pytest -v -s "$module"
+    exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        exit $exit_code
+    fi
+done

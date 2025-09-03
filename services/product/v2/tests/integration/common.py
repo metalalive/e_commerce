@@ -9,7 +9,6 @@ from blacksheep import Response
 from blacksheep.testing import TestClient
 from blacksheep.testing.helpers import HeadersType
 from blacksheep.contents import JSONContent
-from curator.cli import run as run_curator
 
 from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.tests.common import KeystoreMixin
@@ -22,42 +21,38 @@ app_setting = import_module(app_setting_path)
 
 from ecommerce_common.models.enums.base import AppCodeOptions  # noqa: E402
 
+app_setting.KEYSTORE["persist_secret_handler"] = {
+    "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
+    "init_kwargs": {
+        "filepath": app_setting.SYS_BASE_PATH.joinpath(  # noqa: F405
+            "tmp/cache/dev/jwks/privkey/current.json"
+        ),
+        "name": "secret4itest",
+        "expired_after_days": 10,
+        "flush_threshold": 8,
+    },
+}
 
-@pytest.fixture(scope="session")
-def es_mapping_init():
-    base_path = app_setting.APP_BASE_PATH
-    cfg_fullpath = base_path.joinpath("settings/elastic_curator.yaml")
-    action_file_rel_paths = [
-        "attri_label/action_0001.yaml",
-        "saleable_item/action_0001.yaml",
-        "saleable_item/action_0002.yaml",
-        "tag/action_0001.yaml",
-    ]
+app_setting.KEYSTORE.pop("persist_pubkey_handler")
 
-    def _run_curator(relpath):
-        app_path = "src/product/migrations/elastic_curator/%s" % relpath
-        actionfile_fullpath = base_path.joinpath(app_path)
-        run_curator(
-            config=str(cfg_fullpath),
-            action_file=str(actionfile_fullpath),
-            dry_run=False,
-        )
-
-    list(map(_run_curator, action_file_rel_paths))
-    yield
-    actionfile_fullpath = base_path.joinpath(
-        "tests/unit/adapter/repository/elasticsearch/action_teardown_test.yaml"
-    )  # TODO, improve path setup
-    run_curator(
-        config=str(cfg_fullpath), action_file=str(actionfile_fullpath), dry_run=False
-    )
+app_setting.KEYSTORE["persist_pubkey_handler"] = {  # noqa: F405
+    "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
+    "init_kwargs": {
+        "filepath": app_setting.SYS_BASE_PATH.joinpath(  # noqa: F405
+            "tmp/cache/dev/jwks/pubkey/current.json"
+        ),
+        "name": "pubkey4itest",
+        "expired_after_days": 13,
+        "flush_threshold": 10,
+    },
+}
 
 
 class ITestKeystore(KeystoreMixin):
     _keystore_init_config = {
         "keystore": app_setting.KEYSTORE["keystore"],
-        "persist_secret_handler": app_setting.KEYSTORE["persist_secret_handler_test"],
-        "persist_pubkey_handler": app_setting.KEYSTORE["persist_pubkey_handler_test"],
+        "persist_secret_handler": app_setting.KEYSTORE["persist_secret_handler"],
+        "persist_pubkey_handler": app_setting.KEYSTORE["persist_pubkey_handler"],
     }
 
 
@@ -125,7 +120,7 @@ def add_auth_header(
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def mock_client(es_mapping_init, itest_keystore) -> ITestClient:
+async def mock_client(itest_keystore) -> ITestClient:
     await app.start()
     return ITestClient(app, itest_keystore)
 

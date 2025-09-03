@@ -81,9 +81,7 @@ class TestCreate:
         )
         cls.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
         verify_node_ends(mock_tags[0], expect=(1, 2))
-        cls.insert_then_verify(
-            mock_tree, parent_node=mock_tags[0], new_node=mock_tags[1]
-        )
+        cls.insert_then_verify(mock_tree, parent_node=mock_tags[0], new_node=mock_tags[1])
         cls.insert_then_verify(mock_tree, mock_tags[0], new_node=mock_tags[2])
         verify_node_ends(mock_tags[0], expect=(1, 6))
         verify_node_ends(mock_tags[2], expect=(4, 5))
@@ -127,9 +125,7 @@ class TestCreate:
     def test_insert_nodes_degenerate(self):
         cls = type(self)
         mock_tree = TagTreeModel(_id="99")
-        mock_tags = list(
-            map(setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7"])
-        )
+        mock_tags = list(map(setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7"]))
         cls.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
         for i in range(6):
             cls.insert_then_verify(mock_tree, mock_tags[i], new_node=mock_tags[i + 1])
@@ -142,9 +138,7 @@ class TestCreate:
     def test_insert_nodes_ok_2(self):
         cls = type(self)
         mock_tree = TagTreeModel(_id="1yu6")
-        mock_tags = list(
-            map(setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"])
-        )
+        mock_tags = list(map(setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"]))
         cls.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
         cls.insert_then_verify(mock_tree, mock_tags[0], new_node=mock_tags[1])
         cls.insert_then_verify(mock_tree, mock_tags[1], new_node=mock_tags[2])
@@ -196,9 +190,7 @@ class TestCreate:
     @staticmethod
     def verify_nested_set_property(tree: TagTreeModel):
         for node in tree.nodes:  # each node should still be valid
-            assert (
-                node._limit_left < node._limit_right
-            ), f"Node {node._id} has invalid limits."
+            assert node._limit_left < node._limit_right, f"Node {node._id} has invalid limits."
 
         # Verify overlapping
         for i, node in enumerate(tree.nodes):
@@ -226,9 +218,7 @@ class TestCreate:
         # Ensure all limits are unique
         limits = [(node._limit_left, node._limit_right) for node in tree.nodes]
         flat_limits = [limit for pair in limits for limit in pair]
-        assert len(flat_limits) == len(
-            set(flat_limits)
-        ), "Duplicate limits found in the tree."
+        assert len(flat_limits) == len(set(flat_limits)), "Duplicate limits found in the tree."
 
     @classmethod
     def insert_then_verify(
@@ -239,9 +229,7 @@ class TestCreate:
 
         # Ensure the new node exists in the tree
         assert new_node._id > 0
-        inserted_node = next(
-            (node for node in tree.nodes if node._id == new_node._id), None
-        )
+        inserted_node = next((node for node in tree.nodes if node._id == new_node._id), None)
         assert inserted_node is not None, f"New node with ID {new_node._id} not found."
         assert new_node._label == inserted_node._label
 
@@ -336,12 +324,8 @@ class TestCreate:
         for idx_p in range(15):
             c_left = idx_p * 2 + 1
             c_right = idx_p * 2 + 2
-            cls.insert_then_verify(
-                mock_tree, mock_tags[idx_p], new_node=mock_tags[c_left]
-            )
-            cls.insert_then_verify(
-                mock_tree, mock_tags[idx_p], new_node=mock_tags[c_right]
-            )
+            cls.insert_then_verify(mock_tree, mock_tags[idx_p], new_node=mock_tags[c_left])
+            cls.insert_then_verify(mock_tree, mock_tags[idx_p], new_node=mock_tags[c_right])
 
         cls.insert_then_verify(mock_tree, mock_tags[26], new_node=mock_tags[31])
         cls.insert_then_verify(mock_tree, mock_tags[28], new_node=mock_tags[32])
@@ -391,18 +375,12 @@ class TestRemoval:
                 yield "virus%d" % (idx + 1)
 
         mock_tags = list(map(setup_new_node, gen_tag_labels(num_nodes)))
-        TestCreate.insert_then_verify(
-            mock_tree, parent_node=None, new_node=mock_tags[0]
-        )
+        TestCreate.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
         for idx in range(num_nodes >> 1):
             left = idx * 2 + 1
             right = idx * 2 + 2
-            TestCreate.insert_then_verify(
-                mock_tree, mock_tags[idx], new_node=mock_tags[left]
-            )
-            TestCreate.insert_then_verify(
-                mock_tree, mock_tags[idx], new_node=mock_tags[right]
-            )
+            TestCreate.insert_then_verify(mock_tree, mock_tags[idx], new_node=mock_tags[left])
+            TestCreate.insert_then_verify(mock_tree, mock_tags[idx], new_node=mock_tags[right])
         return (mock_tags, mock_tree)
 
     @staticmethod
@@ -581,13 +559,9 @@ class TestRemoval:
 
         num_nodes = 10
         mock_tags = list(map(setup_new_node, gen_tag_labels(num_nodes)))
-        TestCreate.insert_then_verify(
-            mock_tree, parent_node=None, new_node=mock_tags[0]
-        )
+        TestCreate.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
         for i in range(num_nodes - 1):
-            TestCreate.insert_then_verify(
-                mock_tree, mock_tags[i], new_node=mock_tags[i + 1]
-            )
+            TestCreate.insert_then_verify(mock_tree, mock_tags[i], new_node=mock_tags[i + 1])
 
         removed = cls.remove_then_verify(mock_tree, 5)
         assert removed is mock_tags[4]

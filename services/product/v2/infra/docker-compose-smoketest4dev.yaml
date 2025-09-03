@@ -1,0 +1,61 @@
+services:
+  authgen-smoketest-prodmgt:
+    container_name: productmgt-dev-auth4smoketest
+    image: usrmgt-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ../../../user_management/infra/container-dev.env
+    environment:
+      - DB_NAME=ecommerce_usermgt
+      - DB_PORT=3307
+      - API_HOST=usrmgt-dev-apisrv
+      - API_PORT=8008
+      - APP_USER_ID=113
+    working_dir: /app/usermgt
+    command: python3 -m tests.gen_jwt_smoketest
+    volumes:
+      - ../tests/gen_jwt_smoketest.py:/app/usermgt/tests/gen_jwt_smoketest.py
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../../user_management/settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../../../user_management/settings/development.py:/app/usermgt/settings/development.py:ro
+      - ../../../user_management/tests/standalone_env_setup.py:/app/usermgt/tests/standalone_env_setup.py
+      - ../../../tmp/log/dev:/app/tmp/log/dev
+      - ../../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
+    networks:
+      - net2
+
+  smoke-test-prodmgt:
+    container_name: productmgt-dev-smoketest
+    image: productmgt-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-dev.env
+    environment:
+      - API_HOST=productmgt-dev-apisrv
+      - API_PORT=8009
+      - APP_USER_ID=113
+      - APP_SETTINGS=settings.development
+    working_dir: /app/productmgt/v2.x
+    command: python3 -m tests.smoke_test
+    volumes:
+      - ../tests/smoke_test.py:/app/productmgt/v2.x/tests/smoke_test.py:ro
+      - ../settings/common.py:/app/productmgt/v2.x/settings/common.py:ro
+      - ../settings/development.py:/app/productmgt/v2.x/settings/development.py:ro
+      - ../settings/celeryconfig.py:/app/productmgt/v2.x/settings/celeryconfig.py:ro
+      - ../../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../../tmp/log/dev:/app/log
+    depends_on:
+      authgen-smoketest-prodmgt:
+        condition: service_completed_successfully
+      api-server-prodmgt:
+        condition: service_started
+      rpc-consumer-prodmgt:
+        condition: service_started
+    networks:
+      - net1
+      - net2
+      - net3
+

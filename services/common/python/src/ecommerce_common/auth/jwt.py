@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import List
 import math
 import logging
 import json
+
 import jwt
 from jwt import PyJWKClient
 from jwt.api_jwk import PyJWK
@@ -236,18 +238,20 @@ def stream_jwks_file(filepath):
 
 
 class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
-    def __init__(self, url, name="default persist handler", lifespan_hrs=1):
+    def __init__(self, url, name="default persist handler", lifespan_hrs=1, max_cached_keys=10):
         # jwk set is internally cached and will be periodically refreshed
         # inside the package
         lifespan_secs = lifespan_hrs * 3600
         self._jwk_client = PyJWKClient(
-            uri=url, max_cached_keys=9, lifespan=lifespan_secs
+            uri=url, max_cached_keys=max_cached_keys, lifespan=lifespan_secs
         )
         self._name = name
 
-    def _get_signing_keys(self):
+    def _get_signing_keys(self) -> List:
         try:
             keys = self._jwk_client.get_signing_keys()
+            #print("[DEBUG] RemoteJWKSPersistHandler._get_signing_keys , \
+            #    num-keys-load: %d, kids: %s \n" % (len(keys), str(keys[0])))
         except PyJWKSetError as e:
             log_args = ["type", "PyJWKSetError", "detail", e.args[0]]
             _logger.error(None, *log_args)

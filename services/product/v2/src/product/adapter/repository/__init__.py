@@ -91,9 +91,7 @@ class AbstractSaleItemRepo:
     async def delete(self, id_: int):
         raise NotImplementedError("AbstractSaleItemRepo.delete")
 
-    async def fetch(
-        self, id_: int, visible_only: Optional[bool] = None
-    ) -> SaleableItemModel:
+    async def fetch(self, id_: int, visible_only: Optional[bool] = None) -> SaleableItemModel:
         raise NotImplementedError("AbstractSaleItemRepo.fetch")
 
     # TODO, optional timestamp to retrieve snapshot

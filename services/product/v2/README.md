@@ -72,10 +72,10 @@ Note :
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
-|Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
-|Poetry| 1.8.4 | [see here](https://python-poetry.org/docs) |
-|pip| 24.3.1 | [see here](https://pip.pypa.io/en/stable/) |
-|Elasticsearch| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/tree/master/elasticsearch/5.6) | 
+|Python | 3.13.7 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
+|Poetry| 2.1.4 | [see here](https://python-poetry.org/docs) |
+|pip| 25.2 | [see here](https://pip.pypa.io/en/stable/) |
+|Elasticsearch| 8.19.2 | [see here](https://www.elastic.co/guide/en/elasticsearch/reference/current/release-notes-8.19.0.html) | 
 
 ## Documentation
 - [Open API documentation](./doc/api/openapi.yaml)
@@ -83,18 +83,19 @@ Note :
 ## Build
 For full build / test instructions please refer to [this github action workflow script](../../../.github/workflows/productmgt-ci.yaml)
 
-### Dependency update
-Update all dependency packages specified in the configuration file `v1.0.1/pyproject.toml`
+### Docker Build
+Here is Docker image build for base environment of this backend application.
 ```bash
-POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT='true' poetry update
-```
-Note
-- `POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT` is required for current `poetry` version, the CA cert path setup has some unresolved issues between `poetry` and its upstream packages `dulwich`, `urllib3`.
+cd /path/to/this-project/services
 
+docker build --file product/v2/infra/Dockerfile --tag productmgt-backend-base:latest .
+```
+
+### Dependency update
 
 To update specific dependency downloaded from pip server :
 ```bash
-POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT='true' poetry update <WHATEVER-3RD-PARTY-PACKAGE-NAME>
+poetry update <WHATEVER-3RD-PARTY-PACKAGE-NAME>
 ```
 
 To update local dependency `ecommerce-common` :
@@ -105,59 +106,38 @@ To update local dependency `ecommerce-common` :
 
 These steps does not seem efficient, but it does force the update, if you simply run `poetry update ecommerce-common` with version change, then poetry will internally ignore the update without any hint / warning message.
 
-### specify local paths to source code packages
-It is essential to run `install` command to let virtual environment know the local paths to source code packages
-```bash
-poetry install
-```
-After that you should be able to import the packages of the development code
-```bash
-poetry run python
-
-> import sys
-> sys.path
-['/PATH/TO/PACKAGE1', '/PATH/TO/PROJ_HOME', '/PATH/TO/PROJ_HOME/src' ....]
-> import product
-> import settings
->
-```
-
-### Data schema migration
-ElasticSearch is applied as datastore, the mapping type / fields for each index can be maintained using the tool [elastic curator](https://www.elastic.co/guide/en/elasticsearch/client/curator/5.6/about-features.html).
-```bash
-poetry run curator --config ./settings/elastic_curator.yaml \
-    ./src/product/migrations/elastic_curator/*/action_VERSION_NUMBER.yaml
-```
 
 
 ## Run
 ### application server
 ```bash
-APP_SETTINGS="settings.development" poetry run granian --host 127.0.0.1 --port 8009 \
-    --interface asgi  product.entry.web:app
+docker compose --file ./infra/docker-compose-generic.yml \
+    --file ./infra/docker-compose-dev.yml \
+    --file ./infra/docker-compose-smoketest4dev.yaml \
+    --env-file ./infra/interpolation-dev.env \
+    --profile serverstart  up --detach
 ```
 
-### RPC consumer
-```bash
-SERVICE_BASE_PATH="${PWD}/../.."  poetry run celery --app=ecommerce_common.util  \
-    --config=settings.development  --workdir ./src  worker --concurrency 1 --loglevel=INFO \
-    --hostname=productmgt@%h  -E
-```
+- the compose file `docker-compose-smoketest4dev.yaml` will run optional smoke test
+  - smoke test can be omitted if unecessary in your application use cases.
+  - smoke test requires RPC consumer, inter-application message borker (RabbitMQ), and another application server in `user-management` up and running.
+- to stop and remove all running services in this application, replace subcommand `up --detach` with `down --volumes`
 
 ## Test
 ```bash
-APP_SETTINGS="settings.test"  ./run_unit_test
-APP_SETTINGS="settings.test"  ./run_integration_test
+docker compose --file ./infra/docker-compose-generic.yml \
+    --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env \
+    up --detach
 ```
 
 ## Development
 ### code formatter
 ```bash
-poetry run black ./src/ ./tests/ ./settings/
+poetry run black --line-length 100 ./src/ ./tests/ ./settings/
 ```
 
 ### linter
 ```bash
 poetry run ruff check ./src/ ./tests/ ./settings/
 ```
-

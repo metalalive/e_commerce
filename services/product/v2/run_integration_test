@@ -1,3 +1,0 @@
-poetry run pytest -v -s ./tests/integration/tag.py
-poetry run pytest -v -s ./tests/integration/attribute.py
-poetry run pytest -v -s ./tests/integration/saleable_item.py

@@ -435,9 +435,29 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
                     # callers cannot use dict() or tuple() etc. to fetch all the data
                     yld_item.clear()
 
+    def __iter__(self):
+        committed_items = {}
+        self._file.seek(0)
+        # Use ijson.kvitems to parse the entire top-level JSON object
+        for key_id, item_data in self._ijson.kvitems(self._file, ""):
+            # Filter out items marked for deletion
+            if key_id not in self._uncommitted_delete:
+                committed_items[key_id] = item_data
+
+        # Merge uncommitted additions, giving them precedence over committed items
+        all_items = {**committed_items, **self._uncommitted_add}
+
+        for item_data in all_items.values():
+            yield item_data.copy()
+
     def __getitem__(self, key_id):
-        # currently this function limits to fetch those items which are already committed & stored
-        item = None
+        # Check uncommitted additions first
+        if key_id in self._uncommitted_add:
+            return self._uncommitted_add[key_id].copy()
+        # If deleted, raise KeyError
+        if key_id in self._uncommitted_delete:
+            raise KeyError("invalid key ID : %s (marked for deletion)" % key_id)
+
         self._file.seek(0)
         generator = self._ijson.items(self._file, key_id)
         try:

@@ -36,9 +36,7 @@ def init_rpc(app):
         RPC_EXCHANGE_DEFAULT_TYPE,
     )
 
-    exchange = kombu.Exchange(
-        name=RPC_EXCHANGE_DEFAULT_NAME, type=RPC_EXCHANGE_DEFAULT_TYPE
-    )
+    exchange = kombu.Exchange(name=RPC_EXCHANGE_DEFAULT_NAME, type=RPC_EXCHANGE_DEFAULT_TYPE)
     # determine a list of task queues used at here, you don't need to
     # give option -Q at Celery command line
     app.conf.task_queues = [

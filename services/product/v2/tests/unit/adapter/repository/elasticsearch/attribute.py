@@ -203,9 +203,7 @@ class TestDelete:
         await es_repo_attri.delete(remove_ids)
         await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
         result = await es_repo_attri.search(keyword="pelindrone")
-        expect_readdata = [
-            d for d in mockdata if d[0] in ["pelindrone 2nd", "pelindrone 4th"]
-        ]
+        expect_readdata = [d for d in mockdata if d[0] in ["pelindrone 2nd", "pelindrone 4th"]]
         actual_readdata = [(r.name, r.dtype) for r in result]
         assert set(expect_readdata) == set(actual_readdata)
 

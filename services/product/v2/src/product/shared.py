@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from types import ModuleType
 from typing import Dict, Tuple, List
 
@@ -17,6 +18,8 @@ from .adapter.repository import (
     AbstractSaleItemRepo,
     AbstractAttrLabelRepo,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class AppDataStore:
@@ -39,9 +42,7 @@ class AppDataStore:
             return (k, repo)
 
         repo_kv_pairs = [
-            await init_one_repo(k, v)
-            for k, v in setting.DATABASES.items()
-            if isinstance(v, Dict)
+            await init_one_repo(k, v) for k, v in setting.DATABASES.items() if isinstance(v, Dict)
         ]
         return AppDataStore(repo_map=dict(repo_kv_pairs))
 
@@ -81,29 +82,32 @@ class SharedContext:
 
 class ExtendedKeysProvider(KeysProvider):
     def __init__(self, ks_setting: Dict):
-        self._kstore = create_keystore_helper(
-            cfg=ks_setting, import_fn=import_module_string
-        )
+        self._kstore = create_keystore_helper(cfg=ks_setting, import_fn=import_module_string)
 
     async def get_keys(self) -> JWKS:
         keyset: List[PyJWK] = self._kstore.all_pubkeys()
-        _jwks = list(map(type(self).to_guardpost_jwk, keyset))
+        kids = [k.key_id for k in keyset]
+        _logger.debug("keyset length: %d, ids: %s", len(keyset), str(kids))
+        _jwks = list(map(to_guardpost_jwk, keyset))
         return JWKS(_jwks)
 
-    @staticmethod
-    def to_guardpost_jwk(wrapper: PyJWK) -> GuardPostJWK:
-        key_in = wrapper.key
-        pubnum = key_in.public_numbers()
 
-        def encode_with_base64url(x: int) -> str:
-            nbytes = (x.bit_length() + 7) >> 3
-            seq = x.to_bytes(nbytes, byteorder="big")
-            return base64url_encode(seq).decode("utf-8")
+def to_guardpost_jwk(wrapper: PyJWK) -> GuardPostJWK:
+    key_in = wrapper.key
+    pubnum = key_in.public_numbers()
 
-        raw = {
-            "kty": wrapper.key_type,
-            "kid": wrapper.key_id,
-            "n": encode_with_base64url(pubnum.n),
-            "e": encode_with_base64url(pubnum.e),
-        }
-        return GuardPostJWK.from_dict(raw)
+    def encode_with_base64url(x: int) -> str:
+        nbytes = (x.bit_length() + 7) >> 3
+        seq = x.to_bytes(nbytes, byteorder="big")
+        return base64url_encode(seq).decode("utf-8")
+
+    raw = {
+        "kid": wrapper.key_id,
+        "kty": wrapper.key_type,
+        "alg": wrapper.algorithm_name,
+        "use": "sig",
+        "n": encode_with_base64url(pubnum.n),
+        "e": encode_with_base64url(pubnum.e),
+    }
+    # _logger.debug("raw key: %s",  str(raw))
+    return GuardPostJWK.from_dict(raw)

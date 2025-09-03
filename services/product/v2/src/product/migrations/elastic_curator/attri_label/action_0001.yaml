@@ -11,7 +11,6 @@ actions:
           number_of_shards: 1
           number_of_replicas: 0
         mappings:
-          the-only-type:
             properties:
               name:
                 type: text
@@ -21,4 +20,5 @@ actions:
                     analyzer: english
               dtype:
                 type: integer
+      ignore_existing: True
 

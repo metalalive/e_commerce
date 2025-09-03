@@ -69,9 +69,7 @@ def permission_check(claims: Dict, required: List[str]) -> Optional[Dict]:
     from ecommerce_common.models.enums.base import AppCodeOptions
 
     perms_approved = [
-        p["codename"]
-        for p in claims["perms"]
-        if p["app_code"] == AppCodeOptions.product.value[0]
+        p["codename"] for p in claims["perms"] if p["app_code"] == AppCodeOptions.product.value[0]
     ]
     perms_missing = set(required) - set(perms_approved)
     if perms_missing:

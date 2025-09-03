@@ -33,9 +33,7 @@ shr_ctx = evtloop.run_until_complete(shr_ctx_cls.init(setting=_settings))
 )
 @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
 def get_product(item_ids: List[int], profile: int) -> Dict:
-    routine = get_saleitems_data(
-        item_ids, profile, repo=shr_ctx.datastore.saleable_item
-    )
+    routine = get_saleitems_data(item_ids, profile, repo=shr_ctx.datastore.saleable_item)
     result = evtloop.run_until_complete(routine)
     return {"result": result}
 
@@ -49,9 +47,9 @@ async def get_saleitems_data(
     ms: List[SaleableItemModel] = await repo.fetch_many(
         ids=item_ids, usrprof=profile, visible_only=True
     )
-    data = [m.to_dto().model_dump() for m in ms]
-    discard_fields = ["usrprof", "name", "visible", "tags", "media_set"]
-    # reserved fields: id_ , attributes, last_update
+    data = [m.to_dto().model_dump(mode="json") for m in ms]
+    discard_fields = ["usrprof", "visible", "tags", "media_set"]
+    # reserved fields: id_, name , attributes, last_update
     for d in data:
         for fname in discard_fields:
             d.pop(fname)

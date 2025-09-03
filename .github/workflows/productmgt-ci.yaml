@@ -16,58 +16,131 @@ on:
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
 jobs:
-    init-env-then-tests:
+    lint-check:
       runs-on: ubuntu-24.04
-      services:
-        elasticsearch_v6.8:
-          image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23
-          ports: ['9200:9200']
-          options: --env cluster.name=my-ecomm-app --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
-
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-      #- name: check elasticsearch indices
-      #  run: |
-      #      sleep  6
-      #      curl   --request  GET -v  "http://localhost:9200/"
-      #      # _cat/indices?v&pretty&format=text&h=health,status,index,pri,rep,docs.count,docs.deleted,store.size,pri.store.size
-
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12.7
-      - name: Install init poetry
-        uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: 1.8.4
-
-      - name: install dependency packages
-        env:
-            POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT: true
-        working-directory: services/product/v2
-        run: |
-            poetry update
-            poetry install
-            poetry run python -c "from ecommerce_common.util import import_module_string"
-            poetry run python -c "import blacksheep"
-            poetry run python -c "import product"
-            poetry run python -c "import settings"
-            poetry run python -c "from c_exts.util import keygen"
-
+          python-version: 3.13.7
+      - name: Install ruff linter
+        run: python3.13 -m pip install ruff==0.12.11
       - name: lint check
         working-directory: services/product/v2
         run: |
-            poetry run ruff check ./src/ ./tests/ ./settings/
+            ruff check  ./src/ ./tests/  ./settings/
 
-      - name: set up credential
+    build-docker-image:
+      if: startsWith(github.head_ref, 'product-mgt-dev/')
+      needs: lint-check
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+        - name: Build Docker image and export to tar
+          uses: docker/build-push-action@v5
+          with:
+            context: services
+            file: services/product/v2/infra/Dockerfile
+            outputs: type=docker,dest=${{ runner.temp }}/productmgt-backend-base.tar
+            tags: productmgt-backend-base:latest
+            push: false
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+        - name: Upload artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: productmgt-docker-image
+            path: ${{ runner.temp }}/productmgt-backend-base.tar
+            retention-days: 1
+
+    init-env-then-test:
+      if: startsWith(github.head_ref, 'product-mgt-dev/')
+      runs-on: ubuntu-24.04
+      needs: build-docker-image
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Download docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: productmgt-docker-image
+          path: ${{ runner.temp }}
+      - name: Load docker image
+        run: |
+            docker load --input ${{ runner.temp }}/productmgt-backend-base.tar
+            docker image ls -a
+
+      - name: set up database persistence path
+        working-directory: ${{ github.workspace }}
+        # the user `elasticsearch` in docker container has UID 1000 and GID 1000 
+        run: |
+          mkdir -p installed/es/data  installed/es/backup installed/es/log
+          sudo chown --recursive 1000:1000 installed/es
+
+      - name: Create test environment file
+        working-directory: services/product/v2/infra
+        run: |
+          echo "ELASTIC_PASSWORD=DB_PASSWORD" > ./container-test.env
+          echo "DB_ES_HOST=productmgt-test-elastic" >> ./container-test.env
+          echo "DB_ES_PORT=9201" >> ./container-test.env
+          echo "AUTH_SERVER_ADDR=http://usrmgt-test-apisrv:8008" >> ./container-test.env
+
+          echo "ELASTIC_DATA_MAIN_VOL=${{ github.workspace }}/installed/es/data" > ./interpolation-test.env
+          echo "ELASTIC_DATA_BAK_VOL=${{ github.workspace }}/installed/es/backup" >> ./interpolation-test.env
+          echo "ELASTIC_LOG_VOL=${{ github.workspace }}/installed/es/log" >> ./interpolation-test.env
+
+      - name: set up credential for test
         working-directory: services/common/data
+        shell: bash
         run: |
             ln -s ./secrets_template.json  ./secrets.json
-      - name: run tests
+      
+      - name: run unit test
         working-directory: services/product/v2
-        env:
-            APP_SETTINGS: settings.test
         run: |
-            ./run_unit_test
-            ./run_integration_test
+            docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  up --abort-on-container-exit
+        
+      - name: Clean up containers and volumes
+        if: always()
+        working-directory: services/product/v2
+        run: |
+          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  down --volumes
+
+      - name: clean up previous persistence data
+        working-directory: ${{ github.workspace }}/installed/es
+        run: |
+          sudo rm -rf data/*  backup/*  log/*
+
+      - name: Create dev environment file
+        working-directory: services/product/v2/infra
+        run: |
+          echo "ELASTIC_PASSWORD=DB_PASSWORD" > ./container-dev.env
+          echo "DB_ES_HOST=productmgt-dev-elastic" >> ./container-dev.env
+          echo "DB_ES_PORT=9201" >> ./container-dev.env
+          echo "AUTH_SERVER_ADDR=http://usrmgt-dev-apisrv:8008" >> ./container-dev.env
+
+          echo "ELASTIC_DATA_MAIN_VOL=${{ github.workspace }}/installed/es/data" > ./interpolation-dev.env
+          echo "ELASTIC_DATA_BAK_VOL=${{ github.workspace }}/installed/es/backup" >> ./interpolation-dev.env
+          echo "ELASTIC_LOG_VOL=${{ github.workspace }}/installed/es/log" >> ./interpolation-dev.env
+      
+      - name: run integration test
+        working-directory: services/product/v2
+        # - create networks for mocking user-management app here, all other applications regularly retrieve
+        #   JWKS from user-management app server.
+        # - explcitly run each service sequentially , docker compose does not support exit on
+        #   specific service in the middle, this will cause github action workflow hangs forever.
+        run: |
+          docker network create --driver bridge --subnet 172.19.253.0/24 --ip-range 172.19.253.0/28 --gateway 172.19.253.254 ec-intersrvs-dev-net
+          docker network create --driver bridge --subnet 172.19.2.0/24 --ip-range 172.19.2.0/25 --gateway 172.19.2.254 ec-usrmgt-dev-net
+          docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  up --detach
+          python3 ${{ github.workspace }}/.github/docker_wait.py  --container-name productmgt-itest-0  --target-status exited --timeout-secs 180
+          docker logs productmgt-dev-db-schema-migrate
+          docker logs productmgt-itest-0
+
+      - name: Clean up containers and volumes
+        if: always()
+        working-directory: services/product/v2
+        run: docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-dev.yml --env-file ./infra/interpolation-dev.env --profile migrateonly  down --volumes
 

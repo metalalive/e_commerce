@@ -18,15 +18,14 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         self,
         secure_conn_enable: bool,
         cfdntl: Dict,
+        address: Dict,
         index_name: str,
         connector: TCPConnector,
     ):
         proto = "https" if secure_conn_enable else "http"
-        domain_host = "%s://%s:%d" % (proto, cfdntl["HOST"], cfdntl["PORT"])
+        domain_host = "%s://%s:%d" % (proto, address["HOST"], address["PORT"])
         headers = {"content-type": "application/x-ndjson", "accept": "application/json"}
-        self._session = ClientSession(
-            base_url=domain_host, headers=headers, connector=connector
-        )
+        self._session = ClientSession(base_url=domain_host, headers=headers, connector=connector)
         self._index_name = index_name
 
     async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
@@ -41,6 +40,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         return ElasticSearchAttrLabelRepo(
             secure_conn_enable,
             cfdntl=setting["cfdntl"],
+            address=setting["db_addr"],
             index_name=setting["db_name"],
             connector=connector,
         )
@@ -65,7 +65,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             "items.create.created",
             "errors",
         ]
-        url = "/%s/the-only-type/_bulk?filter_path=%s" % (
+        url = "/%s/_bulk?filter_path=%s" % (
             self._index_name,
             ",".join(fields_present),
         )
@@ -87,9 +87,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             async with resp:
                 respbody = await resp.json()
             if resp.status >= 400:
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.AttrLabelCreate, reason=respbody
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelCreate, reason=respbody)
             if respbody["errors"]:
                 recoverable_err_status = [409]
                 conflict_ids = [
@@ -125,7 +123,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             "items.update.result",
             "errors",
         ]
-        url = "/%s/the-only-type/_bulk?filter_path=%s" % (
+        url = "/%s/_bulk?filter_path=%s" % (
             self._index_name,
             ",".join(fields_present),
         )
@@ -152,7 +150,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             reason = {"detail": "input-empty"}
             raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelDelete, reason=reason)
         cls = type(self)
-        url = "/%s/the-only-type/_bulk" % (self._index_name)
+        url = "/%s/_bulk" % (self._index_name)
 
         def convert_to_doc(id_: str) -> str:
             metadata = {"delete": {"_id": id_}}
@@ -163,9 +161,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         async with resp:
             if resp.status >= 400:
                 reason = await resp.json()
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.AttrLabelDelete, reason=reason
-                )
+                raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelDelete, reason=reason)
         _logger.debug("ElasticSearchAttrLabelRepo.delete done successfully")
 
     async def search(self, keyword: str) -> List[AttrLabelModel]:
@@ -173,7 +169,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             reason = {"detail": "input-empty"}
             raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelSearch, reason=reason)
         fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
-        url = "/%s/the-only-type/_search?filter_path=%s" % (
+        url = "/%s/_search?filter_path=%s" % (
             self._index_name,
             ",".join(fields_present),
         )
@@ -195,15 +191,13 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         if nodes_failed > 0:
             _logger.warning("nodes_failed:%d", nodes_failed)
         if nodes_involved > nodes_replied:
-            _logger.warning(
-                "nodes_involved:%d, nodes_replied:%d", nodes_involved, nodes_replied
-            )
+            _logger.warning("nodes_involved:%d, nodes_replied:%d", nodes_involved, nodes_replied)
             if nodes_replied == 0:
                 raise AppRepoError(
                     fn_label=AppRepoFnLabel.AttrLabelSearch, reason=respbody["_shards"]
                 )
-        if respbody["hits"]["total"] > 1000:
-            _logger.warning("hits-total:%d", respbody["hits"]["total"])
+        if respbody["hits"]["total"]["value"] > 1000:
+            _logger.warning("hits-total:%s", str(respbody["hits"]["total"]))
         cls = type(self)
         ms = list(map(cls.convert_from_doc, respbody["hits"].get("hits", [])))
         _logger.debug("ElasticSearchAttrLabelRepo.search done successfully")
@@ -212,11 +206,9 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
     async def fetch_by_ids(self, ids: List[str]) -> List[AttrLabelModel]:
         if not any(ids):
             reason = {"detail": "input-empty"}
-            raise AppRepoError(
-                fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=reason
-            )
+            raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=reason)
         fields_present = ["docs._id", "docs._source", "docs.found"]
-        url = "/%s/the-only-type/_mget?filter_path=%s" % (
+        url = "/%s/_mget?filter_path=%s" % (
             self._index_name,
             ",".join(fields_present),
         )
@@ -226,9 +218,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         async with resp:
             respbody = await resp.json()
         if resp.status >= 400:
-            raise AppRepoError(
-                fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=respbody
-            )
+            raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=respbody)
         cls = type(self)
         # if len(respbody["docs"]) > 0 and not respbody["docs"][0].get("_source"):
         #     pass
