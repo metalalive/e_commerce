@@ -1,0 +1,31 @@
+#!/bin/sh
+
+cargo test --test unittest --features "mariadb amqprs" -- repository::mariadb --test-threads=1
+
+# Note:
+# - the feature options `mariadb`, `amqprs` can also be applied along with the command `cargo test`
+# - `--test-threads=1` can be added if the feature `mariadb` is enabled
+#   - this option means you limit number of threads running all the test cases in parallel.
+#   - this is to reduce number of connections opening for test at the database backend.
+# - `<<OPTIONAL-TEST-ENTRY-MODULE-PATH>>` can accept zero to many paths to specific modules in the test, `cargo test` retrieves all test modules if this option is not specified.
+# - `--nocapture` is optional to allow the program to print all messages to standard output console.
+    
+exit_code=$?
+if [ $exit_code -ne 0 ]; then
+    exit $exit_code
+fi
+
+cd ./tests/integration
+
+cargo clean
+cargo test --test web --features "mariadb" --  --test-threads=1
+
+# Note :
+# - remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
+# - with the feature `mariadb`, the configuration file `settings/test.json` contains essential settings for mariaDB database
+# - for test with in-memory data store, use the configuration file `settings/test-inmem-only.json` without the feature `mariadb`;
+
+exit_code=$?
+if [ $exit_code -ne 0 ]; then
+    exit $exit_code
+fi

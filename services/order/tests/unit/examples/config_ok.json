@@ -66,7 +66,7 @@
 	    "_type": "DbServer",
 	    "alias": "storage-big-table",
 	    "srv_type": "MariaDB",
-	    "db_name": "test_ecommerce_order",
+	    "db_name": "ecommerce_order",
 	    "confidentiality_path": "backend_apps/databases/order_service",
 	    "max_conns": 6,
 	    "acquire_timeout_secs": 30,

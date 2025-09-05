@@ -1,0 +1,23 @@
+services:
+  run-itest-rpc-ordermgt:
+    container_name: ordermgt-itest-rpc-0
+    image: ordermgt-with-devtools:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+      - SERVICE_BASE_PATH=/app/order
+    working_dir: /app/order
+    command: cargo test --test unittest --features "mariadb amqprs" -- rpc::amqp --test-threads=1
+    volumes:
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/test:/app/log
+    networks:
+      - net1
+
+networks:
+  net1:
+    # test RPC using message queue in development environment,
+    # TODO, rethink whether it is necessary to use queue in isolated test env.
+    name: ec-intersrvs-dev-net
+    external: true

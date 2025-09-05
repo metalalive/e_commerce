@@ -92,7 +92,7 @@
 	    "_type": "DbServer",
 	    "alias": "store-persistent-db",
 	    "srv_type": "MariaDB",
-	    "db_name": "test_ecommerce_order",
+	    "db_name": "ecommerce_order",
 	    "confidentiality_path": "backend_apps/databases/order_service",
 	    "max_conns": 4,
 	    "acquire_timeout_secs": 10,
