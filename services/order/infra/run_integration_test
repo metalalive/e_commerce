@@ -17,7 +17,7 @@ fi
 
 cd ./tests/integration
 
-cargo clean
+#cargo clean
 cargo test --test web --features "mariadb" --  --test-threads=1
 
 # Note :

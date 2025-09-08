@@ -1,7 +1,24 @@
+x-base-service-common: &reuse-basesrv-cfg
+  image: ordermgt-backend-base:latest
+  pull_policy: never
+  profiles:
+    - serverstart
+  restart: no
+  environment:
+    DB_PORT: 3307
+    SYS_BASE_PATH: /app
+    SERVICE_BASE_PATH: /app/order
+  stop_signal: SIGTERM
+  working_dir: /app/entry
+  depends_on:
+    db-schema-migration-up-ordermgt:
+      condition: service_completed_successfully
+
 services:
   mariadb-ordermgt:
     image: mariadb:11-noble
     container_name: ordermgt-generic-mariadb
+    restart: no
     environment:
       - DB_NAME=ecommerce_order
     ports:
@@ -25,9 +42,6 @@ services:
   db-schema-migration-up-ordermgt:
     container_name: ordermgt-unknown-db-schema-upgrade
     image: liquibase:4.33-alpine
-    profiles:
-      - serverstart
-      - migrateonly
     restart: no
     volumes:
       - ../migration:/liquibase/changelog:ro
@@ -49,4 +63,14 @@ services:
       - ../migration:/liquibase/changelog:ro
       - ../liquibase.properties:/liquibase/liquibase.properties:ro
     command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3307/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
+
+  api-server-ordermgt:
+    <<: *reuse-basesrv-cfg
+    container_name: ordermgt-unknown-apisrv
+    command: ./web
+
+  rpc-consumer-ordermgt:
+    <<: *reuse-basesrv-cfg
+    container_name: ordermgt-unknown-rpcconsumer
+    command: ./rpc_consumer
 

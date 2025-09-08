@@ -108,6 +108,11 @@ docker build --file order/infra/Dockerfile --tag ordermgt-backend-base:latest  .
 
 
 ## Run
+```shell
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
+```
+
 ### Development API server
 ```shell=?
 cd ${SERVICE_BASE_PATH}
@@ -151,8 +156,7 @@ Note that most module-level test cases run during docker build because they don'
 The command below runs test cases coupled with database, the profile `cleandbschema` is optional to test database migration downgrade.
 ```bash
 docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
-    --env-file ./infra/interpolation-test.env  --profile serverstart --profile cleandbschema  \
-    up --detach
+    --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
 ```
 
 The command below runs RPC-related test cases coupled with inter-application message queue

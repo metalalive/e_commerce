@@ -32,7 +32,13 @@ RUN cargo test --test unittest --features "mariadb amqprs" -- \
     api::rpc  model usecase auth network adapter::datastore::in_mem \
     repository::in_mem --test-threads=1
 
-FROM alpine:3.22 AS final0
+WORKDIR  ${DST_APP_PATH}/tests/integration
+COPY order/tests/integration/*.rs   order/tests/integration/Cargo.lock \
+     order/tests/integration/Cargo.toml  .
+
+RUN cargo build --test web --features "mariadb"
+
+FROM debian:trixie-slim AS final0
 ARG DST_APP_PATH
 
 ENV SYS_BASE_PATH="${DST_APP_PATH}/../"

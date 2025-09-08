@@ -13,7 +13,9 @@ services/media/data/certs/test/*.crt
 services/media/data/certs/test/*.key
 services/order/tests/integration/target/
 services/order/target/
+services/order/infra/container-dev.env
 services/order/infra/container-test.env
+services/order/infra/interpolation-dev.env
 services/order/infra/interpolation-test.env
 services/payment/target/
 services/product/v2/infra/interpolation-dev.env

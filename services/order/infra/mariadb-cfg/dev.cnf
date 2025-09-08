@@ -1,0 +1,16 @@
+[mysqld]
+
+port = 3307
+max_connections = 505
+innodb_buffer_pool_size = 290M
+local-infile=0
+symbolic-links=0
+log_error = /var/log/mysql/error.log
+general_log = 1
+general_log_file = /var/log/mysql/mysql-general.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/mysql-slow.log
+log_warnings = 9
+long_query_time = 5
+expire_logs_days = 21
+

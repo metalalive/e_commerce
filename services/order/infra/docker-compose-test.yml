@@ -35,12 +35,12 @@ services:
     command: /bin/sh ./run_entry
     volumes:
       - ./run_integration_test:/app/order/run_entry
-      - ../tests/integration:/app/order/tests/integration
+      - ../tests/integration/examples:/app/order/tests/integration/examples:ro
       - ../settings/test.json:/app/order/settings/test.json:ro
       - ../../common/data/cors-test.json:/app/common/data/cors.json:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../tmp/log/test:/app/log
-      - ../../tmp/proc:/app/tmp/proc
+      - ../../tmp/proc:/app/proc
     networks:
       - net1
     depends_on:

@@ -10,11 +10,11 @@
              "destination": "console"},
             {"alias": "errlog-file-web-api",
              "min_level": "WARNING",
-             "path": "tmp/log/dev/order_app_server.err",
+             "path": "log/order_app_server.err",
              "destination": "localfs"},
             {"alias": "errlog-file-rpc-consumer",
              "min_level": "INFO",
-             "path": "tmp/log/dev/order_rpc_consumer.err",
+             "path": "log/order_rpc_consumer.err",
              "destination": "localfs"}
         ],
         "loggers" : [
@@ -75,7 +75,7 @@
     },
     "listen": {
         "port": 8012,
-        "host":"localhost",
+        "host":"ordermgt-dev-apisrv",
         "max_failures": 3,
         "api_version": "1.2.0",
 	"max_connections": 256,
@@ -231,7 +231,7 @@
 	"confidential_id": "amqp_broker/0"
     },
     "auth": {
-	"keystore_url": "http://localhost:8008/jwks",
+	"keystore_url": "http://usrmgt-dev-apisrv:8008/jwks",
 	"update_interval_minutes": 60
     },
     "third_parties": [

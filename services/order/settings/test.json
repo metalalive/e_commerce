@@ -10,11 +10,11 @@
              "destination": "console"},
             {"alias": "errlog-file-web-api",
              "min_level": "WARNING",
-             "path": "tmp/log/test/order_app_server.err",
+             "path": "log/order_app_server.err",
              "destination": "localfs"},
             {"alias": "errlog-file-rpc-consumer",
              "min_level": "WARNING",
-             "path": "tmp/log/test/order_rpc_consumer.err",
+             "path": "log/order_rpc_consumer.err",
              "destination": "localfs"}
         ],
         "loggers" : [
