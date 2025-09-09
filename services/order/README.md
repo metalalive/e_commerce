@@ -113,6 +113,8 @@ docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-c
     --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
 ```
 
+To run smoke test after dev server is launched, append the option `--file ./infra/docker-compose-smoketest4dev.yml`  after `docker-compose-dev.yml`.
+
 ### Development API server
 ```shell=?
 cd ${SERVICE_BASE_PATH}

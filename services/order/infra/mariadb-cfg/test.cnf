@@ -1,6 +1,6 @@
 [mysqld]
 
-port = 3307
+port = 3309
 max_connections = 920
 innodb_buffer_pool_size = 300M
 local-infile=0

@@ -27,7 +27,7 @@ services:
     env_file:
       - ./container-test.env
     environment:
-      - DB_PORT=3307
+      - DB_PORT=3309
       - SYS_BASE_PATH=/app
       - SERVICE_BASE_PATH=/app/order
       - CONFIG_FILE_PATH=settings/test.json

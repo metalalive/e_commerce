@@ -5,7 +5,7 @@ x-base-service-common: &reuse-basesrv-cfg
     - serverstart
   restart: no
   environment:
-    DB_PORT: 3307
+    DB_PORT: 3309
     SYS_BASE_PATH: /app
     SERVICE_BASE_PATH: /app/order
   stop_signal: SIGTERM
@@ -16,14 +16,14 @@ x-base-service-common: &reuse-basesrv-cfg
 
 services:
   mariadb-ordermgt:
-    image: mariadb:11-noble
+    image: mariadb-ext:11-noble
     container_name: ordermgt-generic-mariadb
     restart: no
     environment:
       - DB_NAME=ecommerce_order
     ports:
-      # Maps port 3306 on the host to port 3307 in the container
-      - "3306:3307"
+      # Maps port 3308 on the host to port 3309 in the container
+      - "3308:3309"
     volumes:
       - ./mariadb-cfg/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh:ro
       # use environment variable interpolation for database storage files
@@ -33,7 +33,7 @@ services:
       # mount log / error files for troubleshooting
       - ${MARIADB_LOG_VOL}:/var/log/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3307 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
+      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3309 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
       interval: 10s
       timeout: 7s
       retries: 10
@@ -48,7 +48,7 @@ services:
       - ../liquibase.properties:/liquibase/liquibase.properties:ro
     # environment variable expansion is part of shell-specific features, here
     # it is required to explicitly specify which shell to run the command.
-    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3307/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info update"]
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3309/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info update"]
     depends_on:
       mariadb-ordermgt:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
     volumes:
       - ../migration:/liquibase/changelog:ro
       - ../liquibase.properties:/liquibase/liquibase.properties:ro
-    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3307/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3309/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
 
   api-server-ordermgt:
     <<: *reuse-basesrv-cfg
