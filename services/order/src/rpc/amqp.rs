@@ -720,6 +720,7 @@ impl InnerServerConsumer {
         let req = AppRpcClientReqProperty {
             msgbody: content,
             start_time,
+            correlation_id: req_props.correlation_id().cloned(),
             route: deliver.routing_key().clone(),
         };
         let hdlr_fn = self.route_hdlr;

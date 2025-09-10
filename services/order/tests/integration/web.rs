@@ -103,6 +103,7 @@ async fn itest_setup_currency_exrate(shrstate: AppSharedState) {
             start_time: Local::now().fixed_offset(),
             msgbody: b"{}".to_vec(),
             route: mock_rpc_topic.to_string(),
+            correlation_id: None,
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
@@ -261,12 +262,7 @@ async fn new_order_then_return() -> DefaultResult<(), AppError> {
         StatusCode::OK,
     )
     .await;
-    {
-        let raw_body =
-            itest_setup_product_price(shr_state.clone(), FPATH_EDIT_PRODUCTPRICE_OK).await;
-        let respbody = String::from_utf8(raw_body).unwrap();
-        assert!(respbody.is_empty()); // task done successfully
-    }
+    itest_setup_product_price(shr_state.clone(), FPATH_EDIT_PRODUCTPRICE_OK).await;
     {
         let expiry = Local::now().fixed_offset() + Duration::minutes(1);
         let resp_body =
@@ -294,7 +290,7 @@ async fn new_order_then_return() -> DefaultResult<(), AppError> {
     Ok(())
 } // end of fn new_order_then_return
 
-async fn itest_setup_product_price<'a>(shrstate: AppSharedState, body_fpath: &'a str) -> Vec<u8> {
+async fn itest_setup_product_price<'a>(shrstate: AppSharedState, body_fpath: &'a str) {
     let mock_rpc_topic = "rpc.order.update_store_products";
     let cfg = shrstate.config().clone();
     let req = {
@@ -305,11 +301,15 @@ async fn itest_setup_product_price<'a>(shrstate: AppSharedState, body_fpath: &'a
             start_time: Local::now().fixed_offset(),
             msgbody,
             route: mock_rpc_topic.to_string(),
+            correlation_id: Some("py-celery-task-id-xx1234".to_string()),
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
-    result.unwrap()
+    let raw_body = result.unwrap();
+    let resp_json: JsnVal = serde_json::from_slice(&raw_body).unwrap();
+    let actual_status = resp_json.get("status").unwrap().as_str().unwrap();
+    assert_eq!(actual_status, "SUCCESS");
 }
 
 #[tokio::test]
@@ -321,9 +321,7 @@ async fn update_product_price_ok() -> DefaultResult<(), AppError> {
         "/tests/integration/examples/product_price_celery_ok_3.json",
     ];
     for path in subcases {
-        let raw_body = itest_setup_product_price(shrstate.clone(), path).await;
-        let respbody = String::from_utf8(raw_body).unwrap();
-        assert!(respbody.is_empty()); // task done successfully
+        itest_setup_product_price(shrstate.clone(), path).await;
     }
     Ok(())
 } // end of fn update_product_price_ok
@@ -348,6 +346,7 @@ async fn itest_setup_stock_level<'a>(
         AppRpcClientReqProperty {
             start_time: Local::now().fixed_offset(),
             msgbody,
+            correlation_id: None,
             route: mock_rpc_topic.to_string(),
         }
     };
@@ -408,12 +407,9 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
         StatusCode::OK,
     )
     .await;
-    let _raw_body =
-        itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[0]).await;
-    let _raw_body =
-        itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[1]).await;
-    let _raw_body =
-        itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[2]).await;
+    itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[0]).await;
+    itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[1]).await;
+    itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[2]).await;
     itest_setup_currency_exrate(shrstate.clone()).await;
     let _oid = place_new_order_ok(
         top_lvl_cfg.clone(),
@@ -803,9 +799,7 @@ async fn itest_setup_create_order(
         StatusCode::OK,
     )
     .await;
-    let raw_body = itest_setup_product_price(shrstate.clone(), fpath_prod_price).await;
-    let resp_body = String::from_utf8(raw_body).unwrap();
-    assert!(resp_body.is_empty()); // task done successfully
+    itest_setup_product_price(shrstate.clone(), fpath_prod_price).await;
     itest_setup_currency_exrate(shrstate.clone()).await;
     let result = place_new_order_ok(
         top_lvl_cfg.clone(),
@@ -831,13 +825,14 @@ async fn itest_setup_get_order_billing(shrstate: AppSharedState, oid: String) ->
         AppRpcClientReqProperty {
             start_time: Local::now().fixed_offset(),
             msgbody,
+            correlation_id: None,
             route: mock_rpc_topic.to_string(),
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let raw = result.unwrap();
-    let result = serde_json::from_slice(&raw);
+    let result = serde_json::from_slice::<JsnVal>(&raw);
     assert!(result.is_ok());
     result.unwrap()
 }
@@ -934,6 +929,7 @@ async fn itest_update_payment_status(
             start_time: Local::now().fixed_offset(),
             msgbody,
             route: mock_rpc_topic.to_string(),
+            correlation_id: None,
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
@@ -1030,12 +1026,13 @@ async fn itest_setup_get_order_refund(
             start_time: Local::now().fixed_offset(),
             msgbody,
             route: mock_rpc_topic.to_string(),
+            correlation_id: None,
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let raw = result.unwrap();
-    let result = serde_json::from_slice(&raw);
+    let result = serde_json::from_slice::<JsnVal>(&raw);
     assert!(result.is_ok());
     // println!("[debug] itest-setup-get-order-refund , raw : {:?}",
     //          String::from_utf8(raw).unwrap() );
@@ -1189,12 +1186,13 @@ async fn itest_setup_get_order_inventory(
             start_time: Local::now().fixed_offset(),
             msgbody,
             route: mock_rpc_topic.to_string(),
+            correlation_id: None,
         }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let raw = result.unwrap();
-    let result = serde_json::from_slice(&raw);
+    let result = serde_json::from_slice::<JsnVal>(&raw);
     assert!(result.is_ok());
     // println!(
     //     "[debug] itest-setup-get-order-inventory , raw : {:?}",

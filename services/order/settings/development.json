@@ -212,7 +212,7 @@
                 "durable": true,
 		"ttl_secs": 10,
 		"max_length": 1350,
-		"python_celery_task": "product.async_tasks.get_product",
+		"python_celery_task": "product.api.rpc.get_product",
                 "reply": {
                     "queue": "rpc.reply.order.receive_product_info",
                     "correlation_id_prefix": "rpc.order.get_product_info.corr_id",

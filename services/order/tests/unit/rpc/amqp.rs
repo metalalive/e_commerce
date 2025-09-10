@@ -62,6 +62,7 @@ async fn ut_client_send_req<'a>(
         msgbody: msg.as_bytes().to_vec(),
         start_time: Local::now().fixed_offset(),
         route: route.to_string(),
+        correlation_id: None,
     };
     let result = hdlr.send_request(props).await;
     if let Err(e) = result.as_ref() {
