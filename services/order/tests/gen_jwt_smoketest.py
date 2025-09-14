@@ -22,10 +22,10 @@ def main():
             (APP_CODE, "can_create_product_policy"),
         ],
         quota=[
-            (APP_CODE, 1, 3),  # max limit AppAuthQuotaMatCode::NumPhones is 5
-            (APP_CODE, 2, 3),  # max limit AppAuthQuotaMatCode::NumEmails is 5
-            (APP_CODE, 3, 9),  # max limit AppAuthQuotaMatCode::NumOrderLines is 5
-            (APP_CODE, 4, 10),  # max limit AppAuthQuotaMatCode::NumProductPolicies is 5
+            (APP_CODE, 1, 3),  # max limit AppAuthQuotaMatCode::NumPhones
+            (APP_CODE, 2, 3),  # max limit AppAuthQuotaMatCode::NumEmails
+            (APP_CODE, 3, 10),  # max limit AppAuthQuotaMatCode::NumOrderLines
+            (APP_CODE, 4, 11),  # max limit AppAuthQuotaMatCode::NumProductPolicies
         ],
         usr_id=int(mock_app_user_id),
     )
