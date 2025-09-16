@@ -8,8 +8,10 @@ use serde_json::Value as JsnVal;
 #[cfg(test)]
 use serde::Deserialize;
 
+use ecommerce_common::adapter::rpc;
 use ecommerce_common::adapter::rpc::py_celery::{deserialize_reply, serialize_msg_body};
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::constant::api::rpc as RpcConst;
 use crate::error::AppError;
@@ -25,6 +27,13 @@ pub async fn route_to_handler(
     req: AppRpcClientReqProperty,
     shr_state: AppSharedState,
 ) -> DefaultResult<Vec<u8>, AppError> {
+    let logctx_p = shr_state.log_context();
+    app_log_event!(
+        logctx_p,
+        AppLogLevel::DEBUG,
+        "route-handler-reached, key: {}",
+        &req.route,
+    );
     // TODO, build a route table if number of different handling functions
     // grows over time
     let hdlr_label = RpcConst::extract_handler_label(req.route.as_str())?;
@@ -133,10 +142,18 @@ impl PyCelery {
 
     pub(super) fn build_response(task_id: &str, status: &str) -> JsnVal {
         // TODO, accept result from callers
-        const PATTERN: &str = r#" {"result": null, "traceback": null, "children": []} "#;
-        let mut out: JsnVal = serde_json::from_str(PATTERN).unwrap();
+        let mut out = rpc::base_response::<u8>(5, status, None).unwrap();
         if let Some(m) = out.as_object_mut() {
-            m.insert("status".to_string(), JsnVal::String(status.to_string()));
+            m.insert("task_id".to_string(), JsnVal::String(task_id.to_string()));
+            m.insert("traceback".to_string(), JsnVal::Null);
+            m.insert("children".to_string(), JsnVal::Array(Vec::new()));
+        }
+        out
+    }
+
+    pub(super) fn error_response(task_id: &str, e: AppError) -> JsnVal {
+        let mut out = build_error_response(e);
+        if let Some(m) = out.as_object_mut() {
             m.insert("task_id".to_string(), JsnVal::String(task_id.to_string()));
         }
         out
@@ -144,11 +161,10 @@ impl PyCelery {
 } // end of impl PyCelery
 
 pub fn build_error_response(e: AppError) -> JsnVal {
-    const PATTERN: &str = r#" {"status":"error", "detail":""} "#;
-    let mut out: JsnVal = serde_json::from_str(PATTERN).unwrap();
+    let mut out: JsnVal = rpc::base_response::<u8>(4, "FAILURE", None).unwrap();
     if let Some(m) = out.as_object_mut() {
-        let _detail = format!("{}", e);
-        m.insert("detail".to_string(), JsnVal::String(_detail));
+        let detail = format!("{}", e);
+        m.insert("error".to_string(), JsnVal::String(detail));
     }
     out // return json object, to let callers add extra info
 }
@@ -163,7 +179,7 @@ fn test_pycelery_deserialize_ok() {
     }
 
     let data = br#"[["stock", "hay"], {"live":true, "beat":782}, {"callbacks":[]}]"#.to_vec();
-    let result = py_celery_deserialize_req::<Vec<String>, TestData>(&data);
+    let result = PyCelery::deserialize_req::<Vec<String>, TestData>(&data);
     assert!(result.is_ok());
     let (arg, kwarg) = result.unwrap();
     assert_eq!(arg.len(), 2);
@@ -181,7 +197,7 @@ fn test_pycelery_deserialize_error() {
     }
 
     let data = br#"[[], {}]"#.to_vec();
-    let result = py_celery_deserialize_req::<Vec<i64>, TestData>(&data);
+    let result = PyCelery::deserialize_req::<Vec<i64>, TestData>(&data);
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(error.code, AppErrorCode::InvalidJsonFormat);
@@ -190,7 +206,7 @@ fn test_pycelery_deserialize_error() {
         "celery-de-topblk-incomplete"
     );
     let data = br#"[[], {}, 567]"#.to_vec();
-    let result = py_celery_deserialize_req::<Vec<i64>, TestData>(&data);
+    let result = PyCelery::deserialize_req::<Vec<i64>, TestData>(&data);
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(

@@ -24,7 +24,9 @@ pub(super) async fn store_products(
     let repo = match app_repo_product_price(ds).await {
         Ok(r) => r,
         Err(e) => {
-            return build_error_response(e).to_string().into_bytes();
+            return PyCelery::error_response(task_id, e)
+                .to_string()
+                .into_bytes();
         }
     };
     let result = PyCelery::deserialize_req::<Vec<String>, ProductPriceDto>(&req.msgbody);
@@ -33,36 +35,45 @@ pub(super) async fn store_products(
             let logctx = shr_state.log_context().clone();
             let result = EditProductPriceUseCase::execute(repo, data, logctx).await;
             if let Err(e) = result {
-                build_error_response(e).to_string()
+                PyCelery::error_response(task_id, e)
             } else {
                 // complete successfully
-                PyCelery::build_response(task_id.as_str(), "SUCCESS").to_string()
+                PyCelery::build_response(task_id.as_str(), "SUCCESS")
             }
         }
-        Err(e) => build_error_response(e).to_string(),
+        Err(e) => PyCelery::error_response(task_id, e),
     };
-    s.into_bytes()
+    s.to_string().into_bytes()
 }
 
 pub(super) async fn currency_refresh(
-    _req: AppRpcClientReqProperty,
+    req: AppRpcClientReqProperty,
     shr_state: AppSharedState,
 ) -> Vec<u8> {
     let logctx = shr_state.log_context().clone();
     // this endpoint does not require any specific format for message body.
+    let task_id = match PyCelery::get_task_id(&req) {
+        Ok(t) => t,
+        Err(e) => {
+            return build_error_response(e).to_string().into_bytes();
+        }
+    };
     let ds = shr_state.datastore();
     let repo = match app_repo_currency(ds).await {
         Ok(v) => v,
         Err(e) => {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-            return build_error_response(e).to_string().into_bytes();
+            return PyCelery::error_response(task_id, e)
+                .to_string()
+                .into_bytes();
         }
     };
     let exrate_ctx = shr_state.currency();
     let result = CurrencyRateRefreshUseCase::execute(repo, exrate_ctx, logctx).await;
-    if let Err(e) = result {
-        build_error_response(e).to_string().into_bytes()
+    let resp = if let Err(e) = result {
+        PyCelery::error_response(task_id, e)
     } else {
-        Vec::new()
-    }
+        PyCelery::build_response(task_id.as_str(), "SUCCESS")
+    };
+    resp.to_string().into_bytes()
 }

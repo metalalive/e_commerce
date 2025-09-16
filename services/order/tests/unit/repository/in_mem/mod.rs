@@ -47,10 +47,10 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
             detail: Some(format!("utest")),
         })
     }
-    async fn fetch_acquire(
-        &self,
+    async fn fetch_acquire<'a>(
+        &'a self,
         _info: AppInMemFetchKeys,
-    ) -> Result<(AppInMemFetchedData, AppInMemDstoreLock), AppError> {
+    ) -> Result<(AppInMemFetchedData, AppInMemDstoreLock<'a>), AppError> {
         Err(AppError {
             code: AppErrorCode::AcquireLockFailure,
             detail: Some(format!("utest")),
