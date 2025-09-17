@@ -8,7 +8,7 @@ services:
       - SYS_BASE_PATH=/app
       - SERVICE_BASE_PATH=/app/order
     working_dir: /app/order
-    command: cargo test --test unittest --features "mariadb amqprs" -- rpc::amqp --test-threads=1
+    command: cargo test --release --test unittest --features "mariadb amqprs" -- rpc::amqp --test-threads=1
     volumes:
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../tmp/log/test:/app/log

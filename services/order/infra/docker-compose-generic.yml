@@ -18,6 +18,7 @@ services:
   mariadb-ordermgt:
     image: mariadb-ext:11-noble
     container_name: ordermgt-generic-mariadb
+    pull_policy: never
     restart: no
     environment:
       - DB_NAME=ecommerce_order

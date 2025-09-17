@@ -13,7 +13,7 @@ cd /path/to/ecomm-proj/infra
 docker build --tag rabbitmq-custom-init:3.13-management  --file ./rabbitmq-custom-init.dockerfile  .
 ```
 
-### Cron Job Scheduler
+### Common Test environment / Cron Job Scheduler
 ```bash
 cd /path/to/ecomm-proj/
 docker build --tag ecom-common-py:latest --file ./infra/commonpython.dockerfile .

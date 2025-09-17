@@ -12,167 +12,125 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  init-env-test-non-db:
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: downgrade rust toolchain to v1.77
-      uses: ./.github/actions/rust-downgrade
-      with:
-        version-request: 1.77
-    - name: lint check
-      working-directory: services/order
-      run: cargo clippy
-    - name: Run unit test
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-      working-directory: services/order
-      run: |
-          cargo test --test unittest  -- model --test-threads=1
-          cargo test --test unittest  -- usecase --test-threads=1
-          cargo test --test unittest  -- auth --test-threads=1
-          cargo test --test unittest  -- network --test-threads=1
-          cargo test --test unittest  -- repository::in_mem  --test-threads=1
-    - name: Run integration test
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-          CONFIG_FILE_PATH: "settings/test-inmem-only.json"
-      working-directory: services/order/tests/integration
-      run: |
-          cargo test --test web  --  --test-threads=1
+    lint-check:
+      runs-on: ubuntu-24.04
+      steps:
+      - uses: actions/checkout@v4
+      - name: downgrade rust toolchain to v1.86
+        uses: ./.github/actions/rust-downgrade
+        with:
+          version-request: 1.86
+      - name: lint check
+        working-directory: services/order
+        run: cargo clippy --features "mariadb amqprs"
+
+    build-docker-image:
+      if: startsWith(github.head_ref, 'order-mgt-dev/')
+      needs: lint-check
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+        - name: Build Docker image for app and export to tar
+          uses: docker/build-push-action@v5
+          with:
+            context: services
+            file: services/order/infra/Dockerfile
+            outputs: type=docker,dest=${{ runner.temp }}/ordermgt-backend-build0.tar
+            tags: ordermgt-with-devtools:latest
+            target: builder0
+            push: false
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+        - name: Upload artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: ordermgt-docker-image
+            path: ${{ runner.temp }}/ordermgt-backend-build0.tar
+            retention-days: 1
 
 
-  init-env-test-db:
-    if: startsWith(github.head_ref, 'order-proc-dev/')
-    needs: [init-env-test-non-db]
-    runs-on: ubuntu-24.04
-    services:
-      mariadb_primary:
-        image: mariadb:11.2.6
-        # official docker image only exposes default port 3306 to external world
-        # map any non-default port external clients will use to 3306
-        ports:
-          - 3307:3306
-        env:
-          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
-          MARIADB_ROOT_HOST: "localhost"
-          MARIADB_DATABASE: "test_ecommerce_order"
-          MARIADB_USER: "DB_USERNAME"
-          MARIADB_PASSWORD: "DB_PASSWORD"
-    steps:
-    - uses: actions/checkout@v4
-    # Note,
-    # this plug-in incorrectly reports `connection refused from database server` ,
-    # while the database docker is actually up and running
-    # - uses: liquibase-github-actions/update@v4.30.0
-    #   with:
-    #     changelogFile: ${{ github.workspace }}/services/order/migration/changelog_order.xml
-    #     url: jdbc:mariadb://localhost:3306/test_ecommerce_order
-    #     username: DB_USERNAME
-    #     password: DB_PASSWORD
-    #     logLevel: INFO
-    
-    - name: install liquibase migration tool
-      # installation suggestion from liquibase official doc :
-      # https://docs.liquibase.com/start/install/liquibase-linux-debian-ubuntu.html
-      run: |
-          wget -O- https://repo.liquibase.com/liquibase.asc | gpg --dearmor > ./liquibase-keyring.gpg
-          cat ./liquibase-keyring.gpg | sudo tee /usr/share/keyrings/liquibase-keyring.gpg > /dev/null
-          echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/liquibase-keyring.gpg] https://repo.liquibase.com stable main' | sudo tee /etc/apt/sources.list.d/liquibase.list
-          sudo apt-get update
-          sudo apt-get install liquibase
-          liquibase --version
+    init-env-then-test:
+      if: startsWith(github.head_ref, 'order-mgt-dev/')
+      runs-on: ubuntu-24.04
+      needs: build-docker-image
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Build Docker image for database and export to tar
+        uses: docker/build-push-action@v5
+        with:
+          context: infra
+          file: infra/mariadb-ext.dockerfile
+          outputs: type=docker
+          tags: mariadb-ext:11-noble
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Download docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ordermgt-docker-image
+          path: ${{ runner.temp }}
+      - name: Load docker image
+        run: |
+            docker load --input ${{ runner.temp }}/ordermgt-backend-build0.tar
+            docker image list --all
+      
+      - name: set up database persistence path
+        working-directory: ${{ github.workspace }}
+        # the user `mariadb` in docker container has UID 999 and GID 999 
+        run: |
+          mkdir -p installed/mariadb/data  installed/mariadb/log
+          sudo chown --recursive 999:999 installed/mariadb
+      - name: Create test environment file
+        working-directory: services/order/infra
+        run: |
+          echo "DB_HOST=ordermgt-test-mariadb" > ./container-test.env
+          echo "MARIADB_ROOT_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "SITEDBA_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "SITEDBA_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "DB_APP_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "DB_APP_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "CONTAINER_IP_RANGE=172.19.7.%" >> ./container-test.env
+          echo "MIGRATE_VERSION_TAG=0.0.0" >> ./container-test.env
+          echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
+          echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
 
-    - name: run database schema migration
-      working-directory: services/order
-      run: |
-          liquibase  --changeLogFile=./migration/changelog-root.xml \
-              --url=jdbc:mariadb://localhost:3307/test_ecommerce_order \
-              --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+      - name: set up credentials for test
+        working-directory: services/common
+        run: |
+            python3 ./python/src/ecommerce_common/util/json_renderer.py \
+                --template=./data/secrets_template.json   --output=./data/secrets.json \
+                --parameters="backend_apps/secret_key/staff/OpenExchangeRates=${{ secrets.OpenExchangeRates }}"
+            ls -lt ./data
 
-    - name: downgrade rust toolchain to v1.75
-      uses: ./.github/actions/rust-downgrade
-      with:
-        version-request: 1.75
-    - name: lint check
-      working-directory: services/order
-      run: |
-          cargo clippy --features "mariadb"
-    - name: Build apps
-      working-directory: services/order
-      run: |
-          cargo build  --bin web --features "mariadb"
-    - name: set up mock credentials for test
-      working-directory: services/common/data
-      run: |
-          ln -s ./secrets_template.json  ./secrets.json
-    - name: Run unit test
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-      working-directory: services/order
-      run: |
-          cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
-    - name: Run integration test
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-          CONFIG_FILE_PATH: "settings/test.json"
-      working-directory: services/order/tests/integration
-      run: |
-          cargo test --test web  --features "mariadb" --  --test-threads=1
- 
+      - name: run database test
+        working-directory: services/order
+        run: |
+            docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
+            python3 ${{ github.workspace }}/.github/docker_wait.py  --container-name ordermgt-test-db-schema-downgrade  --target-status exited --timeout-secs 600
+            docker ps --all --filter name=ordermgt-itest-0
+            docker logs ordermgt-itest-0
+            docker logs ordermgt-test-db-schema-upgrade --tail 30
+            docker logs db-schema-migration-down-ordermgt --tail 30
 
-  init-env-test-rpc:
-    if: startsWith(github.head_ref, 'order-proc-dev/')
-    needs: [init-env-test-non-db]
-    runs-on: ubuntu-24.04
-    services:
-      rabbitmq_amqp:
-        image: rabbitmq:3-management
-        ports: ["5672:5672", "15672:15672"]
-        env:
-          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
-          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
-          RABBITMQ_DEFAULT_VHOST: "/integration_test"
-    steps:
-    - uses: actions/checkout@v4
-    - name: Wait for RabbitMQ to Initialize
-      run: |
-          echo "Waiting for RabbitMQ service to be ready..."
-          sleep 10
+      - name: Clean up containers database test
+        if: always()
+        working-directory: services/order
+        run: |
+            docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  --profile cleandbschema  down --volumes
 
-    - name: initial setup in RabbitMQ
-      uses: ./.github/actions/rabbitmq-setup
-      with:
-          vhost: /integration_test
-          uname: AMQP_ANOTHER_USERNAME
-          passwd: AMQP_ANOTHER_PASSWORD
+      - name: run 3rd-party integration test
+        working-directory: services/order
+        run: |
+            docker compose --file ./infra/docker-compose-test3pty.yml up
+            docker ps --all --filter name=ordermgt-itest-currex-0
+            docker logs ordermgt-itest-currex-0
 
-    - name: downgrade rust toolchain to v1.75
-      uses: ./.github/actions/rust-downgrade
-      with:
-          version-request: 1.75
-    - name: lint check
-      working-directory: services/order
-      run: |
-          cargo clippy --features "amqprs"
-    - name: Build apps
-      working-directory: services/order
-      run: |
-          cargo build  --bin rpc_consumer --features "amqprs"
-    - name: set up credential for test
-      working-directory: services/common/data
-      run: |
-          ln -s ./secrets_template.json  ./secrets.json
-    - name: Run unit test
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-      working-directory: services/order
-      run: |
-          cargo test --test unittest --features "amqprs"  -- rpc::amqp  --test-threads=1 
+      - name: Clean up containers 3rd-party test
+        if: always()
+        working-directory: services/order
+        run: |
+            docker compose --file ./infra/docker-compose-test3pty.yml down
 

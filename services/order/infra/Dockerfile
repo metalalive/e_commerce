@@ -28,7 +28,7 @@ ENV SERVICE_BASE_PATH="${DST_APP_PATH}"
 #   - `--features amqprs` , to enable publish / subscribe operations to AMQP broker in this service.
 #   - or enable all options , such as `--features "mariadb amqprs"`
 
-RUN cargo test --test unittest --features "mariadb amqprs" -- \
+RUN cargo test --release --test unittest --features "mariadb amqprs" -- \
     api::rpc  model usecase auth network adapter::datastore::in_mem \
     repository::in_mem --test-threads=1
 
@@ -36,10 +36,13 @@ WORKDIR  ${DST_APP_PATH}/tests/integration
 COPY order/tests/integration/*.rs   order/tests/integration/Cargo.lock \
      order/tests/integration/Cargo.toml  .
 
-RUN cargo build --test web --features "mariadb"
+RUN cargo build --release --test web --features "mariadb"
 
 FROM debian:trixie-slim AS final0
 ARG DST_APP_PATH
+
+RUN apt update && apt install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN update-ca-certificates
 
 ENV SYS_BASE_PATH="${DST_APP_PATH}/../"
 ENV SERVICE_BASE_PATH="${DST_APP_PATH}"
@@ -52,7 +55,7 @@ WORKDIR /app/log
 WORKDIR /app/entry
 VOLUME ["/app/log", "/app/entry"]
 
-COPY --from=builder0 ${DST_APP_PATH}/target/debug/rpc_consumer  .
-COPY --from=builder0 ${DST_APP_PATH}/target/debug/web  .
+COPY --from=builder0 ${DST_APP_PATH}/target/release/rpc_consumer  .
+COPY --from=builder0 ${DST_APP_PATH}/target/release/web  .
 
 CMD ["/bin/sh", "/app/entry/run_my_app"]

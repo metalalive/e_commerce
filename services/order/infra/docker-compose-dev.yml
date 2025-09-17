@@ -24,6 +24,7 @@ services:
     env_file:
       - ./container-dev.env
     environment:
+      RUST_BACKTRACE: 1
       CONFIG_FILE_PATH: settings/development.json
     stop_grace_period: 15s
     volumes:

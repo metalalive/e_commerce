@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cargo test --test unittest --features "mariadb amqprs" -- repository::mariadb --test-threads=1
+cargo test --release --test unittest --features "mariadb amqprs" -- repository::mariadb --test-threads=1
 
 # Note:
 # - the feature options `mariadb`, `amqprs` can also be applied along with the command `cargo test`
@@ -18,7 +18,7 @@ fi
 cd ./tests/integration
 
 #cargo clean
-cargo test --test web --features "mariadb" --  --test-threads=1
+cargo test --release --test web --features "mariadb" --  --test-threads=1
 
 # Note :
 # - remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
