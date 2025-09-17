@@ -111,7 +111,7 @@ jobs:
             docker ps --all --filter name=ordermgt-itest-0
             docker logs ordermgt-itest-0
             docker logs ordermgt-test-db-schema-upgrade --tail 30
-            docker logs db-schema-migration-down-ordermgt --tail 30
+            docker logs ordermgt-test-db-schema-downgrade --tail 30
 
       - name: Clean up containers database test
         if: always()
