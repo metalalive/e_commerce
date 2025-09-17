@@ -65,8 +65,6 @@ jobs:
           outputs: type=docker
           tags: mariadb-ext:11-noble
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - name: Download docker image artifact
         uses: actions/download-artifact@v4
         with:
