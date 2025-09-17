@@ -96,7 +96,7 @@ You can build / test this application with following optional features
 - mariaDB, append `--features mariadb` to Rust `cargo` command 
 
 ### Commands for build
-```shell
+```bash
 cd ${SERVICE_BASE_PATH}
 docker build --file order/infra/Dockerfile --target builder0  --tag ordermgt-with-devtools:latest  .
 docker build --file order/infra/Dockerfile --tag ordermgt-backend-base:latest  .
@@ -108,29 +108,13 @@ docker build --file order/infra/Dockerfile --tag ordermgt-backend-base:latest  .
 
 
 ## Run
-```shell
+### API server and RPC consumer in Development Environment
+```bash
 docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
     --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
 ```
 
 To run smoke test after dev server is launched, append the option `--file ./infra/docker-compose-smoketest4dev.yml`  after `docker-compose-dev.yml`.
-
-### Development API server
-```shell=?
-cd ${SERVICE_BASE_PATH}
-
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin web --features "mariadb amqprs"
-```
-### Development RPC consumer
-```shell=?
-cd ${SERVICE_BASE_PATH}
-
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin rpc_consumer --features "mariadb amqprs"
-```
 
 ### Development API server with Debugger
 I use the plug-in [vimspector](https://github.com/puremourning/vimspector) with NeoVim, please refer to configuration in `./order/.vimspector` as well as the article [NeoVim IDE setup from scratch](https://hackmd.io/@0V3cv8JJRnuK3jMwbJ-EeA/r1XR_hZL3)
@@ -142,7 +126,7 @@ Be sure to run the 2 commands below before building / running the applications
 ### Code formatter
 The command below reformat test / production code which meet the [styling requirement](https://github.com/rust-lang/rust/tree/HEAD/src/doc/style-guide/src)
 ```shell
-cargo  fmt
+cargo fmt
 ```
 
 ### Linter
