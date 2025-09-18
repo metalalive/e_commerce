@@ -2,6 +2,7 @@
 infra/dev.env
 services/common/data/secrets.json
 services/common/python/poetry.lock
+services/common/python/c_exts/build/
 services/common/python/c_exts/dist/
 services/common/python/dist/
 services/common/rust/target/
@@ -23,6 +24,9 @@ services/product/v2/infra/interpolation-dev.env
 services/product/v2/infra/interpolation-test.env
 services/product/v2/infra/container-dev.env
 services/product/v2/infra/container-test.env
+services/store/build/
+services/store/infra/container-test.env
+services/store/infra/interpolation-test.env
 services/tmp/buffer/media/*
 services/tmp/cache/dev/*
 services/tmp/cache/dev/jwks/privkey/current.json

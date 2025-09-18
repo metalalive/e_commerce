@@ -57,13 +57,13 @@ def _setup_db_credential() -> Dict:
     )
     out_map = s_map[db_usr_alias]
     out_map["NAME"] = app_settings.DB_NAME
+    out_map["HOST"] = app_settings.DB_HOST
+    out_map["PORT"] = app_settings.DB_PORT
     return out_map
 
 
 db_credential = _setup_db_credential()
-url = format_sqlalchemy_url(
-    driver=app_settings.DRIVER_LABEL, db_credential=db_credential
-)
+url = format_sqlalchemy_url(driver=app_settings.DRIVER_LABEL, db_credential=db_credential)
 config.set_main_option(name="sqlalchemy.url", value=url)
 
 

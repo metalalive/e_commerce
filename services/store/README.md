@@ -76,13 +76,13 @@ PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
 ```
 Alternatively, you can switch to application base folder and explcitly specify virtual environment
 ```bash
-PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+PIPENV_VENV_IN_PROJECT=1 pipenv run python -m venv
 ```
 
 - A virtual environment folder `.venv` will be created under the application folder `./store`
 - Note [`Pipfile`](./Pipfile) already references path to [common python modules](../common/python), that makes `pipenv` installation automatically link to the common modules, no need to build the common python module explicitly.
 
-If you need to modify the `Pipfile` or `pyproject.toml` later, update the virtual environment after you are done editing `Pipfile` , by the command
+Update the virtual environment after you are done editing `Pipfile` and `pyproject.toml` with the command :
 ```shell
 pipenv update --dev
 ```
@@ -102,6 +102,18 @@ The package title should be `my-c-extention-lib`. Once you need to remove the ex
 ```bash
 pipenv run pip uninstall my-c-extention-lib
 ```
+
+### Base Image for Application Environment
+```bash
+cd /path/to/project-home/services
+docker image rm  storefront-backend-base:latest
+docker build --tag=storefront-backend-base:latest --file=store/infra/Dockerfile  .
+```
+
+After custom image `storefront-backend-base:latest` is built successfully, use it for one of following tasks
+- run application in development ensironment
+- run all test cases
+
 
 ### Database Migration
 ```bash
@@ -144,6 +156,11 @@ SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv ru
 (TODO)
 
 ## Test
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
+```
+
 ### Integration Test
 ```bash
 APP_SETTINGS="settings.test"  ./run_test

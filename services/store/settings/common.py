@@ -7,17 +7,16 @@ from ecommerce_common.logging.logger import ExtendedLogger  # noqa: F401
 APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
 SYS_BASE_PATH = APP_BASE_PATH.parent
 
-if not os.environ.get("SYS_BASE_PATH"):
-    os.environ["SYS_BASE_PATH"] = str(SYS_BASE_PATH)
+os.environ["APP_BASE_PATH"] = str(APP_BASE_PATH)
+os.environ["SYS_BASE_PATH"] = str(SYS_BASE_PATH)
 
 from ecommerce_common.cors import config as cors_config  # noqa: E402
 
-# TODO,commit DB schema migration files
-AUTH_MIGRATION_PATH = SYS_BASE_PATH.joinpath("migrations/alembic/store")
-
 SECRETS_FILE_PATH = SYS_BASE_PATH.joinpath("common/data/secrets.json")
 
-DB_NAME = "ecommerce_store"
+DB_HOST = os.environ["DB_HOST"]
+DB_PORT = int(os.environ["DB_PORT"])
+DB_NAME = os.environ["DB_NAME"]
 DB_USER_ALIAS = None
 
 ORM_BASE_CLASSES = ["store.models.Base"]
@@ -44,7 +43,7 @@ KEYSTORE = {
     "persist_pubkey_handler": {
         "module_path": "ecommerce_common.auth.jwt.RemoteJWKSPersistHandler",
         "init_kwargs": {
-            "url": "http://localhost:8008/jwks",
+            "url": f"{AUTH_APP_HOST}/jwks",
             "name": "remote_pubkey",
             "lifespan_hrs": 12,
         },

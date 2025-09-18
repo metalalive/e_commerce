@@ -4,8 +4,18 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-ecommerce-common = {path = "../common/python", editable = false}
-store-front = {path = ".", editable = false}
+ecommerce-common = {path = "../common/python", editable = true}
+store-front = {path = ".", editable = true}
+fastapi = ">= 0.116.2"
+pydantic = {extras = ["email"], version = ">= 2.10.2"}
+uvicorn = ">= 0.23.2"
+PyJWT = ">= 2.8.0"
+SQLAlchemy = ">=2.0.29"
+alembic = "== 1.16.5"
+asyncmy = ">= 0.2.9"
+celery = "== 5.4.0"
+cryptography = ">= 46.0.1"
+setuptools = ">= 69.5.1"
 
 [dev-packages]
 pytest = "8.4.2"

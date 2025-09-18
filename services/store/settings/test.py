@@ -1,7 +1,6 @@
 from .common import *  # noqa: F403
 from .celeryconfig import *  # noqa: F403
 
-DB_NAME = "test_ecommerce_store"
 DB_USER_ALIAS = "test_site2_dba"
 
 KEYSTORE["persist_secret_handler_test"] = {  # noqa: F405

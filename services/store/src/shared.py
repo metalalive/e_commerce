@@ -22,9 +22,7 @@ FASTAPI_SETUP_VAR = "APP_SETTINGS"
 # non-standard way of getting configuration module hierarchy
 CELERY_SETUP_VAR = "CELERY_CONFIG_MODULE"
 
-cfg_mod_path = os.getenv(
-    FASTAPI_SETUP_VAR, os.getenv(CELERY_SETUP_VAR, "settings.common")
-)
+cfg_mod_path = os.getenv(FASTAPI_SETUP_VAR, os.getenv(CELERY_SETUP_VAR, "settings.common"))
 
 _settings = import_module(cfg_mod_path)
 
@@ -100,6 +98,8 @@ def _init_db_engine(conn_args: Optional[dict] = None):
         ),
         "driver_label": _settings.DRIVER_LABEL,
         "db_name": _settings.DB_NAME,
+        "db_host": _settings.DB_HOST,
+        "db_port": _settings.DB_PORT,
     }
     if conn_args:
         kwargs["conn_args"] = conn_args

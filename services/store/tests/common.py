@@ -67,6 +67,8 @@ async def db_engine_resource(request):
         ),
         driver_label=ts_settings.DRIVER_LABEL,
         db_name=ts_settings.DB_NAME,
+        db_host=ts_settings.DB_HOST,
+        db_port=ts_settings.DB_PORT,
         # It is optional to set multi-statement flag for the API endpoints that
         # require to run multiple SQL statements in one go.
         conn_args={"client_flag": 0},
@@ -198,12 +200,8 @@ def _opendays_data_gen():
         chosen_day = weekdays[idx]
         new_data = {
             "day": chosen_day,
-            "time_open": time(
-                hour=random.randrange(9, 11), minute=random.randrange(60)
-            ),
-            "time_close": time(
-                hour=random.randrange(17, 22), minute=random.randrange(60)
-            ),
+            "time_open": time(hour=random.randrange(9, 11), minute=random.randrange(60)),
+            "time_close": time(hour=random.randrange(17, 22), minute=random.randrange(60)),
         }
         yield new_data
         idx = (idx + 1) % 7
