@@ -39,7 +39,7 @@ services:
       - APP_USER_ID=113
       - APP_SETTINGS=settings.development
     working_dir: /app/productmgt/v2.x
-    command: python3 -m tests.smoke_test
+    command: python3 -m tests.smoke_test --clean-on-exit=${SMOKETEST_CLEAN_DATA}
     volumes:
       - ../tests/smoke_test.py:/app/productmgt/v2.x/tests/smoke_test.py:ro
       - ../settings/common.py:/app/productmgt/v2.x/settings/common.py:ro
