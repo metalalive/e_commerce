@@ -8,12 +8,12 @@ ecommerce-common = {path = "../common/python", editable = false}
 store-front = {path = ".", editable = false}
 
 [dev-packages]
-pytest = ">=8.2.*"
-pytest-asyncio = ">=0.24.0"
-ijson = ">= 3.2.*" # for mocking jwks source
+pytest = "8.4.2"
+pytest-asyncio = "1.2.0"
+ijson = ">= 3.3.0" # for mocking jwks source
 httpx = ">=0.27.0" # for async client in pytest
-black = ">=24.4.*"
-ruff = ">=0.7.2"
+black = ">=24.4.0"
+ruff = ">=0.12.5"
 
 [requires]
-python_version = "3.12"
+python_version = "3.13"
