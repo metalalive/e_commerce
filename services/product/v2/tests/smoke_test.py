@@ -4,6 +4,7 @@ import json
 import time
 import logging
 import urllib.request
+import argparse  # Import argparse
 from importlib import import_module
 from typing import Optional, List, Dict
 
@@ -14,6 +15,18 @@ API_HOST = os.environ["API_HOST"]
 API_PORT = os.environ["API_PORT"]
 MOCK_APP_USER_ID = os.environ["APP_USER_ID"]
 ACCESS_TOKEN_PATH = "/app/log/jwt-access-prodmgt.txt"
+
+
+# New function to parse command-line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run product service smoke tests.")
+    parser.add_argument(
+        "--clean-on-exit",
+        type=lambda x: x.lower() == "true",  # Converts "true" to True, others to False
+        default=True,  # Default to cleaning up
+        help="Whether to clean up created resources at the end of the test (true/false). Default is true.",
+    )
+    return parser.parse_args()
 
 
 def _create_tag(headers: dict, request_body: dict) -> Optional[dict]:
@@ -305,6 +318,7 @@ def _get_saleable_item_via_celery(item_id: str, app_user_id: str) -> Optional[Di
 
 
 def main():
+    args = parse_args()  # Parse command-line arguments
     web_frontend_url = "http://localhost:8006"
     logging.info("Smoke test started")
 
@@ -377,18 +391,26 @@ def main():
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}")
     finally:
-        # Ensure saleable item is deleted if it was created and headers are available
-        if saleable_item_id and headers:
-            if not _delete_saleable_item(headers, saleable_item_id):
-                logging.error(f"Failed to delete saleable item {saleable_item_id} during cleanup.")
-        # Ensure attribute label is deleted if it was created and headers are available
-        if attr_label_id and headers:
-            if not _delete_attribute_labels(headers, [attr_label_id]):
-                logging.error(f"Failed to delete attribute label {attr_label_id} during cleanup.")
-        # Ensure tag is deleted if it was created and headers are available
-        if tag_id and headers:
-            if not _delete_tags(headers, tag_id):
-                logging.error(f"Failed to delete tag {tag_id} during cleanup.")
+        # Conditionally perform cleanup based on --clean-on-exit argument
+        if args.clean_on_exit:
+            # Ensure saleable item is deleted if it was created and headers are available
+            if saleable_item_id and headers:
+                if not _delete_saleable_item(headers, saleable_item_id):
+                    logging.error(
+                        f"Failed to delete saleable item {saleable_item_id} during cleanup."
+                    )
+            # Ensure attribute label is deleted if it was created and headers are available
+            if attr_label_id and headers:
+                if not _delete_attribute_labels(headers, [attr_label_id]):
+                    logging.error(
+                        f"Failed to delete attribute label {attr_label_id} during cleanup."
+                    )
+            # Ensure tag is deleted if it was created and headers are available
+            if tag_id and headers:
+                if not _delete_tags(headers, tag_id):
+                    logging.error(f"Failed to delete tag {tag_id} during cleanup.")
+        else:
+            logging.info("Cleanup skipped as requested by --clean-on-exit=false.")
 
     sys.exit(exit_code)  # Final exit status
 
