@@ -1,10 +1,8 @@
-import socket
 import logging
 from contextlib import contextmanager
 from typing import Optional
 
 import kombu
-from kombu import Producer as KombuProducer
 from kombu.exceptions import ChannelError, OperationalError as KombuOperationalError
 from kombu.pools import (
     connections as KombuConnectionPool,
@@ -263,7 +261,7 @@ class ProviderCollector(object):
         try:
             filt = filter(lambda x: x.identity == label, target)
             provider = next(filt)
-        except StopIteration as e:
+        except StopIteration:
             provider = None
         return provider
 
@@ -313,7 +311,6 @@ class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
         # this project embeds user passwd in the url, TODO, more secure design option
         self._amqp_uri = amqp_uri
         self._config = config or {}
-        self._consumers = {}
         self._accept = AMQP_DEFAULT_CONSUMER_ACCEPT_TYPES.copy()
         extra_accept = self._config.pop("accept", None)
         if extra_accept:
@@ -335,6 +332,14 @@ class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
         )
         # connection established lazily whenever needed
 
+    def ensure_connection_ready(self):
+        try:
+            self.connection.ensure_connection(max_retries=3)
+        except Exception as e:
+            log_args = ["action", "amqp-consumer-conn-ensure-failed", "msg", str(e)]
+            _logger.error(None, *log_args)
+            raise
+
     @contextmanager
     def create_connection(self):
         with get_connection(conn=self.connection) as conn_from_pool:
@@ -345,21 +350,24 @@ class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
 
     def get_consumers(self, consumer_cls, channel):
         """
-        implement  kombu.mixins.ConsumerMixin.get_consumers() , will be
-        invoked by ConsumerMixin.consume() . This function creates consumers for
-        all registered providers, which means to consume all the queues at a time.
+        implement  kombu.mixins.ConsumerMixin.get_consumers() , this function is
+        invoked internally after establishing an active connection in `ConsumerMixin.consume()`.
+        then creates consumers bound to the given channel for all registered providers,
+        all the queues specified in the providers will be consumed at a time.
+
+        On exiting each consumer, it becomes invalid by running `cancel` operation , which sends
+        `basic-cancel` command to remote AMQP broker then stops subscription to the queue.
         """
+        out = []
         for provider in self._providers:
-            if self._consumers.get(provider, None):
-                continue
-            consumer = consumer_cls(
+            c = consumer_cls(
                 queues=[provider.queue],
                 callbacks=[provider.handle_message],
                 accept=self._accept,
             )
-            consumer.qos(prefetch_count=1)
-            self._consumers[provider] = consumer
-        return self._consumers.values()
+            c.qos(prefetch_count=1)
+            out.append(c)
+        return out
 
     def ack_message(self, message):
         # only attempt to ack if the message connection is alive;

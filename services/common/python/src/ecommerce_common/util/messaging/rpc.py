@@ -1,6 +1,6 @@
 import os, uuid, socket, logging
 from datetime import datetime, timedelta, UTC
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from amqp.exceptions import ConsumerCancelled, NotFound as AmqpNotFound
 from kombu import Exchange as KombuExchange, Queue as KombuQueue
 from kombu.exceptions import OperationalError as KombuOperationalError
@@ -111,6 +111,7 @@ class ReplyListener:
         # unlimited number of messages to retrieve
         err = None
         try:
+            self.queue_consumer.ensure_connection_ready()
             for _ in self.queue_consumer.consume(
                 limit=num_of_msgs_fetch, timeout=timeout
             ):
@@ -142,7 +143,7 @@ class ReplyListener:
             _logger.error(None, *log_args)
             err = e
         except ConsumerCancelled as e:
-            log_args = ["msg", str(e.args)]
+            log_args = ["action", "rpc-consumer-cancel", "msg", str(e.args)]
             _logger.error(None, *log_args)
             err = e
         return err
@@ -150,17 +151,14 @@ class ReplyListener:
     def handle_message(self, body, message):
         correlation_id: str = message.properties.get("correlation_id")
         reply_event = self._reply_events.get(correlation_id, None)
+        log_args = ["action", "rpc-reply-handler-reached", "corr-id", correlation_id]
+        _logger.debug(None, *log_args)
         if reply_event is not None:
             reply_event.send(body=body)
             if reply_event.finished:
                 self._reply_events.pop(correlation_id, None)
         else:
-            log_args = [
-                "msg",
-                "Unknown correlation id",
-                "correlation_id",
-                correlation_id,
-            ]
+            log_args = ["msg", "Unknown correlation id", "corr-id", correlation_id]
             _logger.warning(None, *log_args)
         self.queue_consumer.ack_message(message)
 
@@ -209,7 +207,7 @@ class RpcReplyEvent:
             "corr_id": corr_id,
         }
 
-    def send(self, body):
+    def send(self, body: Dict):
         """validate state transition and update result"""
         old_status = self.resp_body["status"]
         new_status = body.get("status", None)
@@ -340,18 +338,22 @@ class MethodProxy:
         return self._config.get(SERIALIZER_CONFIG_KEY, DEFAULT_SERIALIZER)
 
     def __call__(self, *args, **kwargs):
-        reply = self._call(*args, **kwargs)
+        custom_payld = kwargs.pop("custom_payload", None)
+        reply = self._call(custom_payld, *args, **kwargs)
         return reply
 
-    def _call(self, *args, **kwargs):
-        # TODO, figure out how Celery uses the metadata section
-        payld_metadata = {
-            "callbacks": None,
-            "errbacks": None,
-            "chain": None,
-            "chord": None,
-        }
-        payload = [args, kwargs, payld_metadata]
+    def _call(self, custom_payld: Optional[Any], *args, **kwargs):
+        if custom_payld:
+            payload = custom_payld
+        else:
+            # TODO, figure out how Celery uses the metadata section
+            payld_metadata = {
+                "callbacks": None,
+                "errbacks": None,
+                "chain": None,
+                "chord": None,
+            }
+            payload = [args, kwargs, payld_metadata]
         exchange = get_rpc_exchange(self._config)
         routing_key = RPC_ROUTE_KEY_PATTERN_SEND % (
             self._dst_app_name,
@@ -371,6 +373,21 @@ class MethodProxy:
                 "routing_key": routing_key,
             }
         }
+        log_args = [
+            "type",
+            "python.messaging.rpc.MethodProxy",
+            "action",
+            "send-rpc-request",
+            "exchange",
+            str(exchange),
+            "routing-key",
+            routing_key,
+            "reply-to",
+            reply_to,
+            "correlation-id",
+            correlation_id,
+        ]
+        _logger.debug(None, *log_args)
         try:
             extra_transport_opts = {}
             if self.enable_confirm is not None:
@@ -394,6 +411,17 @@ class MethodProxy:
                 )
             if self.enable_confirm is True and result.ready is False:
                 raise UndeliverableMessage(exchange=exchange, routing_key=routing_key)
+            log_args = [
+                "type",
+                "python.messaging.rpc.MethodProxy",
+                "action",
+                "rpc-request-sent",
+                "routing-key",
+                routing_key,
+                "correlation-id",
+                correlation_id,
+            ]
+            _logger.debug(None, *log_args)
         except UndeliverableMessage as ume:
             deliver_err_body["status"] = reply_event.status_opt.FAIL_PUBLISH
             deliver_err_body["error"] = ", ".join(ume.args)

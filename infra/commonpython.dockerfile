@@ -22,6 +22,9 @@ WORKDIR /app/common/python/src
 COPY services/common/python/src/ecommerce_common ./ecommerce_common
 COPY services/common/python/src/softdelete ./softdelete
 
+WORKDIR /app/common/python/src/ecommerce_common/util
+RUN rm  celerybeatconfig.py celeryconfig.py
+
 WORKDIR /app/common/python
 RUN poetry config virtualenvs.in-project true && poetry install
 
