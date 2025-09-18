@@ -186,7 +186,10 @@ impl OrderCurrencyModel {
             code: AppErrorCode::InvalidInput,
             detail: Some("rate-not-found".to_string()),
         })?;
-        let newrate = c0.rate / c1.rate;
+        let newrate = c0.rate.checked_div(c1.rate).ok_or(AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(format!("reason:div0, seller:{seller_id}")),
+        })?;
         Ok(CurrencyModel {
             name: self.buyer.name.clone(),
             rate: newrate,

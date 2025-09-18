@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use std::env;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
@@ -24,8 +25,6 @@ use crate::error::AppError;
 #[allow(non_snake_case)]
 #[derive(Deserialize)]
 struct DbSecret {
-    HOST: String,
-    PORT: u16,
     USER: String,
     PASSWORD: String,
 }
@@ -90,11 +89,40 @@ impl AppMariaDbStore {
                 detail: Some(detail),
             });
         }
+        let (d_host, d_port): (String, u16) = {
+            const EXPECTED_LABELS: [&str; 2] = ["DB_HOST", "DB_PORT"];
+            let mut host: Option<String> = None;
+            let mut port: Option<u16> = None;
+            for (k, v) in env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str())) {
+                match k.as_str() {
+                    "DB_HOST" => host = Some(v),
+                    "DB_PORT" => {
+                        port = Some(v.parse().map_err(|e| AppError {
+                            code: AppErrorCode::InvalidInput,
+                            detail: Some(format!(
+                                "db-cfg-port-envvar-error: {:?}, value: {}",
+                                e, v
+                            )),
+                        })?)
+                    }
+                    _ => {}
+                }
+            }
+            let d_host = host.ok_or_else(|| AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some("DB_HOST environment variable not set".to_string()),
+            })?;
+            let d_port = port.ok_or_else(|| AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some("DB_PORT environment variable not set".to_string()),
+            })?;
+            (d_host, d_port)
+        };
         let serial = confidential.try_get_payload(cfg.confidentiality_path.as_str())?;
         let conn_opts = match serde_json::from_str::<DbSecret>(serial.as_str()) {
             Ok(s) => MySqlConnectOptions::new()
-                .host(s.HOST.as_str())
-                .port(s.PORT)
+                .host(d_host.as_str())
+                .port(d_port)
                 .username(s.USER.as_str())
                 .password(s.PASSWORD.as_str())
                 .database(cfg.db_name.as_str()),

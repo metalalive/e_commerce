@@ -11,6 +11,6 @@
         http://www.liquibase.org/xml/ns/pro
         http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
 
-    <include file="./migration/changelog_order-v0.1.xml"/>
-    <include file="./migration/changelog_order-v0.2.xml"/>
+    <include file="./changelog_order-v0.1.xml"/>
+    <include file="./changelog_order-v0.2.xml"/>
 </databaseChangeLog>

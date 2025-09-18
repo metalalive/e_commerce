@@ -1,0 +1,77 @@
+x-base-service-common: &reuse-basesrv-cfg
+  image: ordermgt-backend-base:latest
+  pull_policy: never
+  profiles:
+    - serverstart
+  restart: no
+  environment:
+    DB_PORT: 3309
+    SYS_BASE_PATH: /app
+    SERVICE_BASE_PATH: /app/order
+  stop_signal: SIGTERM
+  working_dir: /app/entry
+  depends_on:
+    db-schema-migration-up-ordermgt:
+      condition: service_completed_successfully
+
+services:
+  mariadb-ordermgt:
+    image: mariadb-ext:11-noble
+    container_name: ordermgt-generic-mariadb
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_NAME=ecommerce_order
+    ports:
+      # Maps port 3308 on the host to port 3309 in the container
+      - "3308:3309"
+    volumes:
+      - ./mariadb-cfg/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh:ro
+      # use environment variable interpolation for database storage files
+      # Mounts the host directory for persistent data storage.
+      # This is a bind mount to a specific path on your host machine.
+      - ${MARIADB_DATA_VOL}:/var/lib/mysql
+      # mount log / error files for troubleshooting
+      - ${MARIADB_LOG_VOL}:/var/log/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3309 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
+      interval: 10s
+      timeout: 7s
+      retries: 10
+      start_period: 35s
+
+  db-schema-migration-up-ordermgt:
+    container_name: ordermgt-unknown-db-schema-upgrade
+    image: liquibase:4.33-alpine
+    restart: no
+    volumes:
+      - ../migration:/liquibase/changelog:ro
+      - ../liquibase.properties:/liquibase/liquibase.properties:ro
+    # environment variable expansion is part of shell-specific features, here
+    # it is required to explicitly specify which shell to run the command.
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3309/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info update"]
+    depends_on:
+      mariadb-ordermgt:
+        condition: service_healthy
+
+  db-schema-migration-down-ordermgt:
+    container_name: ordermgt-unknown-db-schema-downgrade
+    image: liquibase:4.33-alpine
+    profiles:
+      - cleandbschema
+    restart: no
+    volumes:
+      - ../migration:/liquibase/changelog:ro
+      - ../liquibase.properties:/liquibase/liquibase.properties:ro
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3309/ecommerce_order --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
+
+  api-server-ordermgt:
+    <<: *reuse-basesrv-cfg
+    container_name: ordermgt-unknown-apisrv
+    command: ./web
+
+  rpc-consumer-ordermgt:
+    <<: *reuse-basesrv-cfg
+    container_name: ordermgt-unknown-rpcconsumer
+    command: ./rpc_consumer
+

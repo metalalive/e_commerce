@@ -5,7 +5,7 @@
         "product" : "http://productmgt-dev-apisrv:8009",
         "payment" : "http://localhost:8015",
         "store"   : "http://localhost:8011",
-        "order"   : "http://localhost:8012",
+        "order"   : "http://ordermgt-dev-apisrv:8012",
         "media"   : "http://localhost:8010"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],

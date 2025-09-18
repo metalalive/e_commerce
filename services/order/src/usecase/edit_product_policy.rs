@@ -167,6 +167,7 @@ impl EditProductPolicyUseCase {
         };
         let properties = AppRpcClientReqProperty {
             msgbody,
+            correlation_id: None,
             start_time: Local::now().fixed_offset(),
             route: "rpc.product.get_product".to_string(),
         };

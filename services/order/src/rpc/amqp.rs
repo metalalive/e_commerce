@@ -720,6 +720,7 @@ impl InnerServerConsumer {
         let req = AppRpcClientReqProperty {
             msgbody: content,
             start_time,
+            correlation_id: req_props.correlation_id().cloned(),
             route: deliver.routing_key().clone(),
         };
         let hdlr_fn = self.route_hdlr;
@@ -741,6 +742,8 @@ impl AsyncConsumer for InnerServerConsumer {
     ) {
         let log_ctx_p = self.log_ctx.clone();
         let route_key_log = deliver.routing_key().clone();
+        let reply_to_log = basic_properties.reply_to();
+        let corr_id_log = basic_properties.correlation_id();
         let part_content_log = {
             let sz = std::cmp::min(20, content.len());
             content[..sz].to_vec()
@@ -748,8 +751,10 @@ impl AsyncConsumer for InnerServerConsumer {
         app_log_event!(
             log_ctx_p,
             AppLogLevel::DEBUG,
-            "route:{}, content:{:?}",
+            "route:{}, reply-to:{:?}, correletion-id:{:?}, content:{:?}",
             route_key_log,
+            reply_to_log,
+            corr_id_log,
             part_content_log
         );
         let delivery_tag = deliver.delivery_tag();
@@ -762,11 +767,10 @@ impl AsyncConsumer for InnerServerConsumer {
                     app_log_event!(
                         log_ctx_p,
                         AppLogLevel::WARNING,
-                        "route:{}, content:{:?}, \
-                               missing:{}",
+                        "route:{}, missing:{}, content:{:?}",
                         route_key_log,
+                        m,
                         part_content_log,
-                        m
                     );
                 }
             }
@@ -774,8 +778,7 @@ impl AsyncConsumer for InnerServerConsumer {
                 app_log_event!(
                     log_ctx_p,
                     AppLogLevel::ERROR,
-                    "route:{}, content:{:?}, \
-                               error: {:?}",
+                    "route:{}, content:{:?}, error: {:?}",
                     route_key_log,
                     part_content_log,
                     e

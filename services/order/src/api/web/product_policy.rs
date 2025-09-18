@@ -11,7 +11,7 @@ use axum::response::IntoResponse;
 
 use ecommerce_common::error::AppErrorCode;
 
-use crate::api::rpc::{py_celery_deserialize_reply, py_celery_serialize};
+use crate::api::rpc::PyCelery;
 use crate::api::web::dto::ProductPolicyDto;
 use crate::error::AppError;
 use crate::usecase::{
@@ -63,7 +63,7 @@ pub(super) async fn post_handler(
     let rpc_deserialize_msg = if rpc_ctx.label() == "dummy" {
         _rpc_deserialize_dummy
     } else {
-        py_celery_deserialize_reply::<ProductInfoResp>
+        PyCelery::deserialize_reply::<ProductInfoResp>
     };
     let input = EditProductPolicyUseCase {
         data: req_body,
@@ -72,7 +72,7 @@ pub(super) async fn post_handler(
         rpc_ctx,
         authed_usr,
         rpc_deserialize_msg,
-        rpc_serialize_msg: py_celery_serialize::<ProductInfoReq>,
+        rpc_serialize_msg: PyCelery::serialize::<ProductInfoReq>,
     };
     let result = input.execute().await;
     presenter(result)

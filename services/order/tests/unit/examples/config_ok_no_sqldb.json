@@ -10,7 +10,7 @@
              "destination": "console"},
             {"alias": "errlog-file-web-api",
              "min_level": "WARNING",
-             "path": "tmp/log/test/order_app_server.err",
+             "path": "log/order_app_server.err",
              "destination": "localfs"}
         ],
         "loggers" : [
@@ -21,6 +21,9 @@
              "handlers": ["std-output-forall"],
              "level": "ERROR"},
             {"alias": "order::adapter::thirdparty::base_client",
+             "handlers": ["std-output-forall"],
+             "level": "INFO"},
+            {"alias": "order::adapter::thirdparty::currency_exchange",
              "handlers": ["std-output-forall"],
              "level": "INFO"},
             {"alias": "order::usecase::stock_level",

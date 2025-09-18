@@ -109,6 +109,7 @@ pub trait AbstractRpcClient: Send + Sync {
 
 pub struct AppRpcClientReqProperty {
     pub msgbody: Vec<u8>,
+    pub correlation_id: Option<String>,
     pub start_time: DateTime<FixedOffset>, // TODO, handle idempotency on server side
     pub route: String,
 }

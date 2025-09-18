@@ -71,13 +71,12 @@ async fn app_web_service_ok() {
     let req = ut_service_req_setup("POST", "/1.0.33/gram/increment");
     let result = service.call(req).await;
     assert!(result.is_ok());
-    if let Ok(mut r) = result {
-        assert_eq!(r.status(), HttpStatusCode::OK);
-        let rawdata = r.body_mut().data().await;
-        let rawdata = rawdata.unwrap().unwrap().to_vec();
-        let data = serde_json::from_slice::<UTendpointData>(rawdata.as_slice()).unwrap();
-        assert_eq!(data.gram, 77);
-    }
+    let mut r = result.unwrap();
+    assert_eq!(r.status(), HttpStatusCode::OK);
+    let rawdata = r.body_mut().data().await;
+    let rawdata = rawdata.unwrap().unwrap().to_vec();
+    let data = serde_json::from_slice::<UTendpointData>(rawdata.as_slice()).unwrap();
+    assert_eq!(data.gram, 77);
 } // end of fn app_web_service_ok
 
 #[tokio::test]
@@ -141,9 +140,8 @@ async fn middleware_req_body_limit() {
     let mut service = service.layer(middlewares);
     let result = service.call(req).await;
     assert!(result.is_ok());
-    if let Ok(r) = result {
-        assert_eq!(r.status(), HttpStatusCode::PAYLOAD_TOO_LARGE);
-    }
+    let r = result.unwrap();
+    assert_eq!(r.status(), HttpStatusCode::PAYLOAD_TOO_LARGE);
 }
 
 #[tokio::test]
@@ -165,19 +163,16 @@ async fn middleware_shutdown_detection() {
     let req = ut_service_req_setup("PUT", "/1.0.33/policy/products");
     let result = final_service.call(req).await;
     assert!(result.is_ok());
-    if let Ok(res) = result {
-        assert_eq!(res.status(), HttpStatusCode::OK);
-        let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
-        assert_eq!(actual_num_reqs, 0);
-    }
+    let res = result.unwrap();
+    assert_eq!(res.status(), HttpStatusCode::OK);
+    let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
+    assert_eq!(actual_num_reqs, 0);
     // -------------
     let _ = mock_flag.store(true, Ordering::Relaxed);
     let req = ut_service_req_setup("PUT", "/1.0.33/policy/products");
     let result = final_service.call(req).await;
-    assert!(result.is_ok());
-    if let Ok(res) = result {
-        assert_eq!(res.status(), HttpStatusCode::SERVICE_UNAVAILABLE);
-        let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
-        assert_eq!(actual_num_reqs, 0);
-    }
+    let res = result.unwrap();
+    assert_eq!(res.status(), HttpStatusCode::SERVICE_UNAVAILABLE);
+    let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
+    assert_eq!(actual_num_reqs, 0);
 } // end of fn middleware_shutdown_detection

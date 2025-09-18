@@ -29,7 +29,7 @@ uuid = {version="^1.6.1", features=["v8"]}
 
 tracing = {version="0.1", default-features=true}
 
-jsonwebtoken = "9.2"
+jsonwebtoken = "9.3"
 
 # required by the trait method `Executor::fetch()` in `sqlx`
 futures-util = {version="^0.3.19", features=["std"]}

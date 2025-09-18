@@ -10,7 +10,7 @@
              "destination": "console"},
             {"alias": "errlog-file-web-api",
              "min_level": "WARNING",
-             "path": "tmp/log/test/order_app_server.err",
+             "path": "log/order_app_server.err",
              "destination": "localfs"}
         ],
         "loggers" : [
@@ -66,7 +66,7 @@
 	    "_type": "DbServer",
 	    "alias": "storage-big-table",
 	    "srv_type": "MariaDB",
-	    "db_name": "test_ecommerce_order",
+	    "db_name": "ecommerce_order",
 	    "confidentiality_path": "backend_apps/databases/order_service",
 	    "max_conns": 6,
 	    "acquire_timeout_secs": 30,

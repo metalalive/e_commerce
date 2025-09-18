@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::result::Result;
 
-use serde_json::Value as JsnVal;
+use serde::Serialize;
+use serde_json::{Value as JsnVal, Map as JsnMap};
 
 use crate::config::{AppBasepathCfg, AppRpcMockCfg};
 
@@ -37,4 +38,17 @@ impl MockDataSource {
             Ok(v.to_string().into_bytes())
         }
     }
+}
+
+pub fn base_response<T:Serialize>(num_fields:usize, status:&str, result: Option<T>) -> Result<JsnVal, String> {
+    let s = JsnVal::String(status.to_string());
+    let r = if let Some(v) = result {
+        serde_json::to_value(v).map_err(|e| e.to_string())? 
+    } else {
+        JsnVal::Null
+    };
+    let mut objmap = JsnMap::with_capacity(num_fields);
+    objmap.insert("status".to_string(), s);
+    objmap.insert("result".to_string(), r);
+    Ok(JsnVal::Object(objmap))
 }

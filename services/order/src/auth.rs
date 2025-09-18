@@ -317,7 +317,7 @@ impl AppAuthKeystore {
         let resp = self._request_to_key_server(url, sender).await?;
         let keys = self.resp_body_to_keys(resp).await?;
         Ok(keys)
-    } // end of request_new_keys
+    }
 
     async fn setup_tcp_keyserver(
         &self,
@@ -329,8 +329,17 @@ impl AppAuthKeystore {
         ),
         AppError,
     > {
-        let host = url.host().unwrap();
-        let port = url.port().unwrap().as_u16();
+        let host = url.host().ok_or(AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some("keyserver-uri-missing-host".to_string()),
+        })?;
+        let port = url
+            .port()
+            .ok_or(AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some("keyserver-uri-missing-port".to_string()),
+            })?
+            .as_u16();
         let addr = format!("{host}:{port}");
         match TcpStream::connect(addr).await {
             Ok(stream) => match ClientConn::handshake(stream).await {
@@ -352,35 +361,31 @@ impl AppAuthKeystore {
         url: &Uri,
         mut sender: ClientConn::SendRequest<HyperBody>,
     ) -> DefaultResult<Response<HyperBody>, AppError> {
-        let result = Request::builder()
+        let hostname = url.host().unwrap();
+        let req = Request::builder()
             .uri(url.path())
             .method(hyper::Method::GET)
             .header(header::ACCEPT, HTTP_CONTENT_TYPE_JSON)
-            .body(HyperBody::empty());
-        match result {
-            Ok(req) => match sender.send_request(req).await {
-                Ok(resp) => {
-                    if resp.status() == StatusCode::OK {
-                        Ok(resp) // TODO, improve status check
-                    } else {
-                        Err(AppError {
-                            detail: Some(format!(
-                                "remote-key-server-response-status:{}",
-                                resp.status()
-                            )),
-                            code: AppErrorCode::IOerror(ErrorKind::ConnectionRefused),
-                        })
-                    }
-                }
-                Err(net_e) => Err(AppError {
-                    detail: Some(net_e.to_string()),
-                    code: err_code_hyper2app(&net_e),
-                }),
-            },
-            Err(net_e) => Err(AppError {
+            .header(header::HOST, hostname)
+            .body(HyperBody::empty())
+            .map_err(|net_e| AppError {
                 detail: Some(net_e.to_string()),
                 code: AppErrorCode::InvalidInput,
-            }),
+            })?;
+        let resp = sender.send_request(req).await.map_err(|net_e| AppError {
+            detail: Some(net_e.to_string()),
+            code: err_code_hyper2app(&net_e),
+        })?;
+        if resp.status() == StatusCode::OK {
+            Ok(resp) // TODO, improve status check
+        } else {
+            Err(AppError {
+                detail: Some(format!(
+                    "remote-key-server-response-status:{}",
+                    resp.status()
+                )),
+                code: AppErrorCode::IOerror(ErrorKind::ConnectionRefused),
+            })
         }
     }
 

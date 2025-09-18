@@ -1,0 +1,72 @@
+services:
+  mariadb-ordermgt:
+    container_name: ordermgt-test-mariadb
+    env_file:
+      - ./container-test.env
+    restart: no
+    networks:
+      - net1
+    volumes:
+      # Mounts the custom configuration file into the container.
+      # The source path is relative to this compose file.
+      - ./mariadb-cfg/test.cnf:/etc/mysql/conf.d/app.cnf:ro
+
+  db-schema-migration-up-ordermgt:
+    container_name: ordermgt-test-db-schema-upgrade
+    env_file:
+      - ./container-test.env
+    restart: no
+    networks:
+      - net1
+
+  run-itest-ordermgt:
+    container_name: ordermgt-itest-0
+    image: ordermgt-with-devtools:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - DB_PORT=3309
+      - SYS_BASE_PATH=/app
+      - SERVICE_BASE_PATH=/app/order
+      - CONFIG_FILE_PATH=settings/test.json
+    working_dir: /app/order
+    command: /bin/sh ./run_entry
+    volumes:
+      - ./run_integration_test:/app/order/run_entry
+      - ../tests/integration/examples:/app/order/tests/integration/examples:ro
+      - ../settings/test.json:/app/order/settings/test.json:ro
+      - ../../common/data/cors-test.json:/app/common/data/cors.json:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/proc:/app/proc
+    networks:
+      - net1
+    depends_on:
+      db-schema-migration-up-ordermgt:
+        condition: service_completed_successfully
+
+  db-schema-migration-down-ordermgt:
+    container_name: ordermgt-test-db-schema-downgrade
+    env_file:
+      - ./container-test.env
+    restart: no
+    depends_on:
+      run-itest-ordermgt:
+        condition: service_completed_successfully
+    networks:
+      - net1
+
+networks:
+  net1:
+    name: ec-ordermgt-test-net
+    # auto-create network on start the containers,
+    # auto-delete it on stop (and no other containers are attached to the network)
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.7.0/24
+          ip_range: 172.19.7.0/25
+          gateway: 172.19.7.254
+

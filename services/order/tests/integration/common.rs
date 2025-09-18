@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::result::Result as DefaultResult;
-use std::sync::{Arc, Once};
+use std::sync::{Arc, OnceLock};
 
 use axum_core::Error as AxumCoreError;
 use http::{Request, Response};
@@ -26,20 +26,14 @@ use order::network::{app_web_service, WebServiceRoute};
 use order::AppSharedState;
 
 pub(crate) type ITestFinalHttpBody = HyperBody;
-struct ITestGlobalState(AppSharedState);
 
-// Note
-// `static global variable` seems like bad practice, it is better that this app
-// drops all referneces of the shared state, developers might need to write extra script
-// which ensures the internal datastore context are dropped at the end of this
-// integration test, then downgrade the schema  migration for testing database
-static mut GLOBAL_SHARED_STATE: Option<DefaultResult<ITestGlobalState, AppError>> = None;
-static mut SHARED_WEB_SERVER: Option<Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>> = None;
+static SHARED_WEB_SERVER: OnceLock<Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>> =
+    OnceLock::new();
 
-static GLB_STATE_INIT: Once = Once::new();
-static WEB_SRV_INIT: Once = Once::new();
+static APP_SHARED_STATE_CONTAINER: OnceLock<DefaultResult<order::AppSharedState, AppError>> =
+    OnceLock::new();
 
-fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError> {
+fn _init_app_shared_state_internal() -> DefaultResult<order::AppSharedState, AppError> {
     let iter = env::vars().filter(|(k, _)| EXPECTED_LABELS.contains(&k.as_str()));
     let args = AppCfgInitArgs {
         env_var_map: HashMap::from_iter(iter),
@@ -53,54 +47,33 @@ fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError> {
     let cfdntl = confidentiality::build_context(&top_lvl_cfg)?;
     let log_ctx = AppLogContext::new(&top_lvl_cfg.basepath, &top_lvl_cfg.api_server.logging);
     let obj = AppSharedState::new(top_lvl_cfg, log_ctx, cfdntl);
-    Ok(ITestGlobalState(obj))
+    Ok(obj)
 }
 
-pub fn test_setup_shr_state() -> DefaultResult<AppSharedState, AppError> {
-    GLB_STATE_INIT.call_once(|| match _test_setup_shr_state() {
-        Ok(v) => unsafe {
-            GLOBAL_SHARED_STATE = Some(Ok(v));
-        },
-        Err(e) => unsafe {
-            GLOBAL_SHARED_STATE = Some(Err(e));
-        },
-    });
-    unsafe {
-        match GLOBAL_SHARED_STATE.as_ref() {
-            Some(r) => match r {
-                Ok(ITestGlobalState(state)) => Ok(state.clone()),
-                Err(e) => Err(e.clone()),
-            },
-            _others => {
-                panic!("[test] shared state failed to create")
-            }
-        }
+pub fn test_setup_shr_state() -> DefaultResult<order::AppSharedState, AppError> {
+    let result_ref = APP_SHARED_STATE_CONTAINER.get_or_init(|| _init_app_shared_state_internal());
+    match result_ref {
+        Ok(state) => Ok(state.clone()),
+        Err(e) => Err(e.clone()),
     }
-} // end of test_setup_shr_state
+}
 
 pub(crate) struct TestWebServer {}
 type InnerRespBody = UnsyncBoxBody<HyperBytes, AxumCoreError>;
 
 impl TestWebServer {
-    pub fn setup(shr_state: AppSharedState) -> Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>> {
-        WEB_SRV_INIT.call_once(|| {
+    pub fn setup(
+        shr_state: order::AppSharedState,
+    ) -> Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>> {
+        let srv_arc_mutex = SHARED_WEB_SERVER.get_or_init(|| {
             let rtable = route_table::<ITestFinalHttpBody>();
             let top_lvl_cfg = shr_state.config().clone();
             let listener = &top_lvl_cfg.api_server.listen;
-            let (srv, _) = app_web_service::<ITestFinalHttpBody>(listener, rtable, shr_state);
-            let srv = Arc::new(Mutex::new(srv));
-            unsafe {
-                SHARED_WEB_SERVER = Some(srv);
-            }
+            let (srv_instance, _) =
+                app_web_service::<ITestFinalHttpBody>(listener, rtable, shr_state);
+            Arc::new(Mutex::new(srv_instance))
         });
-        unsafe {
-            match &SHARED_WEB_SERVER {
-                Some(s) => s.clone(),
-                _others => {
-                    panic!("[test] web server failed to create")
-                }
-            }
-        }
+        srv_arc_mutex.clone()
     }
 
     pub async fn consume(

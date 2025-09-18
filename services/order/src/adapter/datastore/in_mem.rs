@@ -49,10 +49,10 @@ pub trait AbstInMemoryDStore: Send + Sync {
         op: &dyn AbsDStoreFilterKeyOp,
     ) -> DefaultResult<Vec<InnerKey>, AppError>;
     // read-modify-write semantic, for atomic operation
-    async fn fetch_acquire(
-        &self,
+    async fn fetch_acquire<'a>(
+        &'a self,
         _info: AppInMemFetchKeys,
-    ) -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError>;
+    ) -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock<'a>), AppError>;
     fn save_release(
         &self,
         _data: AppInMemUpdateData,
@@ -200,10 +200,10 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         let guard = self.try_get_table().await;
         Self::fetch_common(guard.borrow_mut(), _info)
     }
-    async fn fetch_acquire(
-        &self,
+    async fn fetch_acquire<'a>(
+        &'a self,
         _info: AppInMemFetchKeys,
-    ) -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError> {
+    ) -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock<'a>), AppError> {
         let guard = self.try_get_table().await;
         let rs_a = Self::fetch_common(guard.borrow_mut(), _info)?;
         Ok((rs_a, guard))

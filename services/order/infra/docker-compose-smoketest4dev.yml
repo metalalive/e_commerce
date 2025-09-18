@@ -1,0 +1,59 @@
+services:
+  authgen-smoketest-ordermgt:
+    container_name: ordermgt-dev-auth4smoketest
+    image: usrmgt-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ../../user_management/infra/container-dev.env
+    environment:
+      - DB_NAME=ecommerce_usermgt
+      - DB_PORT=3307
+      - API_HOST=usrmgt-dev-apisrv
+      - API_PORT=8008
+      - APP_USER_ID=113
+    working_dir: /app/usermgt
+    command: python3 -m tests.gen_jwt_smoketest
+    volumes:
+      - ../tests/gen_jwt_smoketest.py:/app/usermgt/tests/gen_jwt_smoketest.py
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../user_management/settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../../user_management/settings/development.py:/app/usermgt/settings/development.py:ro
+      - ../../user_management/tests/standalone_env_setup.py:/app/usermgt/tests/standalone_env_setup.py
+      - ../../tmp/log/dev:/app/log
+      - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
+    networks:
+      - net3
+
+  smoke-test-ordermgt:
+    container_name: ordermgt-dev-smoketest
+    image: ecom-common-py:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-dev.env
+      - ./smoketest.env
+    environment:
+      API_HOST: ordermgt-dev-apisrv
+      API_PORT: 8012
+      APP_USER_ID: 113
+      SYS_BASE_PATH: /app
+    working_dir: /app/entry
+    command: python3 ./smoke_test.py
+    volumes:
+      - ../tests/smoke_test.py:/app/entry/smoke_test.py:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/dev:/app/log
+    depends_on:
+      authgen-smoketest-ordermgt:
+        condition: service_completed_successfully
+      api-server-ordermgt:
+        condition: service_started
+      rpc-consumer-ordermgt:
+        condition: service_started
+    networks:
+      - net1
+      - net2
+      - net3
+

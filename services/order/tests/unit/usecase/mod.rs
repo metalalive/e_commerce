@@ -558,6 +558,7 @@ async fn client_run_rpc_ok() {
         start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         msgbody: Vec::new(),
         route: "".to_string(),
+        correlation_id: None,
     };
     let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_ok(), true);
@@ -582,6 +583,7 @@ async fn client_run_rpc_acquire_handler_failure() {
         start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         msgbody: Vec::new(),
         route: "".to_string(),
+        correlation_id: None,
     };
     let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
@@ -613,6 +615,7 @@ async fn client_run_rpc_publish_error() {
         start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         msgbody: Vec::new(),
         route: "".to_string(),
+        correlation_id: None,
     };
     let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
@@ -646,6 +649,7 @@ async fn client_run_rpc_consume_reply_error() {
         start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         msgbody: Vec::new(),
         route: "".to_string(),
+        correlation_id: None,
     };
     let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
@@ -677,6 +681,7 @@ async fn server_run_rpc_ok() {
             start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
             route: "app1.func23".to_string(),
             msgbody: br#"client request"#.to_vec(),
+            correlation_id: None,
         };
         _ctx.mock_recv_req(m).await;
         Arc::new(Box::new(_ctx))
@@ -716,6 +721,7 @@ async fn server_run_rpc_receive_request_error() {
             start_time: DateTime::parse_from_rfc3339("2022-07-24T15:02:58+04:00").unwrap(),
             route: "app2.func56".to_string(),
             msgbody: "another request".as_bytes().to_vec(),
+            correlation_id: None,
         };
         _ctx.mock_recv_req(m).await;
         Arc::new(Box::new(_ctx))

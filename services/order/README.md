@@ -87,62 +87,34 @@ For full build / test instructions please refer to this github action workflow s
 ### Pre-requisite
 | type | name | version required |
 |------|------|------------------|
-| SQL Database | MariaDB | `11.2.3` |
-| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
-| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
+| SQL Database | MariaDB | `11.8.2` |
+| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Clippy | `>= 1.86.0` |
+| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.33` |
 
 ### Optional features
 You can build / test this application with following optional features
 - mariaDB, append `--features mariadb` to Rust `cargo` command 
 
 ### Commands for build
-#### For applications
-```shell
-cargo build  --bin web
-cargo build  --bin rpc_consumer
+```bash
+cd ${SERVICE_BASE_PATH}
+docker build --file order/infra/Dockerfile --target builder0  --tag ordermgt-with-devtools:latest  .
+docker build --file order/infra/Dockerfile --tag ordermgt-backend-base:latest  .
 ```
-- the following options can be applied along with the cargo command
-  - `--features mariadb` , to enable MariaDB database in this service.
-  - `--features amqprs` , to enable publish / subscribe operations to AMQP broker in this service.
-  - or enable all options , such as `--features "mariadb amqprs"`
 
-#### Database Migration
-If you configure SQL database as the datastore destination in the development server or testing server, ensure to synchronize schema migration
-```shell
-> /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
-      --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog-root.xml  \
-      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
-      --log-level=info   update
-
-> /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
-      --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog-root.xml  \
-      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
-      --log-level=info   rollback  $VERSION_TAG
-```
-Note : 
-- the parameters above `$HOST`, `$PORT`, `$USER`, `$PASSWORD` should be consistent with database credential set in `${SYS_BASE_PATH}/common/data/secrets.json` , see the structure in [`common/data/secrets_template.json`](../common/data/secrets_template.json)
-- the parameter `$DB_NAME` should be `ecommerce_order` for development server, or  `test_ecommerce_order` for testing server, see [reference](../migrations/init_db.sql)
-- the subcommand `update` upgrades the schema to latest version
-- the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in change log files under the folder `migration`
+- the first-stage build image `ordermgt-with-devtools` is used for running other test cases coupled with external services.
+  - it builds all applications in the stage including the commands `cargo build  --bin web` and `cargo build --bin rpc_consumer`
+- the second-stage build image `ordermgt-backend-base`  (TODO)
 
 
 ## Run
-### Development API server
-```shell=?
-cd ${SERVICE_BASE_PATH}
-
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin web --features "mariadb amqprs"
+### API server and RPC consumer in Development Environment
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
 ```
-### Development RPC consumer
-```shell=?
-cd ${SERVICE_BASE_PATH}
 
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin rpc_consumer --features "mariadb amqprs"
-```
+To run smoke test after dev server is launched, append the option `--file ./infra/docker-compose-smoketest4dev.yml`  after `docker-compose-dev.yml`.
 
 ### Development API server with Debugger
 I use the plug-in [vimspector](https://github.com/puremourning/vimspector) with NeoVim, please refer to configuration in `./order/.vimspector` as well as the article [NeoVim IDE setup from scratch](https://hackmd.io/@0V3cv8JJRnuK3jMwbJ-EeA/r1XR_hZL3)
@@ -154,7 +126,7 @@ Be sure to run the 2 commands below before building / running the applications
 ### Code formatter
 The command below reformat test / production code which meet the [styling requirement](https://github.com/rust-lang/rust/tree/HEAD/src/doc/style-guide/src)
 ```shell
-cargo  fmt
+cargo fmt
 ```
 
 ### Linter
@@ -165,44 +137,23 @@ cargo  clippy  --features "mariadb amqprs"
 
 
 ## Test
-### Unit Test
-Run the test cases collected under `PROJECT_HOME/order/tests/unit`
-```shell
-cd ${SERVICE_BASE_PATH}
+Note that most module-level test cases run during docker build because they don't rely on external services like database.
 
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    cargo test --test unittest --features "mariadb amqprs" -- \
-    <<OPTIONAL-TEST-ENTRY-MODULE-PATH>> --test-threads=1 --nocapture
-```
-Note:
-- the feature options `mariadb`, `amqprs` can also be applied along with the command `cargo test`
-- `--test-threads=1` can be added if the feature `mariadb` is enabled
-  - this option means you limit number of threads running all the test cases in parallel.
-  - this is to reduce number of connections opening for test at the database backend.
-- `--nocapture` is optional to allow the program to print all messages to standard output console.
-
-There are private functions in this source-code crate  containing few test cases :
-```shell
-cd ${SERVICE_BASE_PATH}
-
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  api::rpc::test_pycelery_deserialize_error
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  api::rpc::test_pycelery_deserialize_ok
+The command below runs test cases coupled with database, the profile `cleandbschema` is optional to test database migration downgrade.
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
 ```
 
-### Integration Test
-#### For web server and  RPC consumer
-```shell=?
-cd ${SERVICE_BASE_PATH}/tests/integration
-
-SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
-    CONFIG_FILE_PATH="settings/test.json" \
-    cargo test --test web --  --test-threads=1
+The command below runs RPC-related test cases coupled with inter-application message queue
+```bash
+docker compose --file ./infra/docker-compose-testrpc.yml up --detach
 ```
 
-Note :
-- remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
-- with the feature `mariadb`, the configuration file `settings/test.json` contains essential settings for mariaDB database
-- for test with in-memory data store, use the configuration file `settings/test-inmem-only.json` without the feature `mariadb`;
+The command below runs test cases coupled with 3rd-party services.
+```bash
+docker compose --file ./infra/docker-compose-test3pty.yml up --detach
+```
 
 ### Reference
 - [Web API documentation (OpenAPI v3.0 specification)](./doc/api/openapi.yaml)

@@ -19,6 +19,7 @@ services:
     volumes:
       - ../services/tmp/log/dev/:/app/log/
       - ../services/common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../services/common/python/src/ecommerce_common/util/celeryconfig.py:/app/common/python/src/ecommerce_common/util/celeryconfig.py:ro
     networks:
       - net1
 
@@ -28,6 +29,7 @@ services:
     volumes:
       - ../services/tmp/log/dev/:/app/log/
       - ../services/common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../services/common/python/src/ecommerce_common/util/celerybeatconfig.py:/app/common/python/src/ecommerce_common/util/celerybeatconfig.py:ro
     networks:
       - net1
 

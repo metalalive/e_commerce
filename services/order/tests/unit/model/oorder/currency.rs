@@ -2,6 +2,7 @@ use chrono::{Duration, Local};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CurrencyDto, OrderCurrencySnapshotDto};
+use ecommerce_common::error::AppErrorCode;
 use order::api::web::dto::OrderCreateRespOkDto;
 use order::model::{CurrencyModel, CurrencyModelSet, OrderCurrencyModel, OrderLineModelSet};
 
@@ -77,7 +78,7 @@ pub(super) fn ut_common_order_currency(seller_ids: [u32; 3]) -> OrderCurrencyMod
 }
 
 #[test]
-fn currency_estimate_buyer_rate() {
+fn currency_estimate_buyer_rate_ok() {
     let mock_seller_ids = [2603u32, 9442, 8901];
     let v = ut_common_order_currency(mock_seller_ids);
     let actual = v.to_buyer_rate(mock_seller_ids[1]).unwrap();
@@ -90,7 +91,27 @@ fn currency_estimate_buyer_rate() {
     let actual = v.to_buyer_rate(mock_seller_ids[0]).unwrap();
     let rate2buyer_currency = actual.rate.trunc_with_scale(4).to_string();
     assert_eq!(rate2buyer_currency.as_str(), "1.0000");
-} // end of fn currency_estimate_buyer_rate
+} // end of fn currency_estimate_buyer_rate_ok
+
+#[test]
+fn currency_estimate_buyer_rate_err_div0() {
+    let seller_id = 123;
+    let search_scope = {
+        let data = vec![(CurrencyDto::TWD, 32047, 3), (CurrencyDto::IDR, 0, 4)];
+        ut_setup_currency_mset(data)
+    };
+    let buyer_label = CurrencyDto::TWD;
+    let seller_labels = vec![(seller_id, CurrencyDto::IDR)];
+    let args = (search_scope, buyer_label, seller_labels);
+    let result = OrderCurrencyModel::try_from(args);
+    assert!(result.is_ok());
+    let curr_m = result.unwrap();
+    let result = curr_m.to_buyer_rate(seller_id);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.code, AppErrorCode::DataCorruption));
+    }
+} // end of fn currency_estimate_buyer_rate_err_div0
 
 #[test]
 fn currency_to_rpc_replica_dto() {
@@ -98,33 +119,32 @@ fn currency_to_rpc_replica_dto() {
     let m = ut_common_order_currency(mock_seller_ids);
     let result = OrderCurrencySnapshotDto::try_from(m);
     assert!(result.is_ok());
-    if let Ok(v) = result {
-        assert_eq!(v.buyer, CurrencyDto::TWD);
-        v.sellers
-            .iter()
-            .map(|item| {
-                let expect_label = match item.seller_id {
-                    2615 => CurrencyDto::TWD,
-                    8299 => CurrencyDto::IDR,
-                    1031 => CurrencyDto::INR,
-                    _others => CurrencyDto::Unknown,
-                };
-                assert_eq!(item.currency, expect_label);
-            })
-            .count();
-        v.snapshot
-            .iter()
-            .map(|item| {
-                let expect_rate = match &item.name {
-                    CurrencyDto::TWD => "32.047",
-                    CurrencyDto::INR => "83.4095",
-                    CurrencyDto::IDR => "16301.9430",
-                    _others => "0.000",
-                };
-                assert_eq!(item.rate.to_string().as_str(), expect_rate);
-            })
-            .count();
-    }
+    let v = result.unwrap();
+    assert_eq!(v.buyer, CurrencyDto::TWD);
+    v.sellers
+        .iter()
+        .map(|item| {
+            let expect_label = match item.seller_id {
+                2615 => CurrencyDto::TWD,
+                8299 => CurrencyDto::IDR,
+                1031 => CurrencyDto::INR,
+                _others => CurrencyDto::Unknown,
+            };
+            assert_eq!(item.currency, expect_label);
+        })
+        .count();
+    v.snapshot
+        .iter()
+        .map(|item| {
+            let expect_rate = match &item.name {
+                CurrencyDto::TWD => "32.047",
+                CurrencyDto::INR => "83.4095",
+                CurrencyDto::IDR => "16301.9430",
+                _others => "0.000",
+            };
+            assert_eq!(item.rate.to_string().as_str(), expect_rate);
+        })
+        .count();
 } // end of fn currency_to_rpc_replica_dto
 
 #[test]
