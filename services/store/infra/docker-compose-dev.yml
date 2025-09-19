@@ -1,0 +1,76 @@
+services:
+  mariadb-storefront:
+    container_name: storefront-dev-mariadb
+    env_file:
+      - ./container-dev.env
+    restart: no
+    volumes:
+      - ./mariadb-cfg/dev.cfg:/etc/mysql/conf.d/app.cnf:ro
+    networks:
+      - net1
+
+  db-schema-migration-up-storefront:
+    container_name: storefront-dev-db-schema-upgrade
+    env_file:
+      - ./container-dev.env
+    environment:
+      - APP_SETTINGS=settings.migration
+    volumes:
+      - ../settings/migration.py:/app/store/settings/migration.py:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+
+  api-server-storefront:
+    container_name: storefront-dev-apisrv
+    env_file:
+      - ./container-dev.env
+    environment:
+      - APP_SETTINGS=settings.development
+    volumes:
+      - ../settings/development.py:/app/store/settings/development.py:ro
+      - ../settings/log-cfg-dev.json:/app/store/settings/log-cfg.json:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/dev:/app/log
+    networks:
+      - net1
+      - net2
+      - net3
+
+  rpc-consumer-storefront:
+    container_name: storefront-dev-rpcconsumer
+    env_file:
+      - ./container-dev.env
+    environment:
+      - SYS_BASE_PATH=/app
+      - APP_SETTINGS=settings.development
+      - PYTHONPATH=$PYTHONPATH:/app/store/settings
+    volumes:
+      - ../settings/development.py:/app/store/settings/development.py:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/dev:/app/log
+    networks:
+      - net1
+      - net2
+
+networks:
+  net1:
+    name: ec-storefront-dev-net
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.11.0/24
+          ip_range: 172.19.11.0/25
+          gateway: 172.19.11.254
+ 
+  net2:
+    name: ec-intersrvs-dev-net
+    external: true
+  
+  net3:
+    name: ec-usrmgt-dev-net
+    external: true
+

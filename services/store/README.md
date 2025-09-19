@@ -139,6 +139,12 @@ Note
 
 
 ## Run
+### API server and RPC consumer in Development Environment
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
+```
+
 ### Development Server
 ```bash
 APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
@@ -156,14 +162,10 @@ SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv ru
 (TODO)
 
 ## Test
+### Integration Test
 ```bash
 docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
     --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
-```
-
-### Integration Test
-```bash
-APP_SETTINGS="settings.test"  ./run_test
 ```
 
 ## Development

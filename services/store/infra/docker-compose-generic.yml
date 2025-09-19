@@ -1,3 +1,22 @@
+x-base-service-common: &reuse-basesrv-cfg
+  image: storefront-backend-base:latest
+  pull_policy: never
+  profiles:
+    - serverstart
+  restart: no
+  environment:
+    DB_PORT: 3311
+    DB_NAME: ecommerce_store
+  stop_signal: SIGTERM
+  working_dir: /app/store
+  volumes:
+    - ../settings/common.py:/app/store/settings/common.py:ro
+    - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+  depends_on:
+    db-schema-migration-up-storefront:
+      condition: service_completed_successfully
+
+
 services:
   mariadb-storefront:
     image: mariadb-ext:11-noble
@@ -29,7 +48,7 @@ services:
       - DB_NAME=ecommerce_store
       - DB_PORT=3311
     working_dir: /app/store
-    command: ["/bin/sh", "-c", "alembic --config alembic_app.ini upgrade 000004"]
+    command: alembic --config alembic_app.ini upgrade 000004
     volumes:
       - ../alembic_app.ini:/app/store/alembic_app.ini:ro
       - ../settings/common.py:/app/store/settings/common.py:ro
@@ -54,4 +73,14 @@ services:
       - ../alembic_app.ini:/app/store/alembic_app.ini:ro
       - ../settings/common.py:/app/store/settings/common.py:ro
       - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+
+  api-server-storefront:
+    <<: *reuse-basesrv-cfg
+    container_name: storefront-unknown-apisrv
+    command: ["/bin/sh", "-c", "exec uvicorn --host 0.0.0.0 --port 8011 --access-log --log-config ./settings/log-cfg.json store.entry.web:app"]
+
+  rpc-consumer-storefront:
+    <<: *reuse-basesrv-cfg
+    container_name: storefront-unknown-rpcconsumer
+    command: ["/bin/sh", "-c", "exec celery --app=ecommerce_common.util  --config=$${APP_SETTINGS} --workdir ./src  worker --concurrency 1  --loglevel=INFO  --hostname=storefront@%h -E --logfile=/app/log/storefront-rpc-consumer.log"]
 
