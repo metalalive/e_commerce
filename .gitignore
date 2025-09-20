@@ -29,6 +29,7 @@ services/store/infra/container-dev.env
 services/store/infra/container-test.env
 services/store/infra/interpolation-dev.env
 services/store/infra/interpolation-test.env
+services/store/infra/smoketest.env
 services/tmp/buffer/media/*
 services/tmp/cache/dev/*
 services/tmp/cache/dev/jwks/privkey/current.json
