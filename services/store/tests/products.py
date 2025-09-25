@@ -9,6 +9,7 @@ from sqlalchemy import select as sa_select
 
 from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions
+from ecommerce_common.util import LIMIT_MAX_CTYPE_UINT64, LIMIT_MAX_CTYPE_UINT32
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.validation import EditProductDto
@@ -67,9 +68,7 @@ class TestUpdate:
         reply_event.resp_body["result"] = {"result": msg}
         return reply_event
 
-    def _setup_base_req_body(
-        self, objs, product_avail_gen, num_new_items: int = 2
-    ) -> List[Dict]:
+    def _setup_base_req_body(self, objs, product_avail_gen, num_new_items: int = 2) -> List[Dict]:
         body = [
             {
                 "product_id": obj.product_id,
@@ -115,9 +114,7 @@ class TestUpdate:
         )
         updating_products[0].base_price += 4
         updating_products[4].start_after = datetime.now(UTC).replace(microsecond=0)
-        updating_products[4].end_before = updating_products[4].start_after + timedelta(
-            minutes=27
-        )
+        updating_products[4].end_before = updating_products[4].start_after + timedelta(minutes=27)
         body = self._setup_base_req_body(
             objs=updating_products,
             product_avail_gen=product_avail_data,
@@ -195,6 +192,39 @@ class TestUpdate:
         actual_value = err_detail[0]
         assert expect_value == actual_value
 
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_num_overflow(self, keystore, test_client, saved_store_objs):
+        obj = await anext(saved_store_objs)
+        # sub case 1, product id overflow
+        overflow_product_id = LIMIT_MAX_CTYPE_UINT64 + 1
+        obj.products[0].product_id = overflow_product_id
+        body = self._setup_base_req_body(obj.products[:1], None)
+        auth_data = self._auth_data_pattern
+        auth_data["id"] = obj.staff[0].staff_id
+        auth_data["quotas"][0]["maxnum"] = len(body)
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
+        headers = {"Authorization": "Bearer %s" % encoded_token}
+        url = self.url.format(store_id=obj.id)
+        with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
+            response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 422
+        result = response.json()
+        detail = result["detail"][0]
+        assert detail["ctx"]["le"] < overflow_product_id
+        assert detail["loc"] == ["body", 0, "product_id"]
+
+        # sub case 2, price number is overflow
+        overflow_price = LIMIT_MAX_CTYPE_UINT32 + 1
+        obj.products[1].base_price = overflow_price
+        body = self._setup_base_req_body(obj.products[1:2], None)
+        with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
+            response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 422
+        result = response.json()
+        detail = result["detail"][0]
+        assert detail["ctx"]["le"] < overflow_price
+        assert detail["loc"] == ["body", 0, "base_price"]
+
     @patch(
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
@@ -229,9 +259,7 @@ class TestUpdate:
         def gen_req_body(_) -> EditProductDto:
             raw = next(product_avail_data)
             limit = {
-                "attributes": {
-                    (v["label_id"], v["value"]) for v in raw["attrs_charge"]
-                },
+                "attributes": {(v["label_id"], v["value"]) for v in raw["attrs_charge"]},
                 "last_update": raw.pop("attrs_last_update"),
             }
             d = EditProductDto(**raw)
@@ -279,9 +307,7 @@ class TestUpdate:
         assert mocked_rpc_fn.call_args.kwargs["deleting"].get("items") is None
         # subcase 2
         expect_deleting = {"items": [2, 3, 4, 5], "pkgs": [16, 79, 203]}
-        emit_event_edit_products(
-            expect_store_id, rpc_hdlr=mocked_rpc, deleting=expect_deleting
-        )
+        emit_event_edit_products(expect_store_id, rpc_hdlr=mocked_rpc, deleting=expect_deleting)
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs["s_id"]
         assert [] == mocked_rpc_fn.call_args.kwargs["updating"]
         assert [] == mocked_rpc_fn.call_args.kwargs["creating"]
@@ -310,9 +336,7 @@ class TestDiscard:
         ],
     }
 
-    def _setup_deleting_items(
-        self, products: Iterable[StoreProductAvailable], num_deleting: int
-    ):
+    def _setup_deleting_items(self, products: Iterable[StoreProductAvailable], num_deleting: int):
         def get_prod_id_fn(d) -> int:
             return d.product_id
 
@@ -346,12 +370,8 @@ class TestDiscard:
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
-        deleting_pitems, remaining_pitems = self._setup_deleting_items(
-            obj.products, num_deleting
-        )
-        renderred_url = self.url.format(
-            store_id=obj.id, ids1=",".join(map(str, deleting_pitems))
-        )
+        deleting_pitems, remaining_pitems = self._setup_deleting_items(obj.products, num_deleting)
+        renderred_url = self.url.format(store_id=obj.id, ids1=",".join(map(str, deleting_pitems)))
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
             with patch(
@@ -402,12 +422,8 @@ class TestDiscard:
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
-        deleting_pitems, remaining_pitems = self._setup_deleting_items(
-            obj.products, num_deleting
-        )
-        renderred_url = self.url.format(
-            store_id=obj.id, ids1=",".join(map(str, deleting_pitems))
-        )
+        deleting_pitems, remaining_pitems = self._setup_deleting_items(obj.products, num_deleting)
+        renderred_url = self.url.format(store_id=obj.id, ids1=",".join(map(str, deleting_pitems)))
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
             reply_evt_order.send(
@@ -463,9 +479,7 @@ class TestRead:
         product_avail_data,
     ):
         obj = await anext(saved_store_objs)
-        new_products_avail = [
-            StoreProductAvailable(**next(product_avail_data)) for _ in range(20)
-        ]
+        new_products_avail = [StoreProductAvailable(**next(product_avail_data)) for _ in range(20)]
         obj.products.extend(new_products_avail)
         await session_for_test.commit()
         await session_for_test.refresh(obj, attribute_names=["staff"])

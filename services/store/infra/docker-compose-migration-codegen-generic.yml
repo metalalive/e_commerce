@@ -1,7 +1,7 @@
 services:
   db-schema-migration-up-storefront:
     environment:
-      - ALEMBIC_REVISION_NUMBER=000003
+      - ALEMBIC_REVISION_NUMBER=000004
 
   db-schema-migration-codegen-storefront:
     container_name: storefront-unknown-db-migrate-codegen

@@ -11,7 +11,7 @@ services:
       - DB_NAME=ecommerce_store
       - DB_PORT=3311
     working_dir: /app/store
-    command: /bin/sh ./run_entry
+    command: /bin/bash ./run_entry
     volumes:
       - ./run_itest:/app/store/run_entry:ro
       - ../settings/test.py:/app/store/settings/test.py:ro

@@ -242,7 +242,7 @@ def staff_data():
 def _product_avail_data_gen():
     base_range = 10
     price_range = 10000
-    product_id_start = 1
+    product_id_start = pow(2, 64) - 1
     attrs_charge_raw = [
         ("yght9Fx", "environmental", 29),
         ("j8KhoHs", -19, 39),
@@ -255,11 +255,11 @@ def _product_avail_data_gen():
         return m.model_dump()
 
     while True:
-        product_id_end = product_id_start + base_range
+        product_id_end = product_id_start - base_range
         start_after, end_before = _gen_time_period()
         new_data = {
             # AppIdGapNumberFinder.MAX_GAP_VALUE
-            "product_id": random.randrange(product_id_start, product_id_end),
+            "product_id": random.randrange(product_id_end, product_id_start),
             "start_after": start_after,
             "end_before": end_before,
             "base_price": random.randrange(0, price_range),
@@ -267,7 +267,7 @@ def _product_avail_data_gen():
             "attrs_last_update": datetime.now(UTC).replace(microsecond=0),
         }
         yield new_data
-        product_id_start += base_range
+        product_id_start -= base_range
 
 
 @pytest.fixture(scope="session")

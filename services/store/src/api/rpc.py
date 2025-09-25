@@ -68,7 +68,7 @@ async def _get_shop_profile(db_engine, sid: int) -> Dict:
             saved_obj = None
         if saved_obj:
             store_d = StoreProfileDto.model_validate(saved_obj)
-            out = store_d.model_dump()
+            out = store_d.model_dump(mode="json")
         else:
             log_args = ["reason", "store-not-exist", "store_id", str(sid)]
             _logger.warning(None, *log_args)

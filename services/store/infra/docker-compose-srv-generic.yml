@@ -20,7 +20,7 @@ x-base-service-common: &reuse-basesrv-cfg
 services:
   db-schema-migration-up-storefront:
     environment:
-      - ALEMBIC_REVISION_NUMBER=000004
+      - ALEMBIC_REVISION_NUMBER=000005
 
   db-schema-migration-down-storefront:
     container_name: storefront-unknown-db-schema-downgrade

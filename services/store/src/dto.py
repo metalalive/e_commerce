@@ -8,6 +8,7 @@ from pydantic import (
     BaseModel as PydanticBaseModel,
     ConfigDict,
     EmailStr,
+    Field,
     PositiveInt,
     NonNegativeInt,
     StringConstraints,
@@ -15,6 +16,7 @@ from pydantic import (
 )
 
 from ecommerce_common.models.enums.base import JsonFileChoicesMeta
+from ecommerce_common.util import LIMIT_MAX_CTYPE_UINT64, LIMIT_MAX_CTYPE_UINT32
 
 
 class EnumWeekDay(enum.Enum):
@@ -81,7 +83,7 @@ class ShopLocationDto(PydanticBaseModel):
     locality: str
     street: str
     detail: str
-    floor: int
+    floor: int = Field(ge=-100, le=100)
 
 
 class StoreDtoError(Exception):
@@ -96,7 +98,7 @@ class StoreDtoError(Exception):
 
 class StoreStaffDto(PydanticBaseModel):
     model_config = ConfigDict(from_attributes=True)
-    staff_id: PositiveInt
+    staff_id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT32)
     start_after: datetime
     end_before: datetime
 
@@ -126,7 +128,7 @@ class BusinessHoursDayDto(PydanticBaseModel):
 
 class NewStoreProfileDto(PydanticBaseModel):
     label: str
-    supervisor_id: PositiveInt
+    supervisor_id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT32)
     currency: StoreCurrency
     active: Optional[bool] = False
     emails: Optional[List[StoreEmailDto]] = []
@@ -146,15 +148,15 @@ class EditExistingStoreProfileDto(PydanticBaseModel):
 
 
 class StoreProfileCreatedDto(PydanticBaseModel):
-    id: PositiveInt
-    supervisor_id: PositiveInt
+    id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT32)
+    supervisor_id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT32)
 
 
 class StoreProfileDto(PydanticBaseModel):
     model_config = ConfigDict(from_attributes=True)
     label: str
     active: bool
-    supervisor_id: PositiveInt
+    supervisor_id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT32)
     emails: Optional[List[StoreEmailDto]] = []
     phones: Optional[List[StorePhoneDto]] = []
     location: Optional[ShopLocationDto] = None
@@ -166,12 +168,12 @@ class ProductAttrPriceDto(PydanticBaseModel):
     model_config = ConfigDict(from_attributes=True)
     label_id: str
     value: Union[bool, NonNegativeInt, int, str]
-    price: NonNegativeInt  # extra amount to charge
+    price: NonNegativeInt = Field(ge=0, le=LIMIT_MAX_CTYPE_UINT32)  # extra amount to charge
 
 
 class EditProductDto(PydanticBaseModel):
-    product_id: PositiveInt
-    base_price: PositiveInt
+    product_id: PositiveInt = Field(ge=1, le=LIMIT_MAX_CTYPE_UINT64)
+    base_price: PositiveInt = Field(ge=0, le=LIMIT_MAX_CTYPE_UINT32)
     start_after: datetime
     end_before: datetime
     attrs_charge: List[ProductAttrPriceDto]

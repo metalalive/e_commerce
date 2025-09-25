@@ -1,5 +1,12 @@
-pytest -v -s ./tests/storeprofile/models.py
-pytest -v -s ./tests/storeprofile/api.py
-pytest -v -s ./tests/staff.py
-pytest -v -s ./tests/business_hours.py
-pytest -v -s ./tests/products.py
+#!/bin/bash
+
+testmodules=("./tests/storeprofile/models.py" "./tests/storeprofile/api.py" "./tests/staff.py" "./tests/business_hours.py" "./tests/products.py")
+
+for module in "${testmodules[@]}"; do
+    pytest -v -s "$module"
+    exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        exit $exit_code
+    fi
+done
