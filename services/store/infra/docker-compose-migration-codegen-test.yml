@@ -1,0 +1,13 @@
+services:
+  db-schema-migration-codegen-storefront:
+    container_name: storefront-test-db-migrate-codegen
+    env_file:
+      - ./container-test.env
+    environment:
+      - APP_SETTINGS=settings.test
+    volumes:
+      - ../settings/test.py:/app/store/settings/test.py:ro
+      - ../../common/data/cors-test.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1

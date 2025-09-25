@@ -18,44 +18,9 @@ x-base-service-common: &reuse-basesrv-cfg
 
 
 services:
-  mariadb-storefront:
-    image: mariadb-ext:11-noble
-    container_name: storefront-generic-mariadb
-    pull_policy: never
-    restart: no
-    environment:
-      - DB_NAME=ecommerce_store
-    ports:
-      # Maps port 3310 on the host to port 3311 in the container
-      - "3310:3311"
-    volumes:
-      - ./mariadb-cfg/db-init.sh:/docker-entrypoint-initdb.d/db-init.sh:ro
-      - ${MARIADB_DATA_VOL}:/var/lib/mysql
-      - ${MARIADB_LOG_VOL}:/var/log/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3311 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-
   db-schema-migration-up-storefront:
-    container_name: storefront-unknown-db-schema-upgrade
-    image: storefront-backend-base:latest
-    pull_policy: never
-    restart: no
     environment:
-      - DB_NAME=ecommerce_store
-      - DB_PORT=3311
-    working_dir: /app/store
-    command: alembic --config alembic_app.ini upgrade 000004
-    volumes:
-      - ../alembic_app.ini:/app/store/alembic_app.ini:ro
-      - ../settings/common.py:/app/store/settings/common.py:ro
-      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
-    depends_on:
-      mariadb-storefront:
-        condition: service_healthy
+      - ALEMBIC_REVISION_NUMBER=000004
 
   db-schema-migration-down-storefront:
     container_name: storefront-unknown-db-schema-downgrade
@@ -73,11 +38,20 @@ services:
       - ../alembic_app.ini:/app/store/alembic_app.ini:ro
       - ../settings/common.py:/app/store/settings/common.py:ro
       - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../migrations:/app/store/migrations:ro
 
   api-server-storefront:
     <<: *reuse-basesrv-cfg
     container_name: storefront-unknown-apisrv
+    ports:
+      - 8011:8011
     command: ["/bin/sh", "-c", "exec uvicorn --host 0.0.0.0 --port 8011 --access-log --log-config ./settings/log-cfg.json store.entry.web:app"]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -m ecommerce_common.util.httpsrv_accessible --timeout-secs=3 --host=localhost --port=8011 --uri-path=/profile/000"]
+      interval: 45s
+      timeout: 5s
+      retries: 7
+      start_period: 12s
 
   rpc-consumer-storefront:
     <<: *reuse-basesrv-cfg

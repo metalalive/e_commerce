@@ -87,22 +87,6 @@ Update the virtual environment after you are done editing `Pipfile` and `pyproje
 pipenv update --dev
 ```
 
-### C extension modules (for experiment purpose)
-in common python module, build the wheel:
-```bash
-cd common/python
-pipenv run python -m build ./c_exts
-```
-Then manually install it by following command :
-```bash
-pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-xxxxx.whl
-```
-
-The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
-```bash
-pipenv run pip uninstall my-c-extention-lib
-```
-
 ### Base Image for Application Environment
 ```bash
 cd /path/to/project-home/services
@@ -114,64 +98,62 @@ After custom image `storefront-backend-base:latest` is built successfully, use i
 - run application in development ensironment
 - run all test cases
 
-
 ### Database Migration
+Generate migration script template for ORM code update :
 ```bash
+docker compose --file ./infra/docker-compose-db-generic.yml \
+    --file ./infra/docker-compose-migration-codegen-generic.yml \
+    --file ./infra/docker-compose-db-test.yml \
+    --file ./infra/docker-compose-migration-codegen-test.yml \
+    --env-file ./infra/interpolation-test.env  up --detach
+```
 
-// generate migration script template (not stable)
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini  revision --autogenerate \
-    --rev-id <VERSION_NUMBER>  --depends-on  <PREVIOUS_VERSION_NUMBER>  -m "whatever_message"
+The docker command above covers following basic alembic commands with all necessary variables / config files. 
+```shell 
+alembic --config alembic_app.ini  revision --autogenerate --rev-id <VERSION_NUMBER> \
+   --depends-on  <PREVIOUS_VERSION_NUMBER>  -m "whatever_message"
 
 // update
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
+alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
 
 // rollback
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini downgrade  <VERSION_NUMBER>
+alembic --config alembic_app.ini downgrade  <VERSION_NUMBER>
 
 // check all created revisions (might not sync yet to target database)
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini history
+alembic --config alembic_app.ini history
 ```
 
 Note
+- after the docker command, check new migration script file under path `migrations/app/versions`
 - the migration commands are the same as described in [alembic documentation](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
-- the environment variable `APP_SETTINGS` contains path to setting module for test for development purpose
+- Alembic's auto-generated migration script should be reusable for all runtime environments in most case , no need to generate them for different environments
 - `<VERSION_NUMBER>` can be the number which matches migration module under `migrations/app/versions` , for downgrade, `base` means rollback to state before any table is created in the database.
 
 
 ## Run
 ### API server and RPC consumer in Development Environment
 ```bash
-docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
-    --env-file ./infra/interpolation-dev.env  --profile serverstart up --detach
+docker compose \
+    --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml \
+    --file ./infra/docker-compose-db-dev.yml --file ./infra/docker-compose-srv-dev.yml \
+    --env-file ./infra/interpolation-dev.env --profile serverstart up --detach
 ```
 
-### Development Server
-```bash
-APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
-    --port 8011 store.entry.web:app  >& ./tmp/log/dev/store_app.log &
-```
-
-### RPC Consumer
-```bash
-SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv run celery \
-    --app=ecommerce_common.util  --config=settings.development   --workdir ./src  worker \
-    --concurrency 1  --loglevel=INFO  --hostname=storefront@%h  -E
-```
-
-### Production Server
-(TODO)
+To run smoke test after dev server is launched, append extra `--file ./infra/docker-compose-smoketest4dev.yml`  to the end of `--file` option sequence.
 
 ## Test
 ### Integration Test
 ```bash
-docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+docker compose \
+    --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml \
+    --file ./infra/docker-compose-db-test.yml --file ./infra/docker-compose-srv-test.yml \
     --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
 ```
 
 ## Development
 ### Code Formatter
 ```bash
-pipenv run black ./src/ ./tests/  ./settings/ ./migrations
+pipenv run black --line-length=100 ./src/ ./tests/  ./settings/ ./migrations
 ```
 
 ### Linting Check

@@ -71,13 +71,14 @@ RUN ls -lt ${DST_APP_PATH}/.venv/bin/python3
 WORKDIR ${DST_COMMONAPP_PATH}/c_exts
 RUN python3.13 -m pip install build==1.2.2
 RUN python3.13 -m build ./
+# this will create a package `my-c-extention-lib` under in-project virtual env
+# to remove the C-extension package, run the command `pip uninstall`
 
 WORKDIR ${DST_APP_PATH}
 COPY store/Pipfile  store/Pipfile.lock store/README.md \
      store/pyproject.toml  .
 
 COPY store/src   ./src
-COPY store/migrations  ./migrations
 
 RUN pipenv install --dev
 RUN pipenv run pip install ${DST_COMMONAPP_PATH}/c_exts/dist/my_c_extension_lib-0.0.2-cp313-cp313-linux_x86_64.whl
@@ -105,7 +106,6 @@ COPY --from=builder0 ${DST_COMMONAPP_PATH}/src/softdelete ./softdelete
 WORKDIR ${DST_APP_PATH}
 COPY --from=builder0 ${DST_APP_PATH}/.venv     ./.venv
 COPY --from=builder0 ${DST_APP_PATH}/src       ./src
-COPY --from=builder0 ${DST_APP_PATH}/migrations  ./migrations
 
 # Ubuntu installs non-system python under `/usr/bin` , however `python:3.13-slim`
 # installs default python under `/usr/local/bin` .

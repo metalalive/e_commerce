@@ -1,27 +1,4 @@
 services:
-  mariadb-storefront:
-    container_name: storefront-dev-mariadb
-    env_file:
-      - ./container-dev.env
-    restart: no
-    volumes:
-      - ./mariadb-cfg/dev.cfg:/etc/mysql/conf.d/app.cnf:ro
-    networks:
-      - net1
-
-  db-schema-migration-up-storefront:
-    container_name: storefront-dev-db-schema-upgrade
-    env_file:
-      - ./container-dev.env
-    environment:
-      - APP_SETTINGS=settings.migration
-    volumes:
-      - ../settings/migration.py:/app/store/settings/migration.py:ro
-      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro 
-      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
-    networks:
-      - net1
-
   api-server-storefront:
     container_name: storefront-dev-apisrv
     env_file:
@@ -57,15 +34,6 @@ services:
       - net2
 
 networks:
-  net1:
-    name: ec-storefront-dev-net
-    external: false
-    ipam:
-      config:
-        - subnet: 172.19.11.0/24
-          ip_range: 172.19.11.0/25
-          gateway: 172.19.11.254
- 
   net2:
     name: ec-intersrvs-dev-net
     external: true
