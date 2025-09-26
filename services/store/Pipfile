@@ -12,10 +12,10 @@ uvicorn = ">= 0.23.2"
 PyJWT = ">= 2.8.0"
 SQLAlchemy = ">=2.0.29"
 alembic = "== 1.16.5"
-asyncmy = ">= 0.2.9"
 celery = "== 5.4.0"
 cryptography = ">= 46.0.1"
 setuptools = ">= 69.5.1"
+asyncmy = {editable = true, ref = "bugfix/escape-unsigned-int-64b", git = "https://github.com/metalalive/asyncmy.git"}
 
 [dev-packages]
 pytest = "8.4.2"

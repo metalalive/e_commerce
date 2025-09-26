@@ -15,6 +15,7 @@ RUN apt update \
     && apt install --no-install-suggests -y python3.13 python3.13-dev \
        python3.13-venv  mariadb-client  libmariadb-dev \
     && apt install --no-install-suggests -y gcc \
+    && apt install --no-install-suggests -y git \
     && rm -rf /var/lib/apt/lists/*
 
 # use the pip bound to specific python version , instead of system-level
