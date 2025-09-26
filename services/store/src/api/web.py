@@ -60,9 +60,7 @@ router = APIRouter(
     # the argument `lifespan` hasn't been integrated well in FastAPI an Starlette
     responses={
         FastApiHTTPstatus.HTTP_404_NOT_FOUND: {"description": "resource not found"},
-        FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "internal server error"
-        },
+        FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "internal server error"},
     },
 )
 
@@ -74,6 +72,8 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 
 
 async def common_authentication(encoded_token: str = FastapiDepends(oauth2_scheme)):
+    log_args = ["action", "start-authentication"]
+    _logger.debug(None, *log_args)
     try:
         return base_authentication(
             token=encoded_token,
@@ -198,6 +198,15 @@ async def _storefront_supervisor_validity(
         usr_auth["priv_status"] != ROLE_ID_SUPERUSER
         and saved_obj.supervisor_id != usr_auth["profile"]
     ):
+        log_args = [
+            "action",
+            "verify-usr-id",
+            "expect-supervisor-id",
+            str(saved_obj.supervisor_id),
+            "curr-authed-usr-id",
+            str(usr_auth["profile"]),
+        ]
+        _logger.info(None, *log_args)
         raise FastApiHTTPException(
             detail="Not allowed to edit the store profile",
             headers={},
@@ -216,9 +225,7 @@ async def _storefront_staff_validity(
         eager_load_columns.append(StoreProfile.staff)
     else:
         eager_load_columns = [StoreProfile.staff]
-    saved_obj = await _storefront_existence_validity(
-        session, store_id, eager_load_columns
-    )
+    saved_obj = await _storefront_existence_validity(session, store_id, eager_load_columns)
     valid_staff_ids = list(map(lambda o: o.staff_id, saved_obj.staff))
     valid_staff_ids.append(saved_obj.supervisor_id)
     if usr_auth["profile"] not in valid_staff_ids:
@@ -239,6 +246,8 @@ async def add_profiles(
     request: NewStoreProfilesReqBody,
     user: dict = FastapiDepends(add_profile_authorization),
 ):
+    log_args = ["action", "start-profile-creation"]
+    _logger.debug(None, *log_args)
     request.check_existence(shared_ctx)
     profile_ids = request.supervisor_profile_ids()
     sa_new_stores = list(map(StoreProfile.from_req, request.root))
@@ -312,18 +321,14 @@ async def switch_supervisor(
             [], session=session, target_ids=[request.supervisor_id]
         )
         request.validate_quota(quota_chk_result)
-        saved_obj = await _storefront_supervisor_validity(
-            session, store_id, usr_auth=user
-        )
+        saved_obj = await _storefront_supervisor_validity(session, store_id, usr_auth=user)
         saved_obj.supervisor_id = request.supervisor_id
         await session.commit()
     return None
 
 
 @router.delete("/profiles", status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
-async def delete_profile(
-    ids: str, user: dict = FastapiDepends(delete_profile_authorization)
-):
+async def delete_profile(ids: str, user: dict = FastapiDepends(delete_profile_authorization)):
     try:
         ids = list(map(int, ids.split(",")))
         if len(ids) == 0:
@@ -335,9 +340,7 @@ async def delete_profile(
         stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
         result = await _session.execute(stmt)  # TODO, consider soft-delete
         for s_id in ids:
-            emit_event_edit_products(
-                s_id, rpc_hdlr=shared_ctx["order_app_rpc"], remove_all=True
-            )
+            emit_event_edit_products(s_id, rpc_hdlr=shared_ctx["order_app_rpc"], remove_all=True)
         await _session.commit()
     # Note python does not have `scope` concept, I can access the variables
     # `result` and `ids` declared above.
@@ -472,10 +475,8 @@ async def edit_products_available(
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         saved_obj = await _storefront_staff_validity(session, store_id, usr_auth=user)
-        updating_products: List[StoreProductAvailable] = (
-            await StoreProductAvailable.try_load(
-                session, store_id=saved_obj.id, reqdata=request.root
-            )
+        updating_products: List[StoreProductAvailable] = await StoreProductAvailable.try_load(
+            session, store_id=saved_obj.id, reqdata=request.root
         )
         updatelist: Dict[int, EditProductDto] = await StoreProductAvailable.bulk_update(
             session, updating_products, request.root
@@ -483,9 +484,7 @@ async def edit_products_available(
         new_products: List[EditProductDto] = list(
             filter(lambda d: d.product_id not in updatelist.keys(), request.root)
         )
-        product_ms = map(
-            lambda d: StoreProductAvailable.from_req(saved_obj.id, d), new_products
-        )
+        product_ms = map(lambda d: StoreProductAvailable.from_req(saved_obj.id, d), new_products)
 
         session.add_all([*product_ms])
         emit_event_edit_products(
@@ -508,9 +507,7 @@ async def edit_products_available(
     logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
 
 
-@router.delete(
-    "/profile/{store_id}/products", status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT
-)
+@router.delete("/profile/{store_id}/products", status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
 async def discard_store_products(
     store_id: PositiveInt,
     pitems: str,
@@ -532,12 +529,8 @@ async def discard_store_products(
         )
 
     async with AsyncSession(bind=shared_ctx["db_engine"]) as _session:
-        saved_store = await _storefront_staff_validity(
-            _session, store_id, usr_auth=user
-        )
-        num_deleted = await StoreProductAvailable.bulk_delete(
-            _session, saved_store.id, pitems
-        )
+        saved_store = await _storefront_staff_validity(_session, store_id, usr_auth=user)
+        num_deleted = await StoreProductAvailable.bulk_delete(_session, saved_store.id, pitems)
         emit_event_edit_products(
             store_id,
             s_currency=saved_store.currency.value,
@@ -571,9 +564,7 @@ async def read_profile_products(
 
 
 @router.get("/profile/{store_id}", response_model=StoreProfileDto)
-async def read_profile(
-    store_id: PositiveInt, user: dict = FastapiDepends(common_authentication)
-):
+async def read_profile(store_id: PositiveInt, user: dict = FastapiDepends(common_authentication)):
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         related_attributes = [
             StoreProfile.phones,

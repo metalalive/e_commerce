@@ -18,9 +18,7 @@ KEYSTORE["persist_secret_handler_test"] = {  # noqa: F405
 KEYSTORE["persist_pubkey_handler_test"] = {  # noqa: F405
     "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
     "init_kwargs": {
-        "filepath": SYS_BASE_PATH.joinpath(  # noqa: F405
-            "tmp/cache/test/jwks/pubkey/current.json"
-        ),
+        "filepath": SYS_BASE_PATH.joinpath("tmp/cache/test/jwks/pubkey/current.json"),  # noqa: F405
         "name": "pubkey",
         "expired_after_days": 9,
         "flush_threshold": 4,

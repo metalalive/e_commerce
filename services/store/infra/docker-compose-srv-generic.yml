@@ -45,13 +45,13 @@ services:
     container_name: storefront-unknown-apisrv
     ports:
       - 8011:8011
-    command: ["/bin/sh", "-c", "exec uvicorn --host 0.0.0.0 --port 8011 --access-log --log-config ./settings/log-cfg.json store.entry.web:app"]
+    command: ["/bin/sh", "-c", "exec python3 -m store.entry.web --host=0.0.0.0 --port=8011 --access-log=true --log-config=./settings/log-cfg.json"]
     healthcheck:
       test: ["CMD-SHELL", "python3 -m ecommerce_common.util.httpsrv_accessible --timeout-secs=3 --host=localhost --port=8011 --uri-path=/profile/000"]
-      interval: 45s
-      timeout: 5s
-      retries: 7
-      start_period: 12s
+      interval: 80s
+      timeout: 7s
+      retries: 2
+      start_period: 18s
 
   rpc-consumer-storefront:
     <<: *reuse-basesrv-cfg

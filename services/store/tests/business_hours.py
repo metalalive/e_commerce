@@ -60,9 +60,7 @@ class TestUpdate:
         assert expect_value == actual_value
 
     @pytest.mark.asyncio(loop_scope="session")
-    async def test_duplicate_days(
-        self, keystore, test_client, saved_store_objs, opendays_data
-    ):
+    async def test_duplicate_days(self, keystore, test_client, saved_store_objs, opendays_data):
         obj = await anext(saved_store_objs)
         num_items = 5
         body = [next(opendays_data) for _ in range(num_items)]

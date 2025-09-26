@@ -24,9 +24,34 @@
     }
   },
   "loggers": {
+    "ecommerce_common.auth.auth": {
+      "level": "WARNING",
+      "handlers": ["localfile", "console"],
+      "propagate": false
+    },
     "store.shared": {
       "level": "WARNING",
       "handlers": ["localfile"],
+      "propagate": false
+    },
+    "store.api.web": {
+      "level": "WARNING",
+      "handlers": ["localfile", "console"],
+      "propagate": false
+    },
+    "store.entry.web": {
+      "level": "INFO",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "store.models": {
+      "level": "ERROR",
+      "handlers": ["localfile"],
+      "propagate": false
+    },
+    "store.validation": {
+      "level": "WARNING",
+      "handlers": ["localfile", "console"],
       "propagate": false
     }
   },

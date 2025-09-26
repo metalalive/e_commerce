@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Tuple, List, Optional, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
         StoreStaffsReqBody,
         EditProductsReqBody,
     )
+
+_logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -120,13 +123,21 @@ class AppIdGapNumberFinder(IdGapNumberFinder):
     def get_db_table_name(self, model_cls) -> str:
         return model_cls.__table__.name
 
-    def extract_dup_id_from_error(self, error):
+    def extract_dup_id_from_error(self, error) -> int:
         raw_msg_chars = error.args[0].split()
         idx = raw_msg_chars.index("entry")
         dup_id = raw_msg_chars[idx + 1]
         dup_id = dup_id.strip("'")
-        dup_id = int(dup_id)
-        return dup_id
+        log_args = [
+            "action",
+            "extract-duplicate-id",
+            "class",
+            type(self).__name__,
+            "dup-id",
+            dup_id,
+        ]
+        _logger.debug(None, *log_args)
+        return int(dup_id)
 
 
 class QuotaStatisticsMixin:
