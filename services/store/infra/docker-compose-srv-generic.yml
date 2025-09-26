@@ -1,0 +1,60 @@
+x-base-service-common: &reuse-basesrv-cfg
+  image: storefront-backend-base:latest
+  pull_policy: never
+  profiles:
+    - serverstart
+  restart: no
+  environment:
+    DB_PORT: 3311
+    DB_NAME: ecommerce_store
+  stop_signal: SIGTERM
+  working_dir: /app/store
+  volumes:
+    - ../settings/common.py:/app/store/settings/common.py:ro
+    - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+  depends_on:
+    db-schema-migration-up-storefront:
+      condition: service_completed_successfully
+
+
+services:
+  db-schema-migration-up-storefront:
+    environment:
+      - ALEMBIC_REVISION_NUMBER=000005
+
+  db-schema-migration-down-storefront:
+    container_name: storefront-unknown-db-schema-downgrade
+    image: storefront-backend-base:latest
+    pull_policy: never
+    restart: no
+    profiles:
+      - cleandbschema
+    environment:
+      - DB_NAME=ecommerce_store
+      - DB_PORT=3311
+    working_dir: /app/store
+    command: ["/bin/sh", "-c", "alembic --config alembic_app.ini downgrade base"]
+    volumes:
+      - ../alembic_app.ini:/app/store/alembic_app.ini:ro
+      - ../settings/common.py:/app/store/settings/common.py:ro
+      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../migrations:/app/store/migrations:ro
+
+  api-server-storefront:
+    <<: *reuse-basesrv-cfg
+    container_name: storefront-unknown-apisrv
+    ports:
+      - 8011:8011
+    command: ["/bin/sh", "-c", "exec python3 -m store.entry.web --host=0.0.0.0 --port=8011 --access-log=true --log-config=./settings/log-cfg.json"]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -m ecommerce_common.util.httpsrv_accessible --timeout-secs=3 --host=localhost --port=8011 --uri-path=/profile/000"]
+      interval: 80s
+      timeout: 7s
+      retries: 2
+      start_period: 18s
+
+  rpc-consumer-storefront:
+    <<: *reuse-basesrv-cfg
+    container_name: storefront-unknown-rpcconsumer
+    command: ["/bin/sh", "-c", "exec celery --app=ecommerce_common.util  --config=$${APP_SETTINGS} --workdir ./src  worker --concurrency 1  --loglevel=INFO  --hostname=storefront@%h -E --logfile=/app/log/storefront-rpc-consumer.log"]
+

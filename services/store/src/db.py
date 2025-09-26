@@ -23,7 +23,9 @@ def sqlalchemy_init_engine(
     secret_map: Tuple[str, str],
     base_folder: Path,
     driver_label: str,
-    db_name: str = "",
+    db_name: str,
+    db_host: str,
+    db_port: int,
     conn_args: Optional[dict] = None,
 ):
     conn_args = conn_args or {}
@@ -33,8 +35,9 @@ def sqlalchemy_init_engine(
         secret_map=dict([secret_map]),
     )
     chosen_db_credential = db_credentials[secret_map[0]]
-    if db_name:
-        chosen_db_credential["NAME"] = db_name
+    chosen_db_credential["NAME"] = db_name
+    chosen_db_credential["HOST"] = db_host
+    chosen_db_credential["PORT"] = db_port
     url = format_sqlalchemy_url(driver=driver_label, db_credential=chosen_db_credential)
     # reminder: use engine.dispose() to free up all connections in its pool
     return create_async_engine(url, connect_args=conn_args)

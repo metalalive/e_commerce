@@ -62,10 +62,10 @@ Note :
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
-|Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
-|MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/) |
-|pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
-|pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
+|Python | 3.13.7 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
+|MariaDB| 11.8.2 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/) |
+|pipenv | 2025.0.4 | [see here](https://pip.pypa.io/en/stable/) |
+|pip| 25.1 | [see here](https://pip.pypa.io/en/stable/) |
 
 ## Build
 For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/storefront-ci.yaml)
@@ -76,83 +76,84 @@ PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
 ```
 Alternatively, you can switch to application base folder and explcitly specify virtual environment
 ```bash
-PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+PIPENV_VENV_IN_PROJECT=1 pipenv run python -m venv
 ```
 
 - A virtual environment folder `.venv` will be created under the application folder `./store`
 - Note [`Pipfile`](./Pipfile) already references path to [common python modules](../common/python), that makes `pipenv` installation automatically link to the common modules, no need to build the common python module explicitly.
 
-If you need to modify the `Pipfile` or `pyproject.toml` later, update the virtual environment after you are done editing `Pipfile` , by the command
+Update the virtual environment after you are done editing `Pipfile` and `pyproject.toml` with the command :
 ```shell
 pipenv update --dev
 ```
 
-### C extension modules (for experiment purpose)
-in common python module, build the wheel:
+### Base Image for Application Environment
 ```bash
-cd common/python
-pipenv run python -m build ./c_exts
-```
-Then manually install it by following command :
-```bash
-pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-xxxxx.whl
+cd /path/to/project-home/services
+docker image rm  storefront-backend-base:latest
+docker build --tag=storefront-backend-base:latest --file=store/infra/Dockerfile  .
 ```
 
-The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
-```bash
-pipenv run pip uninstall my-c-extention-lib
-```
+After custom image `storefront-backend-base:latest` is built successfully, use it for one of following tasks
+- run application in development ensironment
+- run all test cases
 
 ### Database Migration
+Generate migration script template for ORM code update :
 ```bash
+docker compose --file ./infra/docker-compose-db-generic.yml \
+    --file ./infra/docker-compose-migration-codegen-generic.yml \
+    --file ./infra/docker-compose-db-test.yml \
+    --file ./infra/docker-compose-migration-codegen-test.yml \
+    --env-file ./infra/interpolation-test.env  up --detach
+```
 
-// generate migration script template (not stable)
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini  revision --autogenerate \
-    --rev-id <VERSION_NUMBER>  --depends-on  <PREVIOUS_VERSION_NUMBER>  -m "whatever_message"
+The docker command above covers following basic alembic commands with all necessary variables / config files. 
+```shell 
+alembic --config alembic_app.ini  revision --autogenerate --rev-id <VERSION_NUMBER> \
+   --depends-on  <PREVIOUS_VERSION_NUMBER>  -m "whatever_message"
 
 // update
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
+alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
 
 // rollback
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini downgrade  <VERSION_NUMBER>
+alembic --config alembic_app.ini downgrade  <VERSION_NUMBER>
 
 // check all created revisions (might not sync yet to target database)
-APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini history
+alembic --config alembic_app.ini history
 ```
 
 Note
+- after the docker command, check new migration script file under path `migrations/app/versions`
 - the migration commands are the same as described in [alembic documentation](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
-- the environment variable `APP_SETTINGS` contains path to setting module for test for development purpose
+- Alembic's auto-generated migration script should be reusable for all runtime environments in most case , no need to generate them for different environments
 - `<VERSION_NUMBER>` can be the number which matches migration module under `migrations/app/versions` , for downgrade, `base` means rollback to state before any table is created in the database.
 
 
 ## Run
-### Development Server
+### API server and RPC consumer in Development Environment
 ```bash
-APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
-    --port 8011 store.entry.web:app  >& ./tmp/log/dev/store_app.log &
+docker compose \
+    --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml \
+    --file ./infra/docker-compose-db-dev.yml --file ./infra/docker-compose-srv-dev.yml \
+    --env-file ./infra/interpolation-dev.env --profile serverstart up --detach
 ```
 
-### RPC Consumer
-```bash
-SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv run celery \
-    --app=ecommerce_common.util  --config=settings.development   --workdir ./src  worker \
-    --concurrency 1  --loglevel=INFO  --hostname=storefront@%h  -E
-```
-
-### Production Server
-(TODO)
+To run smoke test after dev server is launched, append extra `--file ./infra/docker-compose-smoketest4dev.yml`  to the end of `--file` option sequence.
 
 ## Test
 ### Integration Test
 ```bash
-APP_SETTINGS="settings.test"  ./run_test
+docker compose \
+    --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml \
+    --file ./infra/docker-compose-db-test.yml --file ./infra/docker-compose-srv-test.yml \
+    --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
 ```
 
 ## Development
 ### Code Formatter
 ```bash
-pipenv run black ./src/ ./tests/  ./settings/ ./migrations
+pipenv run black --line-length=100 ./src/ ./tests/  ./settings/ ./migrations
 ```
 
 ### Linting Check

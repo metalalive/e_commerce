@@ -67,6 +67,8 @@ async def db_engine_resource(request):
         ),
         driver_label=ts_settings.DRIVER_LABEL,
         db_name=ts_settings.DB_NAME,
+        db_host=ts_settings.DB_HOST,
+        db_port=ts_settings.DB_PORT,
         # It is optional to set multi-statement flag for the API endpoints that
         # require to run multiple SQL statements in one go.
         conn_args={"client_flag": 0},
@@ -198,12 +200,8 @@ def _opendays_data_gen():
         chosen_day = weekdays[idx]
         new_data = {
             "day": chosen_day,
-            "time_open": time(
-                hour=random.randrange(9, 11), minute=random.randrange(60)
-            ),
-            "time_close": time(
-                hour=random.randrange(17, 22), minute=random.randrange(60)
-            ),
+            "time_open": time(hour=random.randrange(9, 11), minute=random.randrange(60)),
+            "time_close": time(hour=random.randrange(17, 22), minute=random.randrange(60)),
         }
         yield new_data
         idx = (idx + 1) % 7
@@ -244,7 +242,7 @@ def staff_data():
 def _product_avail_data_gen():
     base_range = 10
     price_range = 10000
-    product_id_start = 1
+    product_id_start = pow(2, 64) - 1
     attrs_charge_raw = [
         ("yght9Fx", "environmental", 29),
         ("j8KhoHs", -19, 39),
@@ -257,11 +255,11 @@ def _product_avail_data_gen():
         return m.model_dump()
 
     while True:
-        product_id_end = product_id_start + base_range
+        product_id_end = product_id_start - base_range
         start_after, end_before = _gen_time_period()
         new_data = {
             # AppIdGapNumberFinder.MAX_GAP_VALUE
-            "product_id": random.randrange(product_id_start, product_id_end),
+            "product_id": random.randrange(product_id_end, product_id_start),
             "start_after": start_after,
             "end_before": end_before,
             "base_price": random.randrange(0, price_range),
@@ -269,7 +267,7 @@ def _product_avail_data_gen():
             "attrs_last_update": datetime.now(UTC).replace(microsecond=0),
         }
         yield new_data
-        product_id_start += base_range
+        product_id_start -= base_range
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,44 @@
+services:
+  run-itest-storefront:
+    container_name: storefront-itest-0
+    image: storefront-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - APP_SETTINGS=settings.test
+      - DB_NAME=ecommerce_store
+      - DB_PORT=3311
+    working_dir: /app/store
+    command: /bin/bash ./run_entry
+    volumes:
+      - ./run_itest:/app/store/run_entry:ro
+      - ../settings/test.py:/app/store/settings/test.py:ro
+      - ../settings/common.py:/app/store/settings/common.py:ro
+      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../tests:/app/store/tests:ro
+      - ../../common/data/cors-test.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+    depends_on:
+      db-schema-migration-up-storefront:
+        condition: service_completed_successfully
+
+  db-schema-migration-down-storefront:
+    container_name: storefront-test-db-schema-downgrade
+    env_file:
+      - ./container-test.env
+    environment:
+      - APP_SETTINGS=settings.test
+    volumes:
+      - ../settings/test.py:/app/store/settings/test.py:ro
+      - ../../common/data/cors-test.json:/app/common/data/cors.json:ro 
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+    networks:
+      - net1
+    depends_on:
+      run-itest-storefront:
+        condition: service_completed_successfully
+

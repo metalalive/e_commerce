@@ -25,9 +25,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _get_supervisor_auth(prof_ids, shr_ctx):  # TODO, async operation
-    reply_evt = shr_ctx["auth_app_rpc"].get_profile(
-        ids=prof_ids, fields=["id", "auth", "quota"]
-    )
+    reply_evt = shr_ctx["auth_app_rpc"].get_profile(ids=prof_ids, fields=["id", "auth", "quota"])
     num_entry = shr_ctx["settings"].NUM_RETRY_RPC_RESPONSE
     if not reply_evt.finished:
         for _ in range(num_entry):  # TODO, async task
@@ -38,9 +36,16 @@ def _get_supervisor_auth(prof_ids, shr_ctx):  # TODO, async operation
                 pass
     rpc_response = reply_evt.result
     if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
-        raise shr_ctx.rpc_error(
-            detail={"app_code": [AppCodeOptions.user_management.value[0]]}
-        )
+        log_args = [
+            "action",
+            "verify-usr-id",
+            "status",
+            str(rpc_response["status"]),
+            "low-level-result",
+            str(rpc_response["result"]),
+        ]
+        _logger.error(None, *log_args)
+        raise shr_ctx.rpc_error(detail={"app_code": [AppCodeOptions.user_management.value[0]]})
     return rpc_response["result"]
 
 
@@ -52,6 +57,13 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileDto]]):
 
     def check_existence(self, shr_ctx):
         req_prof_ids = self.supervisor_profile_ids()
+        log_args = [
+            "action",
+            "check-store-exist",
+            "usr-prof-ids",
+            str(req_prof_ids),
+        ]
+        _logger.debug(None, *log_args)
         supervisor_verified = _get_supervisor_auth(req_prof_ids, shr_ctx)
         quota_arrangement = self._estimate_quota(supervisor_verified)
         self._contact_common_quota_check(
@@ -114,14 +126,10 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileDto]]):
 
         def _inner_chk(item):
             err = {}
-            num_existing_items = quota_chk_result[item.supervisor_id][
-                "num_existing_items"
-            ]
+            num_existing_items = quota_chk_result[item.supervisor_id]["num_existing_items"]
             num_new_items = quota_chk_result[item.supervisor_id]["num_new_items"]
             curr_used = num_existing_items + num_new_items
-            max_limit = quota_arrangement[item.supervisor_id][
-                QuotaMatCode.MAX_NUM_STORES
-            ]
+            max_limit = quota_arrangement[item.supervisor_id][QuotaMatCode.MAX_NUM_STORES]
             if max_limit < curr_used:
                 err["supervisor_id"] = item.supervisor_id
                 err["store_profile"] = {
@@ -145,6 +153,13 @@ class StoreSupervisorReqBody(PydanticBaseModel):
 
     def check_existence(self, shr_ctx):
         req_prof_id = self.supervisor_id
+        log_args = [
+            "action",
+            "check-supervisor-exist",
+            "usr-prof-ids",
+            str(req_prof_id),
+        ]
+        _logger.debug(None, *log_args)
         supervisor_verified = _get_supervisor_auth([req_prof_id], shr_ctx)
         quota_arrangement = self._estimate_quota(supervisor_verified, req_prof_id)
         self.metadata = {"quota_arrangement": quota_arrangement}
@@ -208,12 +223,28 @@ class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffDto]]):
                     break
         rpc_response = reply_evt.result
         if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
+            log_args = [
+                "action",
+                "verify-usr-id",
+                "status",
+                str(rpc_response["status"]),
+                "low-level-result",
+                str(rpc_response.get("result")),
+            ]
+            _logger.error(None, *log_args)
             raise shr_ctx.rpc_error(
                 detail={"app_code": [AppCodeOptions.user_management.value[0]]},
             )
         validated_staff_ids = rpc_response["result"]
         diff = set(staff_ids) - set(validated_staff_ids)
         if any(diff):
+            log_args = [
+                "action",
+                "verify-usr-id",
+                "invalid_ids",
+                str(diff),
+            ]
+            _logger.warning(None, *log_args)
             err_detail = {
                 "code": "invalid_descendant",
                 "supervisor_id": supervisor_id,
@@ -249,6 +280,13 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductDto]]):
     def validate_products(self, shr_ctx, staff_id: int):
         # TODO, refactor RPC and relevant validation
         item_ids = list(map(lambda obj: obj.product_id, self.root))
+        log_args = [
+            "action",
+            "check-product-exist",
+            "item-ids",
+            str(item_ids),
+        ]
+        _logger.debug(None, *log_args)
         cls = type(self)
         valid_data = cls.refresh_product_attributes(
             shr_ctx,
@@ -270,9 +308,7 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductDto]]):
     def refresh_product_attributes(
         shr_ctx, product_ids: List[int], staff_id: int
     ) -> Dict[int, Dict]:
-        reply_evt = shr_ctx["product_app_rpc"].get_product(
-            item_ids=product_ids, profile=staff_id
-        )
+        reply_evt = shr_ctx["product_app_rpc"].get_product(item_ids=product_ids, profile=staff_id)
         num_retry = shr_ctx["settings"].NUM_RETRY_RPC_RESPONSE
         if not reply_evt.finished:
             for _ in range(num_retry):  # TODO, async task
@@ -281,15 +317,20 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductDto]]):
                     break
         rpc_response = reply_evt.result
         if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
-            raise shr_ctx.rpc_error(
-                detail={"app_code": [AppCodeOptions.product.value[0]]}
-            )
+            log_args = [
+                "action",
+                "verify-product-ids",
+                "status",
+                str(rpc_response["status"]),
+                "low-level-result",
+                str(rpc_response["result"]),
+            ]
+            _logger.error(None, *log_args)
+            raise shr_ctx.rpc_error(detail={"app_code": [AppCodeOptions.product.value[0]]})
         raw = rpc_response["result"]["result"]
         return {
             d["id_"]: {
-                "attributes": {
-                    (v["label"]["id_"], v["value"]) for v in d["attributes"]
-                },
+                "attributes": {(v["label"]["id_"], v["value"]) for v in d["attributes"]},
                 "last_update": datetime.fromisoformat(d["last_update"]),
             }
             for d in raw
@@ -299,9 +340,7 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductDto]]):
 ## end of class EditProductsReqBody
 
 
-def _get_quota_arrangement_helper(
-    supervisor_verified: dict, req_prof_id: int, out: dict
-):
+def _get_quota_arrangement_helper(supervisor_verified: dict, req_prof_id: int, out: dict):
     err_detail = []
     item = supervisor_verified.get(req_prof_id, None)
     if item:

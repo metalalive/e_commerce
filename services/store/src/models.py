@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Tuple, List, Optional, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
@@ -23,7 +24,7 @@ from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import declarative_base, relationship, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
-from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
+from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER, BIGINT
 
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
         StoreStaffsReqBody,
         EditProductsReqBody,
     )
+
+_logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -120,13 +123,21 @@ class AppIdGapNumberFinder(IdGapNumberFinder):
     def get_db_table_name(self, model_cls) -> str:
         return model_cls.__table__.name
 
-    def extract_dup_id_from_error(self, error):
+    def extract_dup_id_from_error(self, error) -> int:
         raw_msg_chars = error.args[0].split()
         idx = raw_msg_chars.index("entry")
         dup_id = raw_msg_chars[idx + 1]
         dup_id = dup_id.strip("'")
-        dup_id = int(dup_id)
-        return dup_id
+        log_args = [
+            "action",
+            "extract-duplicate-id",
+            "class",
+            type(self).__name__,
+            "dup-id",
+            dup_id,
+        ]
+        _logger.debug(None, *log_args)
+        return int(dup_id)
 
 
 class QuotaStatisticsMixin:
@@ -145,9 +156,7 @@ class QuotaStatisticsMixin:
         base_query = cls.get_existing_items_stats(target_ids, attname)
         result = {}
         for target_id in target_ids:
-            new_items = tuple(
-                filter(lambda obj: getattr(obj, attname) == target_id, objs)
-            )
+            new_items = tuple(filter(lambda obj: getattr(obj, attname) == target_id, objs))
             num_new_items = len(new_items)
             query = base_query.filter(attr_fd == target_id)
             resultset = await session.execute(query)
@@ -217,9 +226,7 @@ class StoreProfile(Base, QuotaStatisticsMixin):
 
     @classmethod
     async def quota_stats(cls, objs, session, target_ids):
-        return await super().quota_stats(
-            objs, session, target_ids, attname="supervisor_id"
-        )
+        return await super().quota_stats(objs, session, target_ids, attname="supervisor_id")
 
     @classmethod
     async def try_load(
@@ -295,9 +302,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         primary_key=True,
     )
     # come from GenericUserProfile in user_management app
-    staff_id = Column(
-        MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False
-    )
+    staff_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False)
     store_applied = relationship("StoreProfile", back_populates="staff")
 
     @classmethod
@@ -309,11 +314,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         cls, session, store_id: int, reqdata: List["StoreStaffsReqBody"]
     ) -> List[Self]:
         staff_ids = [d.staff_id for d in reqdata]
-        stmt = (
-            SqlAlSelect(cls)
-            .where(cls.store_id == store_id)
-            .where(cls.staff_id.in_(staff_ids))
-        )
+        stmt = SqlAlSelect(cls).where(cls.store_id == store_id).where(cls.staff_id.in_(staff_ids))
         result = await session.execute(stmt)
         return [p[0] for p in result]
 
@@ -382,7 +383,7 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         ForeignKey("store_profile.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    product_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True)
+    product_id = Column(BIGINT(unsigned=True), primary_key=True)
     base_price = Column(MYSQL_INTEGER(unsigned=True), nullable=False)
     store_applied = relationship("StoreProfile", back_populates="products")
 
@@ -396,12 +397,8 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         super().__init__(*args, **kwargs)
 
     def __eq__(self, other: Self) -> bool:
-        attrs_update = {
-            (a["label_id"], a["value"], a["price"]) for a in other.attrs_charge
-        }
-        attrs_saved = {
-            (a["label_id"], a["value"], a["price"]) for a in self.attrs_charge
-        }
+        attrs_update = {(a["label_id"], a["value"], a["price"]) for a in other.attrs_charge}
+        attrs_saved = {(a["label_id"], a["value"], a["price"]) for a in self.attrs_charge}
         return (
             (attrs_update == attrs_saved)
             and (self.store_id == other.store_id)
@@ -481,11 +478,7 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
         pitem_cond = map(_cond_fn, item_ids)
         find_product_condition = SqlAlOr(*pitem_cond)
-        stmt = (
-            SqlAlDelete(cls)
-            .where(cls.store_id == store_id)
-            .where(find_product_condition)
-        )
+        stmt = SqlAlDelete(cls).where(cls.store_id == store_id).where(find_product_condition)
         result = await session.execute(stmt)
         return result.rowcount
 

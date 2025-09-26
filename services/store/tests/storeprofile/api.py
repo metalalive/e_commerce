@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.util import LIMIT_MAX_CTYPE_UINT32
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.dto import StoreCurrency
@@ -38,9 +39,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_xoxoxox"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             response = test_client.post(
                 self.url,
@@ -80,9 +79,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data) for _ in range(num_items)]
         for item in body:
@@ -150,9 +147,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             with patch("ecommerce_common.util.messaging.rpc.MethodProxy._call"):
@@ -185,9 +180,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data)]
         expect_rpc_fail_status = [
@@ -226,9 +219,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data) for _ in range(num_items)]
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
@@ -283,9 +274,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data) for _ in range(num_stores)]
         body[0]["emails"] = [{"addr": addr} for addr in invalid_emails]
@@ -322,9 +311,7 @@ class TestCreation:
         result = response.json()
         for err in result["detail"]:
             loc_tail = err["loc"][-4:]
-            assert (
-                loc_tail[0] == 0 and loc_tail[1] == "emails" and loc_tail[3] == "addr"
-            )
+            assert loc_tail[0] == 0 and loc_tail[1] == "emails" and loc_tail[3] == "addr"
             assert (
                 "value is not a valid email address" in err["msg"]
                 or "Input should be a valid string" in err["msg"]
@@ -351,15 +338,12 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data) for _ in range(num_stores)]
         body[0]["phones"] = [next(phone_data) for _ in range(2)]
         body[1]["phones"] = [
-            {"country_code": phone[0], "line_number": phone[1]}
-            for phone in invalid_phones
+            {"country_code": phone[0], "line_number": phone[1]} for phone in invalid_phones
         ]
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             with patch(
@@ -417,9 +401,7 @@ class TestCreation:
                 {"app_code": app_code, "codename": "add_storeprofile"},
             ],
         }
-        encoded_token = keystore.gen_access_token(
-            profile=profile_data, audience=["store"]
-        )
+        encoded_token = keystore.gen_access_token(profile=profile_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
         body = [next(store_data) for _ in range(num_stores_saved)]
         chosen_supervisor_id = body[0]["supervisor_id"]
@@ -462,6 +444,28 @@ class TestCreation:
                 assert err["store_profile"]["max_limit"] == max_num_stores_per_user
                 assert err["store_profile"]["num_existing_items"] == num_stores_saved
                 assert err["store_profile"]["num_new_items"] == num_new_stores
+
+    def test_num_overflow(self, keystore, test_client, store_data):
+        profile_data = {
+            "id": 99,
+            "privilege_status": ROLE_ID_STAFF,
+            "quotas": [],
+            "roles": [
+                {"app_code": app_code, "codename": "view_storeprofile"},
+                {"app_code": app_code, "codename": "add_storeprofile"},
+            ],
+        }
+        encoded = keystore.gen_access_token(profile=profile_data, audience=["store"])
+        headers = {"Authorization": "Bearer %s" % encoded}
+        body = [next(store_data)]
+        body[0]["supervisor_id"] = LIMIT_MAX_CTYPE_UINT32 + 1
+        with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
+            response = test_client.post(self.url, headers=headers, json=body)
+        assert response.status_code == 422
+        result = response.json()
+        detail = result["detail"][0]
+        assert detail["ctx"]["le"] < body[0]["supervisor_id"]
+        assert detail["loc"] == ["body", 0, "supervisor_id"]
 
 
 class TestUpdateContact:
@@ -546,9 +550,7 @@ class TestUpdateContact:
         actual_value = set(map(lambda e: e["addr"], body["emails"]))
         assert expect_value == actual_value
         expect_value = set(map(lambda p: (p.country_code, p.line_number), obj.phones))
-        actual_value = set(
-            map(lambda p: (p["country_code"], p["line_number"]), body["phones"])
-        )
+        actual_value = set(map(lambda p: (p["country_code"], p["line_number"]), body["phones"]))
         assert expect_value == actual_value
         assert obj.location.country.value == body["location"]["country"]
         for col_name in ("locality", "street", "detail", "floor"):
@@ -671,9 +673,7 @@ class TestSwitchSupervisor:
         _mocked_rpc_reply_refresh,
     )
     @pytest.mark.asyncio(loop_scope="session")
-    async def test_ok(
-        self, session_for_verify, keystore, test_client, saved_store_objs
-    ):
+    async def test_ok(self, session_for_verify, keystore, test_client, saved_store_objs):
         obj = await anext(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
         new_supervisor_id = 5566
@@ -748,17 +748,13 @@ class TestSwitchSupervisor:
                     old_supervisor_id = obj.supervisor_id
                     auth_data = self._auth_data_pattern
                     auth_data["id"] = old_supervisor_id
-                    encoded_token = keystore.gen_access_token(
-                        profile=auth_data, audience=["store"]
-                    )
+                    encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
                     headers = {"Authorization": "Bearer %s" % encoded_token}
                     url = self.url.format(store_id=obj.id)
                     response = test_client.patch(url, headers=headers, json=body)
                     expect_status_code = 403 if obj is objs[-1] else 200
                     assert response.status_code == expect_status_code
-        stmt = sa_select(StoreProfile.id).filter(
-            StoreProfile.supervisor_id == new_supervisor_id
-        )
+        stmt = sa_select(StoreProfile.id).filter(StoreProfile.supervisor_id == new_supervisor_id)
         resultset = await session_for_verify.execute(stmt)
         actual_data = set(map(lambda row: row[0], resultset.fetchall()))
         expect_data = set(map(lambda obj: obj.id, objs[:-1]))
@@ -769,9 +765,7 @@ class TestSwitchSupervisor:
         _mocked_rpc_reply_refresh,
     )
     @pytest.mark.asyncio(loop_scope="session")
-    async def test_deactivated_supervisor(
-        self, keystore, test_client, saved_store_objs
-    ):
+    async def test_deactivated_supervisor(self, keystore, test_client, saved_store_objs):
         obj = await anext(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
         new_supervisor_id = 5568
@@ -876,9 +870,7 @@ class TestReadWeb:
             assert getattr(obj, field) == result[field]
         expect_data = list(
             map(
-                lambda obj: {
-                    k: getattr(obj, k) for k in ("country_code", "line_number")
-                },
+                lambda obj: {k: getattr(obj, k) for k in ("country_code", "line_number")},
                 obj.phones,
             )
         )
@@ -886,10 +878,7 @@ class TestReadWeb:
         assert expect_data == actual_data
         expect_data = list(
             map(
-                lambda obj: {
-                    k: getattr(obj, k)
-                    for k in ("staff_id", "start_after", "end_before")
-                },
+                lambda obj: {k: getattr(obj, k) for k in ("staff_id", "start_after", "end_before")},
                 obj.staff,
             )
         )
@@ -912,6 +901,6 @@ class TestReadRpc:
         assert actual["supervisor_id"] == obj.supervisor_id
         assert len(actual["emails"]) == len(obj.emails)
         assert len(actual["phones"]) == len(obj.phones)
-        assert actual["location"]["country"] == obj.location.country
+        assert actual["location"]["country"] == obj.location.country.value
         assert len(actual["staff"]) == len(obj.staff)
         assert len(actual["open_days"]) == len(obj.open_days)

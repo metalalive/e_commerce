@@ -22,9 +22,7 @@ FASTAPI_SETUP_VAR = "APP_SETTINGS"
 # non-standard way of getting configuration module hierarchy
 CELERY_SETUP_VAR = "CELERY_CONFIG_MODULE"
 
-cfg_mod_path = os.getenv(
-    FASTAPI_SETUP_VAR, os.getenv(CELERY_SETUP_VAR, "settings.common")
-)
+cfg_mod_path = os.getenv(FASTAPI_SETUP_VAR, os.getenv(CELERY_SETUP_VAR, "settings.common"))
 
 _settings = import_module(cfg_mod_path)
 
@@ -47,6 +45,7 @@ class AppSharedContext(UserDict):
                 dst_app_name="product",
                 src_app_name="store",
                 srv_basepath=str(settings.SYS_BASE_PATH),
+                celery_tasks_pathmap={"get_product": "product.api.rpc.get_product"},
             ),
             "order_app_rpc": RPCproxy(
                 dst_app_name="order",
@@ -100,6 +99,8 @@ def _init_db_engine(conn_args: Optional[dict] = None):
         ),
         "driver_label": _settings.DRIVER_LABEL,
         "db_name": _settings.DB_NAME,
+        "db_host": _settings.DB_HOST,
+        "db_port": _settings.DB_PORT,
     }
     if conn_args:
         kwargs["conn_args"] = conn_args

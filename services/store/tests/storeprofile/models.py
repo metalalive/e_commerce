@@ -150,9 +150,7 @@ class TestCreation:
         chk_result = await StoreProfile.quota_stats(
             parts[2], session=session_for_test, target_ids=target_ids
         )
-        assert chk_result[supervisor_id]["num_existing_items"] == len(parts[0]) + len(
-            parts[1]
-        )
+        assert chk_result[supervisor_id]["num_existing_items"] == len(parts[0]) + len(parts[1])
         assert chk_result[supervisor_id]["num_new_items"] == len(parts[2])
 
     @pytest.mark.asyncio(loop_scope="session")
@@ -171,15 +169,9 @@ class TestCreation:
         num_opendays_per_store = 4
 
         def instantiate_fn(d):
-            email_data_gen = map(
-                lambda idx: next(email_data), range(num_emails_per_store)
-            )
-            phone_data_gen = map(
-                lambda idx: next(phone_data), range(num_phones_per_store)
-            )
-            opendays_gen = map(
-                lambda idx: next(opendays_data), range(num_opendays_per_store)
-            )
+            email_data_gen = map(lambda idx: next(email_data), range(num_emails_per_store))
+            phone_data_gen = map(lambda idx: next(phone_data), range(num_phones_per_store))
+            opendays_gen = map(lambda idx: next(opendays_data), range(num_opendays_per_store))
             d["emails"] = list(map(lambda d: StoreEmail(**d), email_data_gen))
             d["phones"] = list(map(lambda d: StorePhone(**d), phone_data_gen))
             d["location"] = OutletLocation(**next(loc_data))
@@ -192,14 +184,10 @@ class TestCreation:
         for o in objs:
             await session_for_test.refresh(o)
         ids = tuple([obj.id for obj in objs])
-        chk_result = await StoreEmail.quota_stats(
-            [], session=session_for_test, target_ids=ids
-        )
+        chk_result = await StoreEmail.quota_stats([], session=session_for_test, target_ids=ids)
         for store_id, info in chk_result.items():
             assert info["num_existing_items"] == num_emails_per_store
-        chk_result = await StorePhone.quota_stats(
-            [], session=session_for_test, target_ids=ids
-        )
+        chk_result = await StorePhone.quota_stats([], session=session_for_test, target_ids=ids)
         for store_id, info in chk_result.items():
             assert info["num_existing_items"] == num_phones_per_store
 
@@ -226,31 +214,25 @@ class TestUpdate:
         obj.emails.extend(new_email_objs)
         obj.phones.extend(new_phone_objs)
         await session_for_test.commit()
-        await session_for_test.refresh(
-            obj, attribute_names=["emails", "phones", "location"]
-        )
+        await session_for_test.refresh(obj, attribute_names=["emails", "phones", "location"])
         stats_after_update = await StorePhone.quota_stats(
             [], session=session_for_test, target_ids=[store_id]
         )
 
         for expect_new_email in new_email_objs:
-            actual_new_email = next(
-                filter(lambda e: e.seq == expect_new_email.seq, obj.emails)
-            )
+            actual_new_email = next(filter(lambda e: e.seq == expect_new_email.seq, obj.emails))
             assert expect_new_email.addr == actual_new_email.addr
         for expect_new_phone in new_phone_objs:
-            actual_new_phone = next(
-                filter(lambda p: p.seq == expect_new_phone.seq, obj.phones)
-            )
+            actual_new_phone = next(filter(lambda p: p.seq == expect_new_phone.seq, obj.phones))
             assert expect_new_phone.country_code == actual_new_phone.country_code
             assert expect_new_phone.line_number == actual_new_phone.line_number
         for field_name, expect_value in new_loc_data.items():
             actual_value = getattr(obj.location, field_name)
             assert expect_value == actual_value
 
-        assert (
-            1 + stats_before_update[store_id]["num_existing_items"]
-        ) == stats_after_update[obj.id]["num_existing_items"]
+        assert (1 + stats_before_update[store_id]["num_existing_items"]) == stats_after_update[
+            obj.id
+        ]["num_existing_items"]
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_edit_staff(self, session_for_test, staff_data, saved_store_objs):
@@ -263,9 +245,7 @@ class TestUpdate:
         new_end_datetime = obj.staff[0].end_before
         await session_for_test.commit()
         await session_for_test.refresh(obj, attribute_names=["staff"])
-        filtered = tuple(
-            filter(lambda s: s.staff_id == evicted_staff_obj.staff_id, obj.staff)
-        )
+        filtered = tuple(filter(lambda s: s.staff_id == evicted_staff_obj.staff_id, obj.staff))
         assert not any(filtered)
         edited_staff = next(filter(lambda s: s.staff_id == edited_staff_id, obj.staff))
         assert edited_staff.end_before == new_end_datetime

@@ -1,4 +1,8 @@
 import os
+import argparse
+
+# set ExtendedLogger as default logger
+from ecommerce_common.logging.logger import ExtendedLogger  # noqa: F401
 from importlib import import_module
 from contextlib import asynccontextmanager
 from typing import Callable, Tuple
@@ -29,9 +33,9 @@ async def toplvl_lifespan_cb(app: FastAPI):
     """
     fn = import_module_string(dotted_path=settings.INIT_SHARED_CONTEXT_FN)
     shr_ctx = await fn(app)
-    _logger.info("[app]life-span starting")
+    _logger.info(None, "action", "lifespan-start")
     yield shr_ctx
-    _logger.info("[app]life-span terminating")
+    _logger.info(None, "action", "lifespan-terminating")
     fn = import_module_string(dotted_path=settings.DEINIT_SHARED_CONTEXT_FN)
     await fn(app)
 
@@ -64,3 +68,27 @@ def _init_app(_setting):
 # Lifespan feature in `uvicorn` server requires `FastAPI` instance to
 # be created as soon as this module is intially loaded by `uvicorn`
 app: FastAPI = _init_app(_setting=settings)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Run the FastAPI application.")
+    parser.add_argument("--host", type=str, required=True, help="Host address to bind to.")
+    parser.add_argument("--port", type=int, required=True, help="Port to listen on.")
+    parser.add_argument(
+        "--access-log",
+        type=lambda x: (str(x).lower() == "true"),  # Convert string 'true'/'false' to boolean
+        required=True,
+        help="Enable access logging (true/false).",
+    )
+    parser.add_argument(
+        "--log-config", type=str, required=True, help="Path to log configuration file."
+    )
+    args = parser.parse_args()
+    uvicorn.run(
+        "store.entry.web:app",
+        host=args.host,
+        port=args.port,
+        access_log=args.access_log,
+        log_config=args.log_config,
+    )

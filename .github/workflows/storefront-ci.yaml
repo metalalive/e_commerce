@@ -12,78 +12,111 @@ on:
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
 jobs:
-    init-env-then-tests:
+    lint-check:
       if: startsWith(github.head_ref, 'storefront-dev/')
       runs-on: ubuntu-24.04
-      services:
-        mariadb_v11:
-          image: mariadb:11.2.6
-          # official docker image only exposes default port 3306 to external world
-          # map any non-default port external clients will use to 3306
-          ports:
-            - 3307:3306
-          env:
-            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-            MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
-            MARIADB_ROOT_HOST: 'localhost'
-            MARIADB_DATABASE: 'test_ecommerce_store'
-            MARIADB_USER: 'DB_USERNAME'
-            MARIADB_PASSWORD: 'DB_PASSWORD'
-
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12.7'
-
-      - name: Install init pipenv
-        run: |
-            python3 -m pip install pipenv==2023.12.1
-            pipenv --version
-
-      - name: install dependency packages
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            cd services/store
-            pipenv install --dev
-            pipenv run python -c "from ecommerce_common.util import import_module_string"
-            pipenv run python -c "import fastapi"
-            pipenv run python -c "import store"
-
-      - name: build internal common package
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            cd services/common/python
-            pipenv run pip3 install build==1.2.2
-            pipenv run python -m build ./c_exts
-      - name: install internal common package
-        run: |
-            cd services/store
-            pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
-            pipenv run python -c "from c_exts.util import keygen"
+          python-version: 3.13.7
       
-      - name: mariadb database migration
-        env:
-            APP_SETTINGS: "settings.test"
+      - name: Install ruff linter
+        run: python3.13 -m pip install ruff==0.13.0
+      - name: lint check
+        working-directory: services/store
         run: |
-            cd services/common/data
+            ruff check  ./src/ ./tests/  ./settings/ 
+
+    build-docker-image:
+      if: startsWith(github.head_ref, 'storefront-dev/')
+      needs: lint-check
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+        - name: Build Docker image and export to tar
+          uses: docker/build-push-action@v5
+          with:
+            context: services
+            file: services/store/infra/Dockerfile
+            outputs: type=docker,dest=${{ runner.temp }}/storefront-backend-base.tar
+            tags: storefront-backend-base:latest
+            push: false
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+        - name: Upload artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: storefront-docker-image
+            path: ${{ runner.temp }}/storefront-backend-base.tar
+            retention-days: 1
+
+    init-env-then-test:
+      if: startsWith(github.head_ref, 'storefront-dev/')
+      runs-on: ubuntu-24.04
+      needs: build-docker-image
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Build Docker image for database and export to tar
+        uses: docker/build-push-action@v5
+        with:
+          context: infra
+          file: infra/mariadb-ext.dockerfile
+          outputs: type=docker
+          tags: mariadb-ext:11-noble
+          push: false
+      - name: Download docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: storefront-docker-image
+          path: ${{ runner.temp }}
+      - name: Load docker image
+        run: |
+            docker load --input ${{ runner.temp }}/storefront-backend-base.tar
+            docker image list
+      
+      - name: set up database persistence path
+        working-directory: ${{ github.workspace }}
+        # the user `mariadb` in docker container has UID 999 and GID 999 
+        run: |
+          mkdir -p installed/mariadb/data  installed/mariadb/log
+          sudo chown --recursive 999:999 installed/mariadb
+
+      - name: Create test environment file
+        working-directory: services/store/infra
+        run: |
+          echo "DB_HOST=storefront-test-mariadb" > ./container-test.env
+          echo "MARIADB_ROOT_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "SITEDBA_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "SITEDBA_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "DB_APP_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "DB_APP_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "CONTAINER_IP_RANGE=172.19.10.%" >> ./container-test.env
+          echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
+          echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
+
+      - name: set up credentials for test
+        working-directory: services/common/data
+        run: |
             ln -s ./secrets_template.json  ./secrets.json
-            cd ../../store
-            pipenv run alembic --config ./alembic_app.ini upgrade  000004
+            ls -lt ./
 
-      - name: run linter
+      - name: run database test
+        working-directory: services/store
         run: |
-            cd services/store
-            pipenv run ruff check  ./src/ ./tests/  ./settings/ ./migrations
+            docker compose --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml  --file ./infra/docker-compose-db-test.yml --file ./infra/docker-compose-srv-test.yml  --env-file ./infra/interpolation-test.env  --profile cleandbschema  up --detach
+            python3 ${{ github.workspace }}/.github/docker_wait.py  --container-name storefront-test-db-schema-downgrade  --target-status exited --timeout-secs 660
+            docker ps --all --filter name=storefront-*
+            docker logs storefront-itest-0
+            docker logs storefront-test-db-schema-upgrade --tail 30
+            docker logs storefront-test-db-schema-downgrade --tail 30
 
-      - name: run unit test
-        env:
-            APP_SETTINGS: "settings.test"
+      - name: Clean up containers database test
+        if: always()
+        working-directory: services/store
         run: |
-            cd services/store 
-            ./run_test
+            docker compose --file ./infra/docker-compose-db-generic.yml --file ./infra/docker-compose-srv-generic.yml  --file ./infra/docker-compose-db-test.yml --file ./infra/docker-compose-srv-test.yml  --env-file ./infra/interpolation-test.env  --profile cleandbschema  down --volumes
 

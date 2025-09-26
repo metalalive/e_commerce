@@ -1,0 +1,66 @@
+services:
+  authgen-smoketest-storefront:
+    container_name: storefront-dev-auth4smoketest
+    image: usrmgt-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ../../user_management/infra/container-dev.env
+      - ./smoketest.env
+    environment:
+      - DB_NAME=ecommerce_usermgt
+      - DB_PORT=3307
+      - API_HOST=usrmgt-dev-apisrv
+      - API_PORT=8008
+    working_dir: /app/usermgt
+    command: python3 -m tests.gen_jwt_smoketest
+    volumes:
+      - ../tests/gen_jwt_smoketest.py:/app/usermgt/tests/gen_jwt_smoketest.py
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../user_management/settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../../user_management/settings/development.py:/app/usermgt/settings/development.py:ro
+      - ../../user_management/tests/standalone_env_setup.py:/app/usermgt/tests/standalone_env_setup.py:ro
+      - ../../user_management/devtools.py:/app/usermgt/devtools.py:ro
+      - ../../tmp/log/dev:/app/tmp/log/dev
+      - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
+    networks:
+      - net3
+
+  # dependent containers in other applications after their own smoke tests :
+  # - inter-apps-msgq-dev
+  # - usrmgt-dev-mariadb productmgt-dev-elastic ordermgt-dev-mariadb
+  # - usrmgt-dev-apisrv usrmgt-dev-rpcconsumer ordermgt-dev-rpcconsumer productmgt-dev-rpcconsumer
+  smoke-test-storefront:
+    container_name: storefront-dev-smoketest
+    image: ecom-common-py:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-dev.env
+      - ./smoketest.env
+    environment:
+      API_HOST: storefront-dev-apisrv
+      API_PORT: 8011
+      APP_SETTINGS: settings.celeryconfig
+      SYS_BASE_PATH: /app
+      PYTHONPATH: $PYTHONPATH:/app/store:/app/store/settings
+    working_dir: /app/entry
+    command: python3 ./smoke_test.py
+    volumes:
+      - ../tests/smoke_test.py:/app/entry/smoke_test.py:ro
+      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/dev:/app/log
+    depends_on:
+      authgen-smoketest-storefront:
+        condition: service_completed_successfully
+      api-server-storefront:
+        condition: service_healthy
+      rpc-consumer-storefront:
+        condition: service_started
+    networks:
+      - net1
+      - net2
+      - net3
+

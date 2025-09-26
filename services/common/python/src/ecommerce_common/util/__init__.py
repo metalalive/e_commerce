@@ -7,6 +7,10 @@ from pathlib import Path
 from importlib import import_module
 from collections.abc import Iterable
 
+# create the parameters since it is impossible to reuse macros from system-level C header `limits.h`
+LIMIT_MAX_CTYPE_UINT64 = pow(2, 64) - 1
+LIMIT_MAX_CTYPE_UINT32 = pow(2, 32) - 1
+
 
 def get_header_name(name: str):
     """

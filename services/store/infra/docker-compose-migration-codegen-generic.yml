@@ -1,0 +1,24 @@
+services:
+  db-schema-migration-up-storefront:
+    environment:
+      - ALEMBIC_REVISION_NUMBER=000004
+
+  db-schema-migration-codegen-storefront:
+    container_name: storefront-unknown-db-migrate-codegen
+    image: storefront-backend-base:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_NAME=ecommerce_store
+      - DB_PORT=3311
+    working_dir: /app/store
+    command: ["/bin/sh", "-c", "alembic --config alembic_app.ini revision --autogenerate --rev-id 000005 --depends-on 000004 -m \"modify_product_id_64b\""]
+    volumes:
+      - ../alembic_app.ini:/app/store/alembic_app.ini:ro
+      - ../settings/common.py:/app/store/settings/common.py:ro
+      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../migrations:/app/store/migrations
+    depends_on:
+      db-schema-migration-up-storefront:
+        condition: service_completed_successfully
+

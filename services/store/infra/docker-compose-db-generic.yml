@@ -1,0 +1,41 @@
+services:
+  mariadb-storefront:
+    image: mariadb-ext:11-noble
+    container_name: storefront-generic-mariadb
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_NAME=ecommerce_store
+    ports:
+      # Maps port 3310 on the host to port 3311 in the container
+      - "3310:3311"
+    volumes:
+      - ./mariadb-cfg/db-init.sh:/docker-entrypoint-initdb.d/db-init.sh:ro
+      - ${MARIADB_DATA_VOL}:/var/lib/mysql
+      - ${MARIADB_LOG_VOL}:/var/log/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3311 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+
+  db-schema-migration-up-storefront:
+    container_name: storefront-unknown-db-schema-upgrade
+    image: storefront-backend-base:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_NAME=ecommerce_store
+      - DB_PORT=3311
+    working_dir: /app/store
+    command: ["/bin/sh", "-c", "./run_db_upgrade"]
+    volumes:
+      - ./run_db_upgrade:/app/store/run_db_upgrade:ro
+      - ../alembic_app.ini:/app/store/alembic_app.ini:ro
+      - ../settings/common.py:/app/store/settings/common.py:ro
+      - ../settings/celeryconfig.py:/app/store/settings/celeryconfig.py:ro
+      - ../migrations:/app/store/migrations:ro
+    depends_on:
+      mariadb-storefront:
+        condition: service_healthy
