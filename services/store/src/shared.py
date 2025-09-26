@@ -45,6 +45,7 @@ class AppSharedContext(UserDict):
                 dst_app_name="product",
                 src_app_name="store",
                 srv_basepath=str(settings.SYS_BASE_PATH),
+                celery_tasks_pathmap={"get_product": "product.api.rpc.get_product"},
             ),
             "order_app_rpc": RPCproxy(
                 dst_app_name="order",

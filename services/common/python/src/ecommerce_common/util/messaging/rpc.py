@@ -97,9 +97,7 @@ class ReplyListener:
             self._q_created = self.queue_consumer.declare(conn=conn, label=self._id)
 
     def get_reply_event(self, correlation_id, timeout_s=10):
-        reply_event = RpcReplyEvent(
-            listener=self, timeout_s=timeout_s, corr_id=correlation_id
-        )
+        reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_s, corr_id=correlation_id)
         self._reply_events[correlation_id] = reply_event
         return reply_event
 
@@ -112,9 +110,7 @@ class ReplyListener:
         err = None
         try:
             self.queue_consumer.ensure_connection_ready()
-            for _ in self.queue_consumer.consume(
-                limit=num_of_msgs_fetch, timeout=timeout
-            ):
+            for _ in self.queue_consumer.consume(limit=num_of_msgs_fetch, timeout=timeout):
                 pass
         except socket.timeout as e:
             log_args = [
@@ -268,7 +264,12 @@ class RPCproxy:
     """
 
     def __init__(
-        self, dst_app_name: str, src_app_name: str, srv_basepath: str = ".", **options
+        self,
+        dst_app_name: str,
+        src_app_name: str,
+        srv_basepath: str = ".",
+        celery_tasks_pathmap: Optional[Dict] = None,
+        **options
     ):
         _default_msg_broker_url = _get_amqp_url(
             secrets_path=os.path.join(srv_basepath, "common/data/secrets.json")
@@ -280,6 +281,7 @@ class RPCproxy:
             dst_app_label=dst_app_name,
             src_app_label=src_app_name,
         )
+        self._pycelery_tasks_map = celery_tasks_pathmap
         self._options = options
         self._options.update({"broker_url": _default_msg_broker_url})
 
@@ -290,10 +292,15 @@ class RPCproxy:
         listener.destroy()
 
     def __getattr__(self, name):
+        if self._pycelery_tasks_map:
+            tskpath = self._pycelery_tasks_map.get(name, None)
+        else:
+            tskpath = None
         return MethodProxy(
             dst_app_name=self._dst_app_name,
             src_app_name=self._src_app_name,
             method_name=name,
+            celery_task_path=tskpath,
             reply_listener=self._rpc_reply_listener,
             **self._options
         )
@@ -309,12 +316,14 @@ class MethodProxy:
         method_name: str,
         broker_url: str,
         reply_listener,
+        celery_task_path: Optional[str] = None,
         enable_confirm: Optional[bool] = None,
         **options
     ):
         self._dst_app_name = dst_app_name
         self._src_app_name = src_app_name
         self._method_name = method_name
+        self._celery_task_path = celery_task_path
         self._broker_url = broker_url
         self._reply_listener = reply_listener
         self.enable_confirm = enable_confirm  # each published message has its own setup
@@ -361,9 +370,7 @@ class MethodProxy:
         )
         reply_to = self._reply_listener.routing_key
         correlation_id = str(uuid.uuid4())
-        context = self.get_message_context(
-            id=correlation_id, src_app=self._src_app_name
-        )
+        context = self.get_message_context(id=correlation_id, src_app=self._src_app_name)
         reply_event = self._reply_listener.get_reply_event(
             correlation_id, timeout_s=self._options.get("reply_timeout_sec", 5)
         )
@@ -436,21 +443,22 @@ class MethodProxy:
                 raise
         return reply_event
 
-    def get_message_context(
-        self, id, src_app, content_type=MSG_PAYLOAD_DEFAULT_CONTENT_TYPE
-    ):
+    def get_message_context(self, id, src_app, content_type=MSG_PAYLOAD_DEFAULT_CONTENT_TYPE):
         # in this project , the RPC services are managed by Celery, which reference
         # extra headers :
         # * id : uuid4  string sequence
         # * task : python hierarchical path to Celery task function
         # https://docs.celeryq.dev/en/master/internals/protocol.html
+        taskpath = self._celery_task_path
+        if not taskpath:
+            taskpath = RPC_DEFAULT_TASK_PATH_PATTERN % (
+                self._dst_app_name,
+                self._method_name,
+            )
         out = {}
         out["id"] = id
         out["content_type"] = content_type
-        out["task"] = RPC_DEFAULT_TASK_PATH_PATTERN % (
-            self._dst_app_name,
-            self._method_name,
-        )
+        out["task"] = taskpath
         out["headers"] = {"src_app": src_app}  # AMQP message headers
         return out
 
