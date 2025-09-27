@@ -6,6 +6,7 @@ from django.utils.module_loading import import_string
 
 from ecommerce_common.auth.keystore import create_keystore_helper
 from ecommerce_common.auth.jwt import JWT
+from ecommerce_common.models.constants import ROLE_ID_STAFF
 
 """
 Helper functions used in development envisonment.
@@ -32,9 +33,7 @@ def gen_auth_token(
     def quota_gen_fn(k):
         return {"app_code": k[0], "mat_code": k[1], "maxnum": k[2]}
 
-    keystore = create_keystore_helper(
-        cfg=django_settings.AUTH_KEYSTORE, import_fn=import_string
-    )
+    keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE, import_fn=import_string)
     now_time = datetime.utcnow()
     expiry = now_time + timedelta(minutes=valid_minutes)
     token = JWT()
@@ -46,6 +45,7 @@ def gen_auth_token(
         "exp": expiry,
         "perms": list(map(perm_gen_fn, perm_codes)),
         "quota": list(map(quota_gen_fn, quota)),
+        "priv_status": ROLE_ID_STAFF,
         "iss": issuer,
     }
     token.payload.update(payload)
@@ -62,6 +62,7 @@ def gen_auth_token_to_file(
     issuer: str,
     key_id: str = "",
 ):
+    assert type(usr_id) == int, f"user ID {usr_id} has to be integer"
     pathdir = pathlib.Path(filepath).parent
     assert pathdir.exists() and pathdir.is_dir(), "pathdir not exists, %s" % pathdir
     encoded_token = gen_auth_token(

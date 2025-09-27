@@ -61,10 +61,8 @@ RUN python3.13 -m pip install build==1.2.2
 RUN python3.13 -m build ./
 
 WORKDIR /app/usermgt
-COPY user_management/Pipfile  user_management/Pipfile.lock \
-     user_management/README.md  user_management/devtools.py \
-     user_management/pyproject.toml  user_management/manage.py \
-     .
+COPY user_management/Pipfile  user_management/Pipfile.lock  user_management/README.md \
+     user_management/pyproject.toml  user_management/manage.py  .
 
 COPY user_management/data  ./data
 COPY user_management/src   ./src
@@ -95,7 +93,7 @@ COPY --from=builder0 /app/usermgt/.venv ./.venv
 COPY --from=builder0 /app/usermgt/data  ./data
 COPY --from=builder0 /app/usermgt/src   ./src
 COPY --from=builder0 /app/usermgt/infra/check_db_ready ./infra/
-COPY --from=builder0 /app/usermgt/devtools.py  /app/usermgt/manage.py ./
+COPY --from=builder0 /app/usermgt/manage.py ./
 
 # Ubuntu installs non-system python under `/usr/bin` , however `python:3.13-slim`
 # installs default python under `/usr/local/bin` .

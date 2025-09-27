@@ -12,10 +12,10 @@ x-base-service-common: &reuse-basesrv-cfg
     # TODO, switch to Docker Secret or Vault for better security
   
 services:
-  mariadb:
+  mariadb-usrmgt:
     # options can be overwritten by successive docker compose file for
     # multiple runtime environments, e.g. dev / test / production
-    image: mariadb:11-noble
+    image: mariadb-ext:11-noble
     container_name: usrmgt-generic-mariadb
     environment:
       - DB_NAME=ecommerce_usermgt
@@ -31,7 +31,7 @@ services:
       # mount log / error files for troubleshooting
       - ${MARIADB_LOG_VOL}:/var/log/mysql
   
-  db-schema-migration:
+  db-schema-migration-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-db-schema-migrate
     profiles:
@@ -48,9 +48,9 @@ services:
       # condition cannot be specified here because mariaDB container requires extra time to
       # get real database server ready for accepting inbound connections , neither
       # `service_started` or `service_completed_successfully` fits in such case.
-      - mariadb
+      - mariadb-usrmgt
   
-  db-initial-data-import:
+  db-initial-data-import-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-db-data-migrate
     profiles:
@@ -62,21 +62,27 @@ services:
       - ../settings/common.py:/app/usermgt/settings/common.py:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 
-  api-server:
+  api-server-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-apisrv
     ports:
       - "8008:8008"
     profiles:
       - serverstart
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -m ecommerce_common.util.httpsrv_accessible --timeout-secs=8 --host=localhost --port=8008 --uri-path=/jwks"]
+      interval: 90s
+      timeout: 6s
+      retries: 2
+      start_period: 18s
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 
-  rpc-consumer:
+  rpc-consumer-usrmgt:
     container_name: usrmgt-unknown-rpcconsumer
     <<: *reuse-basesrv-cfg
     environment:
@@ -85,6 +91,6 @@ services:
     profiles:
       - serverstart
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 

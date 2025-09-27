@@ -1,5 +1,5 @@
 services:
-  mariadb:
+  mariadb-usrmgt:
     container_name: usrmgt-test-mariadb
     env_file:
       - ./container-test.env
@@ -11,7 +11,7 @@ services:
       # The source path is relative to this compose file.
       - ./mariadb-cfg/usrmgt-test.cnf:/etc/mysql/conf.d/usrmgt.cnf:ro
   
-  run-test:
+  run-test-usrmgt:
     container_name: usrmgt-backend-testapp-0
     image: usrmgt-backend-base:latest
     pull_policy: never
@@ -27,7 +27,7 @@ services:
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../common/python/tests/gmail-crt-chain.pem:/app/common/python/tests/gmail-crt-chain.pem:ro
     depends_on:
-      mariadb:
+      mariadb-usrmgt:
         condition: service_started
     networks:
       - net1
