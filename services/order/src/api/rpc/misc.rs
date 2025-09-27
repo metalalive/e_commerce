@@ -15,6 +15,7 @@ pub(super) async fn store_products(
     shr_state: AppSharedState,
 ) -> Vec<u8> {
     let ds = shr_state.datastore();
+    let logctx = shr_state.log_context().clone();
     let task_id = match PyCelery::get_task_id(&req) {
         Ok(t) => t,
         Err(e) => {
@@ -32,7 +33,6 @@ pub(super) async fn store_products(
     let result = PyCelery::deserialize_req::<Vec<String>, ProductPriceDto>(&req.msgbody);
     let s = match result {
         Ok((_arg, data)) => {
-            let logctx = shr_state.log_context().clone();
             let result = EditProductPriceUseCase::execute(repo, data, logctx).await;
             if let Err(e) = result {
                 PyCelery::error_response(task_id, e)

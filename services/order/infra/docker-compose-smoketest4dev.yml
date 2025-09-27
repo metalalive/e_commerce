@@ -6,12 +6,12 @@ services:
     restart: no
     env_file:
       - ../../user_management/infra/container-dev.env
+      - ./smoketest.env
     environment:
       - DB_NAME=ecommerce_usermgt
       - DB_PORT=3307
       - API_HOST=usrmgt-dev-apisrv
       - API_PORT=8008
-      - APP_USER_ID=113
     working_dir: /app/usermgt
     command: python3 -m tests.gen_jwt_smoketest
     volumes:
@@ -21,6 +21,7 @@ services:
       - ../../user_management/settings/common.py:/app/usermgt/settings/common.py:ro
       - ../../user_management/settings/development.py:/app/usermgt/settings/development.py:ro
       - ../../user_management/tests/standalone_env_setup.py:/app/usermgt/tests/standalone_env_setup.py
+      - ../../user_management/devtools.py:/app/usermgt/devtools.py:ro
       - ../../tmp/log/dev:/app/log
       - ../../tmp/cache/dev/jwks:/app/tmp/cache/dev/jwks:ro
     networks:
@@ -37,7 +38,6 @@ services:
     environment:
       API_HOST: ordermgt-dev-apisrv
       API_PORT: 8012
-      APP_USER_ID: 113
       SYS_BASE_PATH: /app
     working_dir: /app/entry
     command: python3 ./smoke_test.py
