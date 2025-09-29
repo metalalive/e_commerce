@@ -17,9 +17,17 @@ services:
     pull_policy: never
     env_file:
       - ./container-test.env
+    environment:
+      - DB_NAME=ecommerce_usermgt
+      - DB_HOST=usrmgt-test-mariadb
+      - DB_PORT=3307
+      - APP_LOG_PATH=tmp/log/test
+      - SYS_BASE_PATH=/app
     restart: no
+    working_dir: /app/usermgt
     volumes:
       - ./run_test_container:/app/entry/run_my_app
+      - ../src/migrations:/app/usermgt/src/migrations:ro
       - ../tests:/app/usermgt/tests:ro
       - ../settings/common.py:/app/usermgt/settings/common.py:ro
       - ../settings/test.py:/app/usermgt/settings/test.py:ro
@@ -28,7 +36,7 @@ services:
       - ../../common/python/tests/gmail-crt-chain.pem:/app/common/python/tests/gmail-crt-chain.pem:ro
     depends_on:
       mariadb-usrmgt:
-        condition: service_started
+        condition: service_healthy
     networks:
       - net1
 

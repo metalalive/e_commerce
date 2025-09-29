@@ -3,6 +3,13 @@ mkdir -p /app/$APP_LOG_PATH/
 echo "--- initialize default login users / roles / profiles ---"
 python3 -m  user_management.init_users
 
+exit_code=$?
+
+if [ $exit_code -ne 0 ]; then
+    exit $exit_code
+fi
+
 echo "--- initialize permissions / quota materials for other application servers ---"
 python3 ./manage.py  loaddata  --database usermgt_service  --settings $DJANGO_SETTINGS_MODULE -v 1  remoteapps_quota_perm_fixtures.json
 
+exit $?

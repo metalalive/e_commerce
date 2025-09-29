@@ -66,8 +66,11 @@ COPY user_management/Pipfile  user_management/Pipfile.lock  user_management/READ
 
 COPY user_management/data  ./data
 COPY user_management/src   ./src
-COPY user_management/infra/check_db_ready ./infra/
 
+WORKDIR /app/usermgt/src
+RUN rm -rf ./init_users.py ./migrations
+
+WORKDIR /app/usermgt
 RUN pipenv install
 RUN pipenv run pip install /app/common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp313-cp313-linux_x86_64.whl
 RUN find /app/usermgt/.venv -depth -type d -name "__pycache__" -exec rm -rf {} +
@@ -75,7 +78,7 @@ RUN find /app/usermgt/.venv -depth -type d -name "__pycache__" -exec rm -rf {} +
 
 FROM python:3.13-slim AS final0
 RUN apt update && apt install -y --no-install-recommends mariadb-client libmariadb-dev \
-    && rm -rf /var/lib/apt/lists/*
+     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/log
 WORKDIR /app/entry
@@ -92,7 +95,6 @@ WORKDIR /app/usermgt
 COPY --from=builder0 /app/usermgt/.venv ./.venv
 COPY --from=builder0 /app/usermgt/data  ./data
 COPY --from=builder0 /app/usermgt/src   ./src
-COPY --from=builder0 /app/usermgt/infra/check_db_ready ./infra/
 COPY --from=builder0 /app/usermgt/manage.py ./
 
 # Ubuntu installs non-system python under `/usr/bin` , however `python:3.13-slim`
@@ -102,4 +104,4 @@ RUN unlink ./.venv/bin/python3.13 &&  \
     ln -s /usr/local/bin/python3  ./.venv/bin/python3.13
 
 ENV PATH="/app/usermgt/.venv/bin:$PATH"
-CMD ["/bin/sh", "/app/entry/run_my_app"]
+CMD ["/bin/bash", "/app/entry/run_my_app"]
