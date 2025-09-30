@@ -54,9 +54,7 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
             {"id": 4, "first_name": "Ham", "last_name": "Simpson"},
             {"id": 5, "first_name": "Ben", "last_name": "Troy"},
         ]
-        profiles = tuple(
-            map(lambda d: GenericUserProfile.objects.create(**d), profile_data)
-        )
+        profiles = tuple(map(lambda d: GenericUserProfile.objects.create(**d), profile_data))
         account_data = [
             # active guest
             {
@@ -143,16 +141,10 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
         # assume frontend accidentally sends the same request again in a few milliseconds
         response_2nd = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response_2nd.status_code), 200)
-        expect_token = response.cookies.get(
-            django_settings.JWT_NAME_REFRESH_TOKEN, None
-        ).value
-        actual_token = self._client.cookies.get(
-            django_settings.JWT_NAME_REFRESH_TOKEN, None
-        ).value
+        expect_token = response.cookies.get(django_settings.JWT_NAME_REFRESH_TOKEN, None).value
+        actual_token = self._client.cookies.get(django_settings.JWT_NAME_REFRESH_TOKEN, None).value
         self.assertEqual(expect_token, actual_token)
-        self.assertIsNone(
-            response_2nd.cookies.get(django_settings.JWT_NAME_REFRESH_TOKEN, None)
-        )
+        self.assertIsNone(response_2nd.cookies.get(django_settings.JWT_NAME_REFRESH_TOKEN, None))
 
     def _verify_recv_jwt(self, encoded):
         _jwt = JWT(encoded=encoded)
@@ -165,9 +157,7 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
                 audience=["sale", "payment"],
                 raise_if_failed=True,
             )
-        payld_verified = _jwt.verify(
-            keystore=self._keystore, audience=None, raise_if_failed=True
-        )
+        payld_verified = _jwt.verify(keystore=self._keystore, audience=None, raise_if_failed=True)
         self.assertNotEqual(payld_verified, None)
         # refresh token doesn't include `aud` field
         self.assertIsNone(payld_verified.get("aud"))
@@ -196,9 +186,7 @@ class RefreshAccessTokenTestCase(
         roles = tuple(map(lambda d: Role.objects.create(**d), role_data))
         roles_iter = iter(roles[1:])
         for app_label in app_labels:
-            qset = ModelLevelPermission.objects.filter(
-                content_type__app_label=app_label
-            )
+            qset = ModelLevelPermission.objects.filter(content_type__app_label=app_label)
             role = next(roles_iter)
             role.permissions.set(qset[:3])
         for role in roles:
@@ -236,9 +224,7 @@ class RefreshAccessTokenTestCase(
         self.api_call_kwargs.update({"path": self.path, "method": "get"})
         profile_2nd_data = {"id": 4, "first_name": "Texassal", "last_name": "Bovaski"}
         profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
-        self._role_data = self._setup_role(
-            profile=self._profile, approved_by=profile_2nd
-        )
+        self._role_data = self._setup_role(profile=self._profile, approved_by=profile_2nd)
         self._quota_mat_data = self._setup_quota_mat(profile=self._profile)
 
     def tearDown(self):
@@ -247,9 +233,7 @@ class RefreshAccessTokenTestCase(
 
     def test_ok(self):
         expect_audience = ["user_management"]
-        self.api_call_kwargs["extra_query_params"] = {
-            "audience": ",".join(expect_audience)
-        }
+        self.api_call_kwargs["extra_query_params"] = {"audience": ",".join(expect_audience)}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         result = response.json()
@@ -258,9 +242,7 @@ class RefreshAccessTokenTestCase(
         self.assertEqual(expect_jwks_url, actual_jwks_url)
         actual_token = result.get("access_token")
         self.assertIsNotNone(actual_token)
-        payld_verified = self._verify_recv_jwt(
-            actual_token, expect_audience=expect_audience
-        )
+        payld_verified = self._verify_recv_jwt(actual_token, expect_audience=expect_audience)
         expect_issuer_url = "%s/login" % (cors_cfg.ALLOWED_ORIGIN["user_management"])
         self.assertEqual(expect_issuer_url, payld_verified["iss"])
         self.assertEqual(self._profile.id, payld_verified["profile"])
@@ -299,17 +281,13 @@ class RefreshAccessTokenTestCase(
     def test_missing_refresh_token(self):
         self._client.cookies.pop(django_settings.JWT_NAME_REFRESH_TOKEN, None)
         expect_audience = ["user_management"]
-        self.api_call_kwargs["extra_query_params"] = {
-            "audience": ",".join(expect_audience)
-        }
+        self.api_call_kwargs["extra_query_params"] = {"audience": ",".join(expect_audience)}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
 
     def test_invalid_app_labels(self):
         expect_audience = ["non_existent_app_1", "non_existent_app_2"]
-        self.api_call_kwargs["extra_query_params"] = {
-            "audience": ",".join(expect_audience)
-        }
+        self.api_call_kwargs["extra_query_params"] = {"audience": ",".join(expect_audience)}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 400)
         result = response.json()
@@ -319,9 +297,7 @@ class RefreshAccessTokenTestCase(
         # delete staff role, then there shouldn't be any role existing in the response below
         self._profile.roles.filter(role__id=ROLE_ID_STAFF).delete(hard=True)
         expect_audience = ["non_existent_app_1", "media"]
-        self.api_call_kwargs["extra_query_params"] = {
-            "audience": ",".join(expect_audience)
-        }
+        self.api_call_kwargs["extra_query_params"] = {"audience": ",".join(expect_audience)}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         result = response.json()
         self.assertEqual(int(response.status_code), 403)
@@ -355,9 +331,7 @@ class RefreshAccessTokenTestCase(
 ## end of class RefreshAccessTokenTestCase
 
 
-class LogoutTestCase(
-    TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin
-):
+class LogoutTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
     path = "/logout"
 
     def setUp(self):
@@ -377,9 +351,7 @@ class LogoutTestCase(
         self.assertEqual(int(response.status_code), 403)
 
 
-class JwksPublicKeyTestCase(
-    TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreMixin
-):
+class JwksPublicKeyTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreMixin):
     _keystore_init_config = django_settings.AUTH_KEYSTORE
     path = "/jwks"
 

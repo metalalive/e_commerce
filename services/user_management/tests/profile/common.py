@@ -47,17 +47,12 @@ class HttpRequestDataGenProfile(HttpRequestDataGen, UserNestedFieldSetupMixin):
     def init_primitive(self):
         keys = (Role, QuotaMaterial, GenericUserGroup)
         data_map = dict(map(lambda cls: (cls, _fixtures[cls]), keys))
-        objs = {
-            k_cls: list(map(lambda d: k_cls(**d), data))
-            for k_cls, data in data_map.items()
-        }
+        objs = {k_cls: list(map(lambda d: k_cls(**d), data)) for k_cls, data in data_map.items()}
         for cls in keys:
             cls.objects.bulk_create(objs[cls])
         # the profiles that were already created, will be used to create another new profiles
         # through serializer or API endpoint
-        default_profile_data = _fixtures[GenericUserProfile][
-            : self.num_default_profiles
-        ]
+        default_profile_data = _fixtures[GenericUserProfile][: self.num_default_profiles]
         objs[GenericUserProfile] = list(
             map(lambda d: GenericUserProfile(**d), default_profile_data)
         )
@@ -74,9 +69,7 @@ class HttpRequestDataGenProfile(HttpRequestDataGen, UserNestedFieldSetupMixin):
         #        / \                           /
         #       6   7                         14
 
-        grp_obj_map = dict(
-            map(lambda obj: (obj.id, obj), self._primitives[GenericUserGroup])
-        )
+        grp_obj_map = dict(map(lambda obj: (obj.id, obj), self._primitives[GenericUserGroup]))
         group_closure_data = [
             {
                 "id": 1,
@@ -243,9 +236,7 @@ class HttpRequestDataGenProfile(HttpRequestDataGen, UserNestedFieldSetupMixin):
         return super()._gen_roles(role_objs=self._primitives[Role], num=num)
 
     def _gen_quota(self, num=None):
-        return super()._gen_quota(
-            quota_mat_objs=self._primitives[QuotaMaterial], num=num
-        )
+        return super()._gen_quota(quota_mat_objs=self._primitives[QuotaMaterial], num=num)
 
     def _gen_groups(self, num=None):
         if num is None:
@@ -263,10 +254,7 @@ class HttpRequestDataGenProfile(HttpRequestDataGen, UserNestedFieldSetupMixin):
         return out
 
     def customize_req_data_item(self, item, **kwargs):
-        data = {
-            fname: getattr(self, "_gen_%s" % fname)()
-            for fname in _nested_field_names.keys()
-        }
+        data = {fname: getattr(self, "_gen_%s" % fname)() for fname in _nested_field_names.keys()}
         item.update(data)
 
 

@@ -187,9 +187,7 @@ class ProfileCommonTestCase(TransactionTestCase):
         roles = tuple(map(lambda d: Role.objects.create(**d), role_data))
         roles_iter = iter(roles[2:])
         for app_label in app_labels:
-            qset = ModelLevelPermission.objects.filter(
-                content_type__app_label=app_label
-            )
+            qset = ModelLevelPermission.objects.filter(content_type__app_label=app_label)
             role = next(roles_iter)
             role.permissions.set(qset[:3])
         return roles
@@ -273,9 +271,7 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         expect_roles = self._roles[2:4]
         self.assertSetEqual(set(actual_roles), set(expect_roles))
         # subcase #2 : add new group to user profile and new role to parent group, see how roles change
-        self._profile.groups.create(
-            group=self._groups[10], approved_by=self._profile_2nd
-        )
+        self._profile.groups.create(group=self._groups[10], approved_by=self._profile_2nd)
         self._groups[9].roles.create(
             expiry=None, approved_by=self._profile_2nd, role=self._roles[4]
         )
@@ -496,17 +492,13 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         quota_rel = list(map(ut_setup_obj, quota_rel_data))
         indexes = [5, 7, 11, 12, 15, 2]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)
-        expect_quota = dict(
-            map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data)
-        )
+        expect_quota = dict(map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data))
         actual_quota = self._profile.inherit_quota
         self.assertDictEqual(expect_quota, actual_quota)
         # subcase #2 : quota arragements directly applied to the user
         indexes = [5, 17, 11, 18, 15, 2]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)
-        expect_quota = dict(
-            map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data)
-        )
+        expect_quota = dict(map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data))
         actual_quota = self._profile.all_quota
         self.assertDictEqual(expect_quota, actual_quota)
         # subcase #3 : quota arragements expired, test the 2 subcases above again
@@ -517,16 +509,12 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         quota_rel[11].save(update_fields=["expiry"])
         indexes = [5, 7, 10, 12, 15, 1]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)
-        expect_quota = dict(
-            map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data)
-        )
+        expect_quota = dict(map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data))
         actual_quota = self._profile.inherit_quota
         self.assertDictEqual(expect_quota, actual_quota)
         indexes = [5, 17, 10, 18, 15, 16]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)
-        expect_quota = dict(
-            map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data)
-        )
+        expect_quota = dict(map(lambda d: (d["material"].id, d["maxnum"]), filtered_quota_rel_data))
         actual_quota = self._profile.all_quota
         self.assertDictEqual(expect_quota, actual_quota)
 
@@ -575,13 +563,9 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
             with self.assertRaises(ObjectDoesNotExist):
                 self._profile.account
             self._groups[4].roles.all(with_deleted=True).delete(hard=True)
-            self._groups[4].roles.create(
-                role=verify_item["role"], approved_by=self._profile_2nd
-            )
+            self._groups[4].roles.create(role=verify_item["role"], approved_by=self._profile_2nd)
             # first-time activation
-            actual_account = self._profile.activate(
-                new_account_data=expect_account_data
-            )
+            actual_account = self._profile.activate(new_account_data=expect_account_data)
             self._profile.account
             expect_passwd = expect_account_data["password"]
             passwd_result = actual_account.check_password(expect_passwd)
@@ -589,18 +573,14 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
             self.assertTrue(actual_account.is_active)
             # check account privilege is sync with roles
             self.assertEqual(actual_account.is_staff, verify_item["expect_is_staff"])
-            self.assertEqual(
-                actual_account.is_superuser, verify_item["expect_is_superuser"]
-            )
+            self.assertEqual(actual_account.is_superuser, verify_item["expect_is_superuser"])
             # assume deactivated, then activate again
             self._profile.deactivate()
             self.assertFalse(actual_account.is_active)
             actual_account = self._profile.activate(new_account_data=None)
             self.assertTrue(actual_account.is_active)
             self.assertEqual(actual_account.is_staff, verify_item["expect_is_staff"])
-            self.assertEqual(
-                actual_account.is_superuser, verify_item["expect_is_superuser"]
-            )
+            self.assertEqual(actual_account.is_superuser, verify_item["expect_is_superuser"])
             # deactivated and delete account
             self._profile.deactivate(remove_account=True)
 
@@ -621,7 +601,7 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertSetEqual({6, 8}, set(grp_ids))
         self._profile.delete(hard=True)
         qset = GenericUserGroupRelation.objects.all(with_deleted=True).filter(
-            id={"profile": prof_id, "group__in": grp_ids}
+            profile__id=prof_id, group__in=grp_ids
         )
         self.assertFalse(qset.exists())
         qset = GenericUserProfile.objects.all(with_deleted=True).filter(id=prof_id)
@@ -636,9 +616,7 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertSetEqual({6, 8}, set(grp_ids))
         self._profile.delete(profile_id=self._profile_2nd.id)
         self._profile.refresh_from_db()
-        qset = GenericUserGroupRelation.objects.filter(
-            profile=prof_id, group__in={6, 8}
-        )
+        qset = GenericUserGroupRelation.objects.filter(profile=prof_id, group__in={6, 8})
         self.assertFalse(qset.exists())
         qset = GenericUserGroupRelation.objects.all(with_deleted=True).filter(
             profile=prof_id, group__in=list(grp_ids)
@@ -661,20 +639,12 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
 
     def test_self_removal(self):
         # 3rd user profile
-        profile_3rd = GenericUserProfile.objects.create(
-            **_fixtures[GenericUserProfile][2]
-        )
+        profile_3rd = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][2])
         # 4th user profile
-        profile_4th = GenericUserProfile.objects.create(
-            **_fixtures[GenericUserProfile][3]
-        )
+        profile_4th = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][3])
         # 5th user profile, superuser
-        profile_5th = GenericUserProfile.objects.create(
-            **_fixtures[GenericUserProfile][4]
-        )
-        profile_5th.roles.create(
-            role=self._roles[0], approved_by=profile_5th, expiry=None
-        )
+        profile_5th = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][4])
+        profile_5th.roles.create(role=self._roles[0], approved_by=profile_5th, expiry=None)
         # set up group relations
         grp_rel_data = [
             {

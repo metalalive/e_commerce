@@ -97,9 +97,7 @@ def _get_request_headers():
 
 def get_permissions_for_models(model_classes, using=None):
     """Fetches Django Permission objects for a list of model classes."""
-    content_types = (
-        ContentType.objects.db_manager(using).get_for_models(*model_classes).values()
-    )
+    content_types = ContentType.objects.db_manager(using).get_for_models(*model_classes).values()
     return Permission.objects.using(using).filter(content_type__in=content_types)
 
 
@@ -141,9 +139,7 @@ def create_test_user(
             ],
             using=db_alias,
         )
-        test_role, _ = Role.objects.using(db_alias).get_or_create(
-            name="Smoke Test Manager Role"
-        )
+        test_role, _ = Role.objects.using(db_alias).get_or_create(name="Smoke Test Manager Role")
         test_role.permissions.set(permissions)
         staff_role = Role.objects.using(db_alias).get(pk=ROLE_ID_STAFF)
         # Apply the roles below to the new user profile
@@ -164,6 +160,21 @@ def create_test_user(
         return user_profile
 
 
+def setup_user_login_account(db_alias: str, username: str, t_now: datetime, usr_prof_kept: Dict):
+    with _atomicity_fn():
+        user_profile = GenericUserProfile.objects.get(pk=usr_prof_kept["id"])
+        LoginAccount.objects.db_manager(db_alias).create_user(
+            profile=user_profile,
+            username=username,
+            password=generate_password(),
+            is_active=True,
+            password_last_updated=t_now,
+        )
+    logging.info(
+        "User profile ID : %s , kept for smoke tests in other applications" % usr_prof_kept["id"]
+    )
+
+
 def delete_all_test_objs(
     user_profile: GenericUserProfile,
     username: str,
@@ -176,15 +187,16 @@ def delete_all_test_objs(
         if created_profiles:
             profile_ids_to_delete = [p["id"] for p in created_profiles]
             logging.info(f"Deleting test profiles with IDs: {profile_ids_to_delete}")
-            GenericUserProfile.objects.using(db_alias).filter(
-                id__in=profile_ids_to_delete
-            ).delete(hard=True)
+            GenericUserProfile.objects.using(db_alias).filter(id__in=profile_ids_to_delete).delete(
+                hard=True
+            )
         # Use a hard delete to permanently remove records
         # The related LoginAccount is deleted via CASCADE
         user_profile.delete(hard=True)
-        GenericUserGroup.objects.using(db_alias).filter(
-            name__in=["Smoke Test Group A", "Smoke Test Group B"]
-        ).delete(hard=True)
+        # groups will be used in test cases of other applications
+        # GenericUserGroup.objects.using(db_alias).filter(
+        #     name__in=["Smoke Test Group A", "Smoke Test Group B"]
+        # ).delete(hard=True)
         Role.objects.using(db_alias).filter(
             name__in=[
                 "Smoke Test Manager Role",
@@ -204,9 +216,7 @@ def assign_roles_to_user(
     user_profile: GenericUserProfile, roles: List[Dict[str, Any]], db_alias: str
 ):
     """Assigns a list of roles (from API response) to a given user profile."""
-    logging.info(
-        f"Assigning {len(roles)} roles to user '{user_profile.account.username}'"
-    )
+    logging.info(f"Assigning {len(roles)} roles to user '{user_profile.account.username}'")
     role_ids = [r["id"] for r in roles]
     role_objects = Role.objects.using(db_alias).filter(id__in=role_ids)
     with _atomicity_fn():
@@ -247,9 +257,7 @@ def test_manage_roles(auth_info: Dict[str, Any], db_alias: str) -> list:
     permissions = get_permissions_by_codename(perm_codenames, using=db_alias)
     perm_ids = list(permissions.values_list("pk", flat=True))
     if len(perm_ids) < len(perm_codenames):
-        raise AssertionError(
-            "Not enough permissions found to conduct role management test."
-        )
+        raise AssertionError("Not enough permissions found to conduct role management test.")
 
     # --- 2. Create roles (POST) ---
     logging.info("Attempting to create roles...")
@@ -340,6 +348,7 @@ def test_manage_usrgrps(auth_info: Dict[str, Any]) -> list:
         },
         {
             "name": "Smoke Test Group B",
+            "new_parent": 0,
             "roles": [],
             "quota": [],
             "emails": [],
@@ -352,14 +361,11 @@ def test_manage_usrgrps(auth_info: Dict[str, Any]) -> list:
 
     with request.urlopen(req) as response:
         if response.status != 201:
-            raise AssertionError(
-                f"User group creation failed with status {response.status}"
-            )
+            raise AssertionError(f"User group creation failed with status {response.status}")
         created_groups = json.loads(response.read())
 
     assert len(created_groups) == 2, "Expected 2 user groups to be created."
     logging.info(f"Successfully created {len(created_groups)} user groups.")
-
     # --- 2. Return created groups ---
     logging.info("User group management test passed.")
     return created_groups
@@ -385,12 +391,18 @@ def test_create_usrprofs(
     quota_material_id = quota_materials.first().pk
     # Pick some quota from this user-management app for testing
     quota_materials = QuotaMaterial.objects.using(db_alias).filter(app_code=1)
-    email_quota_mat_id = quota_materials.get(
+    usr_email_quota_mat_id = quota_materials.get(
         mat_code=QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS
     ).pk
-    phone_quota_mat_id = quota_materials.get(
+    usr_phone_quota_mat_id = quota_materials.get(
         mat_code=QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS
     ).pk
+    quota_materials = QuotaMaterial.objects.using(db_alias).filter(app_code=5)
+    store_quota_mat_id = quota_materials.get(mat_code=1).pk
+    store_staff_quota_mat_id = quota_materials.get(mat_code=2).pk
+    store_emails_quota_mat_id = quota_materials.get(mat_code=3).pk
+    store_phones_quota_mat_id = quota_materials.get(mat_code=4).pk
+    store_products_quota_mat_id = quota_materials.get(mat_code=5).pk
     # --- 2. Create user profiles (POST) ---
     logging.info("Attempting to create user profiles...")
     role_ids = [r["id"] for r in roles]
@@ -409,8 +421,8 @@ def test_create_usrprofs(
             "emails": [{"addr": "john.smoke@example.com"}],
             "roles": [{"role": role_ids[0], "expiry": expiry_time}],
             "quota": [
-                {"material": email_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
-                {"material": phone_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": usr_email_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
                 {"material": quota_material_id, "maxnum": 10, "expiry": expiry_time},
             ],
         },
@@ -423,8 +435,8 @@ def test_create_usrprofs(
             "emails": [{"addr": "jane.tester@example.com"}],
             "roles": [{"role": role_ids[1], "expiry": expiry_time}],
             "quota": [
-                {"material": email_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
-                {"material": phone_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": usr_email_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
                 {"material": quota_material_id, "maxnum": 5, "expiry": expiry_time},
             ],
         },
@@ -437,9 +449,64 @@ def test_create_usrprofs(
             "emails": [{"addr": "charlie.delta@example.com"}],
             "roles": [{"role": role_ids[0], "expiry": expiry_time}],
             "quota": [
-                {"material": email_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
-                {"material": phone_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": usr_email_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
                 {"material": quota_material_id, "maxnum": 15, "expiry": expiry_time},
+            ],
+        },
+        {
+            "first_name": "Esspreso",
+            "last_name": "Fatima",
+            "groups": [{"group": grp_ids[0]}],
+            "phones": [
+                {"line_number": "0730281190", "country_code": "92"},
+            ],
+            "locations": [],
+            "emails": [{"addr": "esspro.fatimah@example.com"}],
+            "roles": [{"role": role_ids[0], "expiry": expiry_time}],
+            "quota": [
+                {"material": usr_email_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 2, "expiry": expiry_time},
+                {"material": quota_material_id, "maxnum": 16, "expiry": expiry_time},
+                {"material": store_quota_mat_id, "maxnum": 5, "expiry": expiry_time},
+                {"material": store_staff_quota_mat_id, "maxnum": 6, "expiry": expiry_time},
+                {"material": store_emails_quota_mat_id, "maxnum": 7, "expiry": expiry_time},
+                {"material": store_phones_quota_mat_id, "maxnum": 8, "expiry": expiry_time},
+                {"material": store_products_quota_mat_id, "maxnum": 9, "expiry": expiry_time},
+            ],
+        },
+        {
+            "first_name": "Geoffery",
+            "last_name": "Halluciation",
+            "groups": [{"group": grp_ids[1]}],
+            "phones": [
+                {"line_number": "0281190101", "country_code": "163"},
+            ],
+            "locations": [],
+            "emails": [{"addr": "geff.hallus@example.com"}],
+            "roles": [{"role": role_ids[0], "expiry": expiry_time}],
+            "quota": [
+                {"material": usr_email_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": quota_material_id, "maxnum": 8, "expiry": expiry_time},
+                {"material": store_products_quota_mat_id, "maxnum": 15, "expiry": expiry_time},
+            ],
+        },
+        {
+            "first_name": "Ioweed",
+            "last_name": "Jotsckegikaegh",
+            "groups": [{"group": grp_ids[1]}],
+            "phones": [
+                {"line_number": "0281190555", "country_code": "163"},
+            ],
+            "locations": [],
+            "emails": [{"addr": "iowe.jgika@example.com"}],
+            "roles": [{"role": role_ids[0], "expiry": expiry_time}],
+            "quota": [
+                {"material": usr_email_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": usr_phone_quota_mat_id, "maxnum": 1, "expiry": expiry_time},
+                {"material": quota_material_id, "maxnum": 8, "expiry": expiry_time},
+                {"material": store_products_quota_mat_id, "maxnum": 20, "expiry": expiry_time},
             ],
         },
     ]
@@ -448,12 +515,10 @@ def test_create_usrprofs(
 
     with request.urlopen(req) as response:
         if response.status != 201:
-            raise AssertionError(
-                f"User profile creation failed with status {response.status}"
-            )
+            raise AssertionError(f"User profile creation failed with status {response.status}")
         created_profiles = json.loads(response.read())
 
-    assert len(created_profiles) == 3, "Expected 3 user profiles to be created."
+    assert len(created_profiles) == 6, "Expected 6 user profiles to be created."
     logging.info(f"Successfully created {len(created_profiles)} user profiles.")
     return created_profiles
 
@@ -480,9 +545,7 @@ def test_update_usrprof(auth_info: Dict[str, Any], profile_to_update: dict):
 
     with request.urlopen(req) as response:
         if response.status != 200:
-            raise AssertionError(
-                f"User profile update failed with status {response.status}"
-            )
+            raise AssertionError(f"User profile update failed with status {response.status}")
 
     logging.info("Successfully updated a user profile.")
 
@@ -508,12 +571,8 @@ def test_query_usrprof(auth_info: Dict[str, Any], profile_id: int):
             )
         retrieved_profile = json.loads(response.read())
 
-    assert (
-        retrieved_profile["last_name"] == "Smoke-Updated"
-    ), "Last name was not updated correctly."
-    assert (
-        retrieved_profile["quota"][0]["maxnum"] == 20
-    ), "Quota was not updated correctly."
+    assert retrieved_profile["last_name"] == "Smoke-Updated", "Last name was not updated correctly."
+    assert retrieved_profile["quota"][0]["maxnum"] == 20, "Quota was not updated correctly."
     logging.info("Successfully validated updated profile.")
 
 
@@ -535,9 +594,7 @@ def test_account_activation(
     # Use the first email for activation request
     email_id = profile_to_activate["emails"][0]["id"]
     profile_id = profile_to_activate["id"]
-    logging.info(
-        f"Requesting activation for profile ID {profile_id} via email ID {email_id}"
-    )
+    logging.info(f"Requesting activation for profile ID {profile_id} via email ID {email_id}")
 
     payload = [{"profile": profile_id, "email": email_id}]
     data = json.dumps(payload).encode("utf-8")
@@ -547,8 +604,7 @@ def test_account_activation(
         if response.status != 201:
             body = response.read().decode("utf-8")
             raise AssertionError(
-                f"Account activation request failed with status {response.status}, "
-                f"body: {body}"
+                f"Account activation request failed with status {response.status}, " f"body: {body}"
             )
 
     logging.info("Account activation request sent successfully.")
@@ -588,9 +644,7 @@ def test_api_login(username: str, password: str) -> str:
         # logging.debug(f"refresh_token = {refresh_token}")
         return refresh_token
     else:
-        raise ValueError(
-            "Refresh token not found in login response's Set-Cookie header."
-        )
+        raise ValueError("Refresh token not found in login response's Set-Cookie header.")
 
 
 def test_auth_token_refreshing(refresh_token: str) -> Dict[str, Any]:
@@ -682,9 +736,13 @@ def main():
         groups = test_manage_usrgrps(auth_info)
 
         # 7. Test user profile management (Create, Update, Query)
-        created_profiles_for_cleanup = test_create_usrprofs(
-            auth_info, roles, groups, db_alias
+        created_profiles_for_cleanup = test_create_usrprofs(auth_info, roles, groups, db_alias)
+        setup_user_login_account(db_alias, "CicadaDino", t_now, created_profiles_for_cleanup.pop(3))
+        setup_user_login_account(db_alias, "EelFrog", t_now, created_profiles_for_cleanup.pop(3))
+        setup_user_login_account(
+            db_alias, "GopherHeron", t_now, created_profiles_for_cleanup.pop(3)
         )
+
         profile_to_update = created_profiles_for_cleanup[0]
         test_update_usrprof(auth_info, profile_to_update)
         test_query_usrprof(auth_info, profile_to_update["id"])
@@ -706,9 +764,7 @@ def main():
     finally:
         # 8. Clean up: Delete the temporary user regardless of the result
         if user_profile:
-            delete_all_test_objs(
-                user_profile, username, db_alias, created_profiles_for_cleanup
-            )
+            delete_all_test_objs(user_profile, username, db_alias, created_profiles_for_cleanup)
 
     logging.info("SMOKE TEST PASSED")
     sys.exit(0)

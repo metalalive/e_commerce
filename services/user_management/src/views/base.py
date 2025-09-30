@@ -63,9 +63,7 @@ class RoleAPIView(AuthCommonAPIView):
     ordering_fields = ["id", "name"]
     search_fields = ["name"]
     # add django model permission obj
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [
-        RolePermissions
-    ]
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [RolePermissions]
     PRESERVED_ROLE_IDS = _PRESERVED_ROLE_IDS
     queryset = serializer_class.Meta.model.objects.all()
 
@@ -95,9 +93,7 @@ class RoleAPIView(AuthCommonAPIView):
         # conflict happenes if frontend attempts to delete preserved roles (e.g. admin role)
         reserved_role_ids = set(self.PRESERVED_ROLE_IDS) & set(IDs)
         if reserved_role_ids:
-            errmsg = "not allowed to delete preserved role ID = {}".format(
-                str(reserved_role_ids)
-            )
+            errmsg = "not allowed to delete preserved role ID = {}".format(str(reserved_role_ids))
             context = {drf_settings.NON_FIELD_ERRORS_KEY: [errmsg]}
             response = RestResponse(data=context, status=RestStatus.HTTP_409_CONFLICT)
         else:
@@ -129,9 +125,7 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
         "locations__street",
         "locations__detail",
     ]
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [
-        UserGroupsPermissions
-    ]
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserGroupsPermissions]
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
@@ -164,9 +158,7 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
         kwargs["resource_content_type"] = ContentType.objects.get(
             app_label="user_management", model=modelname.lower()
         )
-        return self.recovery(
-            request=request, profile_id=request.user.profile.id, *args, **kwargs
-        )
+        return self.recovery(request=request, profile_id=request.user.profile.id, *args, **kwargs)
 
     def delete_success_callback(self, id_list):
         update_accounts_privilege.delay(affected_groups=id_list, deleted=True)
@@ -193,15 +185,11 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
         "groups__group__name",
         "roles__role__name",
     ]
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [
-        UserProfilesPermissions
-    ]
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserProfilesPermissions]
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
-        self.queryset = self.serializer_class.Meta.model.objects.order_by(
-            "-time_created"
-        )
+        self.queryset = self.serializer_class.Meta.model.objects.order_by("-time_created")
         # if the argument `pk` is `me`, then update the value to profile ID of current login user
         if kwargs.get("pk", None) == "me":
             account = request.user
@@ -248,9 +236,7 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
         kwargs["resource_content_type"] = ContentType.objects.get(
             app_label="user_management", model=modelname.lower()
         )
-        return self.recovery(
-            request=request, profile_id=request.user.profile.id, *args, **kwargs
-        )
+        return self.recovery(request=request, profile_id=request.user.profile.id, *args, **kwargs)
 
     def delete_success_callback(self, id_list):
         account = self.request.user
@@ -305,9 +291,7 @@ class AccountActivationView(AuthCommonAPIView):
         kwargs["return_data_after_done"] = True
         kwargs["pk_src"] = LimitQuerySetMixin.REQ_SRC_BODY_DATA
         kwargs["serializer_kwargs"] = {
-            "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                "body/user_activation_link_send.html"
-            ),
+            "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/user_activation_link_send.html"),
             "subject_template": MAIL_DATA_BASEPATH.joinpath(
                 "subject/user_activation_link_send.txt"
             ),

@@ -1,7 +1,7 @@
 # Note , docker does not support reference block configuration
 # across different files
 services:
-  mariadb:
+  mariadb-usrmgt:
     container_name: usrmgt-dev-mariadb
     env_file:
       - ./container-dev.env
@@ -14,7 +14,7 @@ services:
     networks:
       - net11
 
-  db-schema-migration:
+  db-schema-migration-usrmgt:
     container_name: usrmgt-dev-db-schema-migrate
     env_file:
       - ./container-dev.env
@@ -24,7 +24,7 @@ services:
     networks:
       - net11
 
-  db-initial-data-import:
+  db-initial-data-import-usrmgt:
     container_name: usrmgt-dev-db-data-migrate
     env_file:
       - ./container-dev.env
@@ -36,7 +36,7 @@ services:
     networks:
       - net11
 
-  api-server:
+  api-server-usrmgt:
     container_name: usrmgt-dev-apisrv
     env_file:
       - ./container-dev.env
@@ -56,7 +56,7 @@ services:
       - net11
       - net12
 
-  rpc-consumer:
+  rpc-consumer-usrmgt:
     container_name: usrmgt-dev-rpcconsumer
     env_file:
       - ./container-dev.env
@@ -76,7 +76,7 @@ services:
       - net11
       - net12
 
-  smoke-test:
+  smoke-test-usrmgt:
     container_name: usrmgt-dev-smoketest
     image: usrmgt-backend-base:latest
     pull_policy: never
@@ -100,11 +100,11 @@ services:
       - initialstart
       - serverstart
     depends_on:
-      db-initial-data-import:
+      db-initial-data-import-usrmgt:
         condition: service_completed_successfully
-      api-server:
-        condition: service_started
-      rpc-consumer:
+      api-server-usrmgt:
+        condition: service_healthy
+      rpc-consumer-usrmgt:
         condition: service_started
     networks:
       - net11

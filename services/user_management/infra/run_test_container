@@ -1,32 +1,23 @@
-export DB_NAME=ecommerce_usermgt
-export DB_HOST=usrmgt-test-mariadb
-export DB_PORT=3307
-export APP_LOG_PATH=tmp/log/test
-
-cd /app/usermgt
-# wait for DB server to be ready, test interval = 10 sec, timeout = 5 min
-. infra/check_db_ready
-wait_for_db 10 5
+#!/bin/bash
 
 mkdir -p /app/$APP_LOG_PATH/
 
-python ./manage.py test  tests.middlewares.cors  --settings settings.test  --verbosity=2  
-python ./manage.py test  tests.middlewares.csrf  --settings settings.test  --verbosity=2
-python ./manage.py test  tests.util   --settings settings.test  --verbosity=2
-python -m unittest  tests.keystore.keygen  -v
-SYS_BASE_PATH="${PWD}/.."  python -m unittest tests.keystore.persistence  -v
-SYS_BASE_PATH="${PWD}/.."  python -m unittest tests.keystore.manager  -v
+python -m unittest tests.keystore.keygen  -v
+python -m unittest tests.keystore.persistence  -v
+python -m unittest tests.keystore.manager  -v
 
-python ./manage.py test tests.login  --settings settings.test  --keepdb --verbosity=2
-python ./manage.py test tests.role.views   --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.group.models --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.group.serializers  --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.group.views  --settings settings.test --keepdb  --verbosity=2
-python ./manage.py test tests.profile.models  --settings settings.test --keepdb  --verbosity=2
-python ./manage.py test tests.profile.serializers   --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.profile.views  --settings settings.test --keepdb  --verbosity=2
-python ./manage.py test tests.account.models --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.account.serializers  --settings  settings.test --keepdb --verbosity=2
-python ./manage.py test tests.account.views  --settings settings.test --keepdb --verbosity=2
-python ./manage.py test tests.async_tasks    --settings settings.test --keepdb  --verbosity=2
+testmodules=(
+    "tests.middlewares.cors" "tests.middlewares.csrf" "tests.util"
+    "tests.login" "tests.role.views" "tests.group.models" "tests.group.serializers"
+    "tests.group.views" "tests.profile.models" "tests.profile.serializers" "tests.profile.views"
+    "tests.account.models" "tests.account.serializers" "tests.account.views" "tests.async_tasks"
+)
 
+for module in "${testmodules[@]}"; do
+    python ./manage.py test $module  --settings settings.test --keepdb --verbosity=2
+    exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        exit $exit_code
+    fi
+done

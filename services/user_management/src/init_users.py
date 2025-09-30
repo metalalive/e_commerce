@@ -32,27 +32,19 @@ def _render_usermgt_fixture(src: List[Dict[str, Any]]) -> None:
             fields["last_updated"] = now_time
         elif model_name == GenericUserAppliedRole.__name__.lower():
             fields["expiry"] = None  # never expired, now_time
-            item["pk"] = GenericUserAppliedRole.format_pk(
-                usr_type=fields["user_type"],
-                usr_id=fields["user_id"],
-                role_id=fields["role"],
-            )
+            item["pk"] = [fields["user_type"], fields["user_id"], fields["role"]]
         elif model_name == LoginAccount.__name__.lower():
             fields["last_login"] = now_time
             fields["date_joined"] = now_time
             fields["password_last_updated"] = now_time
             raw_passwd = secrets.token_urlsafe(16)
             fields["password"] = make_password(raw_passwd)
-            info_msg = (
-                "[INFO] Default user account %s with random-generated password %s"
-            )
+            info_msg = "[INFO] Default user account %s with random-generated password %s"
             info_msg = info_msg % (fields["username"], raw_passwd)
             print(info_msg)
 
 
-def render_fixture(
-    src_path: Path, detail_fn: Callable[[List[Dict[str, Any]]], None]
-) -> Path:
+def render_fixture(src_path: Path, detail_fn: Callable[[List[Dict[str, Any]]], None]) -> Path:
     dst_filename = "renderred_%s" % src_path.name
     dst_path = src_path.parent.joinpath(dst_filename)
     with open(src_path, "r") as f:

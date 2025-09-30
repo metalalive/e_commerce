@@ -1,12 +1,13 @@
 mkdir -p /app/$APP_LOG_PATH/
 
-# default working directory should already be `/app/usermgt`
-# wait for DB server to be ready, test interval = 10 sec, timeout = 6 min
-. infra/check_db_ready
-wait_for_db 10 6
+python3 manage.py makemigrations user_management  --settings settings.migration --name tables_composite_pk
 
-echo "MariaDB server is available. Proceeding with database migrations."
+exit_code=$?
 
-python3 manage.py makemigrations user_management  --settings settings.migration
-python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
+if [ $exit_code -ne 0 ]; then
+    exit $exit_code
+fi
 
+python3 manage.py migrate user_management  0003  --settings settings.migration  --database site2_dba
+
+exit $?

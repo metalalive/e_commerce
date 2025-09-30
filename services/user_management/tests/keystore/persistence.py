@@ -28,9 +28,7 @@ srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 class FilePersistHandlerTestCase(unittest.TestCase):
     _init_kwargs = {
-        "filepath": os.path.join(
-            srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"
-        ),
+        "filepath": os.path.join(srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"),
         "name": "test_secret_storage",
         "expired_after_days": 11,
         "max_expired_after_days": 90,
@@ -39,9 +37,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
     }
 
     def setUp(self):
-        dir_tear_down, file_tear_down = _setup_keyfile(
-            filepath=self._init_kwargs["filepath"]
-        )
+        dir_tear_down, file_tear_down = _setup_keyfile(filepath=self._init_kwargs["filepath"])
         self._dir_tear_down = dir_tear_down
         self._file_tear_down = file_tear_down
         _clean_prev_persisted_filedata(**self._init_kwargs.copy())
@@ -85,9 +81,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
         actual_data = dict(persist_handler.items())
         expect_data = {k: {} for k in keydata.keys()}
         self.assertDictEqual(actual_data, expect_data)
-        actual_data_gen = persist_handler.items(
-            present_fields=["exp", "kty", "use", "alg"]
-        )
+        actual_data_gen = persist_handler.items(present_fields=["exp", "kty", "use", "alg"])
         for k, v in actual_data_gen:  # NOTE, DO NOT use dict() to fetch all the items
             actual_data = v
             expect_data = keydata.get(k, {})
@@ -113,9 +107,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
             persist_handler[key] = item
         keydata.update(extra_keydata)
         self.assertEqual(len(keydata.keys()), len(persist_handler))
-        actual_data_gen = persist_handler.items(
-            present_fields=["exp", "kty", "use", "alg"]
-        )
+        actual_data_gen = persist_handler.items(present_fields=["exp", "kty", "use", "alg"])
         for k, v in actual_data_gen:  # NOTE, DO NOT use dict() to fetch all the items
             actual_data = v
             expect_data = keydata.get(k, {})
@@ -212,9 +204,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
         tuple(map(lambda kid: keydata.pop(kid, None), remove_key_ids))
         keydata = keydata | extra_keydata
         self.assertEqual(len(keydata.keys()), len(persist_handler))
-        actual_data_gen = persist_handler.items(
-            present_fields=["exp", "kty", "use", "alg"]
-        )
+        actual_data_gen = persist_handler.items(present_fields=["exp", "kty", "use", "alg"])
         for k, v in actual_data_gen:  # NOTE, DO NOT use dict() to fetch all the items
             actual_data = v
             expect_data = keydata.get(k, {})
@@ -276,9 +266,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
             )
         )
         self.assertEqual(len(keydata.keys()), len(persist_handler))
-        actual_data_gen = persist_handler.items(
-            present_fields=["exp", "kty", "use", "alg"]
-        )
+        actual_data_gen = persist_handler.items(present_fields=["exp", "kty", "use", "alg"])
         for k, v in actual_data_gen:
             actual_data = v
             expect_data = keydata.get(k, {})

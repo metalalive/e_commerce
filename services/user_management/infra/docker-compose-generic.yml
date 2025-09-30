@@ -12,10 +12,10 @@ x-base-service-common: &reuse-basesrv-cfg
     # TODO, switch to Docker Secret or Vault for better security
   
 services:
-  mariadb:
+  mariadb-usrmgt:
     # options can be overwritten by successive docker compose file for
     # multiple runtime environments, e.g. dev / test / production
-    image: mariadb:11-noble
+    image: mariadb-ext:11-noble
     container_name: usrmgt-generic-mariadb
     environment:
       - DB_NAME=ecommerce_usermgt
@@ -30,8 +30,14 @@ services:
       - ${MARIADB_DATA_VOL}:/var/lib/mysql
       # mount log / error files for troubleshooting
       - ${MARIADB_LOG_VOL}:/var/log/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3307 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
+      interval: 48s
+      timeout: 8s
+      retries: 2
+      start_period: 65s
   
-  db-schema-migration:
+  db-schema-migration-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-db-schema-migrate
     profiles:
@@ -43,14 +49,15 @@ services:
       # items below, not merged into the volume set here.
       - ./db_schema_migration:/app/entry/run_my_app
       - ../settings/common.py:/app/usermgt/settings/common.py:ro
+      - ../src/migrations:/app/usermgt/src/migrations
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
     depends_on:
-      # condition cannot be specified here because mariaDB container requires extra time to
-      # get real database server ready for accepting inbound connections , neither
-      # `service_started` or `service_completed_successfully` fits in such case.
-      - mariadb
+      # mariaDB container requires extra time to get real database server ready
+      # for accepting inbound connections.
+      mariadb-usrmgt:
+        condition: service_healthy
   
-  db-initial-data-import:
+  db-initial-data-import-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-db-data-migrate
     profiles:
@@ -59,24 +66,31 @@ services:
     working_dir: /app/usermgt
     volumes:
       - ./db_init_data_migration:/app/entry/run_my_app
+      - ../src/init_users.py:/app/usermgt/src/init_users.py:ro
       - ../settings/common.py:/app/usermgt/settings/common.py:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 
-  api-server:
+  api-server-usrmgt:
     <<: *reuse-basesrv-cfg
     container_name: usrmgt-unknown-apisrv
     ports:
       - "8008:8008"
     profiles:
       - serverstart
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -m ecommerce_common.util.httpsrv_accessible --timeout-secs=8 --host=localhost --port=8008 --uri-path=/jwks"]
+      interval: 90s
+      timeout: 6s
+      retries: 2
+      start_period: 18s
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 
-  rpc-consumer:
+  rpc-consumer-usrmgt:
     container_name: usrmgt-unknown-rpcconsumer
     <<: *reuse-basesrv-cfg
     environment:
@@ -85,6 +99,6 @@ services:
     profiles:
       - serverstart
     depends_on:
-      db-schema-migration:
+      db-schema-migration-usrmgt:
         condition: service_completed_successfully
 

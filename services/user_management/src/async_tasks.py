@@ -25,9 +25,7 @@ srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 def update_accounts_privilege(self, affected_groups, deleted=False):
     # TODO, may repeat the task after certain time interval if it failed in the middle
     # (until it's successfully completed)
-    profiles = GenericUserGroup.get_profiles_under_groups(
-        grp_ids=affected_groups, deleted=deleted
-    )
+    profiles = GenericUserGroup.get_profiles_under_groups(grp_ids=affected_groups, deleted=deleted)
     GenericUserProfile.update_accounts_privilege(profiles)
     return True
 
@@ -39,9 +37,7 @@ def clean_expired_reset_requests(days, hours=0, minutes=0):
     t0 = django_timezone.now()
     t0 = t0 - td
     expired = UnauthResetAccountRequest.objects.filter(time_created__lt=t0)
-    result = expired.values(
-        "email__user_id", "email__user_type", "email__addr", "time_created"
-    )
+    result = expired.values("email__user_id", "email__user_type", "email__addr", "time_created")
     result = list(result)
     expired.delete()
     return result
@@ -107,26 +103,20 @@ def get_profile(self, ids: List[int], fields: List[str]):
     req = self.request  # retrieve extra headers from celery task context
     src_app_label = req.headers.get("src_app") if req.headers else None
     if not src_app_label and (present_quota or present_roles):
-        raise ValueError(
-            "src_app_label is required for fetching quota/roles of user profile"
-        )
+        raise ValueError("src_app_label is required for fetching quota/roles of user profile")
 
     class fake_request:
         query_params = {"fields": ",".join(fields)}
 
     extra_context = {"request": fake_request}
-    serializer = GenericUserProfileSerializer(
-        many=True, instance=qset, context=extra_context
-    )
+    serializer = GenericUserProfileSerializer(many=True, instance=qset, context=extra_context)
     data = serializer.data
     for d in data:
         profile = qset.get(id=d["id"])
         if present_quota:
             d["quota"] = serialize_profile_quota(profile, app_labels=[src_app_label])
         if present_roles:
-            d["perms"] = serialize_profile_permissions(
-                profile, app_labels=[src_app_label]
-            )
+            d["perms"] = serialize_profile_permissions(profile, app_labels=[src_app_label])
     return data
 
 

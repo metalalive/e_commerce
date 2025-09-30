@@ -295,9 +295,7 @@ class AuthenticateUserMixin(KeystoreMixin):
         return profile, response
 
     def _refresh_access_token(self, testcase, audience):
-        testcase.assertIn(
-            django_settings.JWT_NAME_REFRESH_TOKEN, testcase._client.cookies.keys()
-        )
+        testcase.assertIn(django_settings.JWT_NAME_REFRESH_TOKEN, testcase._client.cookies.keys())
         api_call_kwargs = {
             "path": "/refresh_access_token",
             "method": "get",
@@ -330,9 +328,7 @@ class UserNestedFieldSetupMixin:
                 data = {
                     "expiry": gen_expiry_time(serializable=serializable),
                     "role": role,
-                    "approved_by": random.randrange(
-                        3, 1000
-                    ),  # will NOT write this field to model
+                    "approved_by": random.randrange(3, 1000),  # will NOT write this field to model
                 }
                 out.append(data)
         return out
@@ -356,10 +352,7 @@ class UserNestedFieldSetupMixin:
                         == QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value
                     ):
                         self.num_phones = maxnum
-                    elif (
-                        material.mat_code
-                        == QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS.value
-                    ):
+                    elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS.value:
                         self.num_emails = maxnum
                     elif (
                         material.mat_code
@@ -460,14 +453,10 @@ class UserNestedFieldVerificationMixin:
     def _value_compare_roles_fn(self, val_a, val_b):
         _fields_compare = self._nested_field_names["roles"]
         expect_val = list(
-            map(
-                lambda d: {fname: d[fname] for fname in _fields_compare}, val_a["roles"]
-            )
+            map(lambda d: {fname: d[fname] for fname in _fields_compare}, val_a["roles"])
         )
         actual_val = list(
-            map(
-                lambda d: {fname: d[fname] for fname in _fields_compare}, val_b["roles"]
-            )
+            map(lambda d: {fname: d[fname] for fname in _fields_compare}, val_b["roles"])
         )
         expect_val = sorted(expect_val, key=lambda d: d["role"])
         actual_val = sorted(actual_val, key=lambda d: d["role"])
@@ -476,31 +465,21 @@ class UserNestedFieldVerificationMixin:
     def _value_compare_quota_fn(self, val_a, val_b):
         _fields_compare = self._nested_field_names["quota"]
         expect_val = list(
-            map(
-                lambda d: {fname: d[fname] for fname in _fields_compare}, val_a["quota"]
-            )
+            map(lambda d: {fname: d[fname] for fname in _fields_compare}, val_a["quota"])
         )
         actual_val = list(
-            map(
-                lambda d: {fname: d[fname] for fname in _fields_compare}, val_b["quota"]
-            )
+            map(lambda d: {fname: d[fname] for fname in _fields_compare}, val_b["quota"])
         )
         expect_val = sorted(expect_val, key=lambda d: d["material"])
         actual_val = sorted(actual_val, key=lambda d: d["material"])
         return actual_val == expect_val
 
-    def _value_compare_contact_fn(
-        self, val_a, val_b, _fields_compare, compare_id=False
-    ):
+    def _value_compare_contact_fn(self, val_a, val_b, _fields_compare, compare_id=False):
         if not compare_id:
             _fields_compare = _fields_compare.copy()
             _fields_compare.remove("id")
-        expect_val = list(
-            map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_a)
-        )
-        actual_val = list(
-            map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_b)
-        )
+        expect_val = list(map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_a))
+        actual_val = list(map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_b))
         expect_val = sorted(expect_val)
         actual_val = sorted(actual_val)
         return actual_val == expect_val

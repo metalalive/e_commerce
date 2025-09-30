@@ -87,12 +87,8 @@ class LoginAccountCreateView(APIView, UserEditViewLogMixin):
         else:
             serializer_kwargs = {
                 "mail_kwargs": {
-                    "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                        "body/user_activated.html"
-                    ),
-                    "subject_template": MAIL_DATA_BASEPATH.joinpath(
-                        "subject/user_activated.txt"
-                    ),
+                    "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/user_activated.html"),
+                    "subject_template": MAIL_DATA_BASEPATH.joinpath("subject/user_activated.txt"),
                 },
                 "data": request.data,
                 "passwd_required": True,
@@ -115,9 +111,7 @@ class LoginAccountCreateView(APIView, UserEditViewLogMixin):
             response_data["created"] = True
         return {"data": response_data, "status": None}
 
-    post = check_auth_req_token(
-        fn_succeed=_post_token_valid, fn_failure=_rst_req_token_expired
-    )
+    post = check_auth_req_token(fn_succeed=_post_token_valid, fn_failure=_rst_req_token_expired)
 
 
 class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
@@ -146,12 +140,8 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
             "request_time": datetime.now(timezone.utc),
         }
         content, subject = render_mail_content(
-            msg_template_path=MAIL_DATA_BASEPATH.joinpath(
-                "body/username_recovery.html"
-            ),
-            subject_template_path=MAIL_DATA_BASEPATH.joinpath(
-                "subject/username_recovery.txt"
-            ),
+            msg_template_path=MAIL_DATA_BASEPATH.joinpath("body/username_recovery.html"),
+            subject_template_path=MAIL_DATA_BASEPATH.joinpath("subject/username_recovery.txt"),
             msg_data=msg_data,
         )
         task_kwargs = {
@@ -162,9 +152,7 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
         }
         # Do not return result backend or task ID to unauthorized frontend user.
         # Log errors raising in async task
-        async_send_mail.apply_async(
-            kwargs=task_kwargs, link_error=async_default_error_handler.s()
-        )
+        async_send_mail.apply_async(kwargs=task_kwargs, link_error=async_default_error_handler.s())
         self._log_action(
             action_type="recover_username",
             request=request,
@@ -174,9 +162,7 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
         )
 
 
-class UnauthPasswordResetRequestView(
-    LimitQuerySetMixin, GenericAPIView, BulkCreateModelMixin
-):
+class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkCreateModelMixin):
     """for unauthenticated users who registered but  forget their password"""
 
     serializer_class = UnauthRstAccountReqSerializer
@@ -185,9 +171,7 @@ class UnauthPasswordResetRequestView(
     def post(self, request, *args, **kwargs):
         addr = request.data.get("addr", "").strip()
         email, profile = get_profile_by_email(addr=addr, request=request)
-        self._send_req_mail(
-            request=request, kwargs=kwargs, profile=profile, email=email
-        )
+        self._send_req_mail(request=request, kwargs=kwargs, profile=profile, email=email)
         # always respond OK status even if it failed, to avoid malicious email enumeration
         return RestResponse(
             data=None, status=RestStatus.HTTP_202_ACCEPTED
@@ -199,12 +183,8 @@ class UnauthPasswordResetRequestView(
         resource_path = UserMgtCfg.api_url[UnauthPasswordResetView.__name__].split("/")
         resource_path.pop()  # last one should be <slug:token>
         serializer_kwargs = {
-            "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                "body/passwd_reset_request.html"
-            ),
-            "subject_template": MAIL_DATA_BASEPATH.joinpath(
-                "subject/passwd_reset_request.txt"
-            ),
+            "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/passwd_reset_request.html"),
+            "subject_template": MAIL_DATA_BASEPATH.joinpath("subject/passwd_reset_request.txt"),
             "url_host": WEB_HOST,
             "url_resource": "/".join(resource_path),
         }
@@ -289,9 +269,7 @@ class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
             status = RestStatus.HTTP_403_FORBIDDEN
         return {"data": response_data, "status": status}
 
-    patch = check_auth_req_token(
-        fn_succeed=_patch_token_valid, fn_failure=_rst_req_token_expired
-    )
+    patch = check_auth_req_token(fn_succeed=_patch_token_valid, fn_failure=_rst_req_token_expired)
 
 
 class CommonAuthAccountEditMixin:
@@ -382,9 +360,7 @@ class LoginView(APIView):
     def _set_refresh_token_to_cookie(self, response, jwt):
         if not jwt:
             return
-        jwt_name_refresh_token = getattr(
-            django_settings, "JWT_NAME_REFRESH_TOKEN", None
-        )
+        jwt_name_refresh_token = getattr(django_settings, "JWT_NAME_REFRESH_TOKEN", None)
         err_msg = "all of the parameters have to be set when applying JWTbaseMiddleware , but some of them are unconfigured, JWT_NAME_REFRESH_TOKEN = %s"
         assert jwt_name_refresh_token, err_msg % (jwt_name_refresh_token)
         _keystore = create_keystore_helper(
@@ -488,7 +464,9 @@ class RefreshAccessTokenView(APIView):
         # --- fetch low-level permissions relevant to the audience ---
         out["perms"] = serialize_profile_permissions(profile, app_labels=audience)
         if not any(out["perms"]) and out["priv_status"] != type(profile).SUPERUSER:
-            errmsg = "the user does not have access to these resource services listed in audience field"
+            errmsg = (
+                "the user does not have access to these resource services listed in audience field"
+            )
             err_detail = {
                 drf_settings.NON_FIELD_ERRORS_KEY: [errmsg],
             }
@@ -505,9 +483,7 @@ class RefreshAccessTokenView(APIView):
             cfg=django_settings.AUTH_KEYSTORE, import_fn=import_string
         )
         now_time = datetime.utcnow()
-        expiry = now_time + timedelta(
-            seconds=django_settings.JWT_ACCESS_TOKEN_VALID_PERIOD
-        )
+        expiry = now_time + timedelta(seconds=django_settings.JWT_ACCESS_TOKEN_VALID_PERIOD)
         token = JWT()
         issuer_url = "%s/%s" % (
             cors_cfg.ALLOWED_ORIGIN[UserMgtCfg.name],
@@ -531,9 +507,9 @@ class RefreshAccessTokenView(APIView):
 class JWKSPublicKeyView(APIView):
     def get(self, request, *args, **kwargs):
         try:
-            filepath = django_settings.AUTH_KEYSTORE["persist_pubkey_handler"][
-                "init_kwargs"
-            ]["filepath"]
+            filepath = django_settings.AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"][
+                "filepath"
+            ]
             status = RestStatus.HTTP_200_OK
         except (AttributeError, KeyError) as e:
             status = RestStatus.HTTP_404_NOT_FOUND

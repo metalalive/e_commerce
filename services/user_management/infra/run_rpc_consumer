@@ -1,10 +1,6 @@
 # Note Celery consumer in one conainer updates jwks to file on host machine
 # then api server in another container refers to the content from the same jwks file
 
-# wait for DB server to be ready, test interval = 15 sec, timeout = 5 min
-. infra/check_db_ready
-wait_for_db 15 5
-
 exec  celery --app=ecommerce_common.util  --config=user_management.celeryconfig  worker \
     --concurrency 1 --loglevel=INFO  --hostname=usermgt@%h  -E \
     --logfile=/app/log/usermgt_celery.log

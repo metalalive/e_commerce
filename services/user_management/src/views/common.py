@@ -38,9 +38,7 @@ def get_profile_by_email(addr: str, request):
         email = EmailAddress.objects.get(addr=addr)
         prof_cls = email.user_type.model_class()
         if prof_cls is not GenericUserProfile:
-            raise MultipleObjectsReturned(
-                "invalid class type for individual user profile"
-            )
+            raise MultipleObjectsReturned("invalid class type for individual user profile")
         profile = prof_cls.objects.get(pk=email.user_id)
         if not profile.account.is_active:
             raise PermissionDenied("not allowed to query account of a deactivated user")

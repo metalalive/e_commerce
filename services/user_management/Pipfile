@@ -13,20 +13,20 @@ user-management = {path = ".", editable = true}
 # `pipenv run pip install /path/to/c-ext/wheel.whl`
 # my-c-extension-lib= {path = "../common/python/c_exts", editable = true}
 
-django = "5.1.4"
-djangorestframework = "3.15.2"
-ijson = "==3.3.0"
-PyJWT = "2.8.0"
-bcrypt = "4.2.1"
-cryptography = "44.0.0"
+django = "5.2.6"
+djangorestframework = "3.16.1"
+ijson = "==3.4.0"
+PyJWT = "2.10.1"
+bcrypt = "4.3.0"
+cryptography = "45.0.7"
 mysqlclient = "2.1.1"
 # - `setuptools` can be used for those old packages which still rely
 #   on`distutils`, which is removed since python 3.12
-setuptools = "75.6.0"
+setuptools = "80.9.0"
 
 [dev-packages]
 black = ">=24.4.0"
-ruff = "==0.12.5"
+ruff = ">=0.13.0"
 
 [requires]
 python_version = "3.13"

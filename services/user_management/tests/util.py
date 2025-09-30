@@ -13,9 +13,7 @@ class RenderMailContentTestCase(unittest.TestCase):
 
     def test_ok(self):
         msg_template_path = self._example_path.joinpath("mail_content_template.html")
-        subject_template_path = self._example_path.joinpath(
-            "mail_subject_template.html"
-        )
+        subject_template_path = self._example_path.joinpath("mail_subject_template.html")
         msg_data = {
             "func_name": "user-preference-history",
             "syntax": "zero-sized type",
@@ -30,18 +28,14 @@ class RenderMailContentTestCase(unittest.TestCase):
         )
         self.assertEqual(actual_subject, "Your neighbor's grass always looks greener")
         self.assertEqual(actual_content.index("user-preference-history"), 1)
-        self.assertGreater(
-            actual_content.index("added to the neural-network-training module"), 0
-        )
+        self.assertGreater(actual_content.index("added to the neural-network-training module"), 0)
         self.assertGreater(
             actual_content.index("zero-sized type could lead to undefined behaviour"), 0
         )
 
     def test_template_not_exists(self):
         msg_template_path = self._example_path.joinpath("xxxx.html")
-        subject_template_path = self._example_path.joinpath(
-            "mail_subject_template.html"
-        )
+        subject_template_path = self._example_path.joinpath("mail_subject_template.html")
         msg_data = {}
         subject_data = {"someone_else": "neighbor", "thing": "grass", "adj": "greener"}
         with self.assertRaises(FileNotFoundError):
@@ -54,9 +48,7 @@ class RenderMailContentTestCase(unittest.TestCase):
 
     def test_render_error(self):
         msg_template_path = self._example_path.joinpath("mail_content_template.html")
-        subject_template_path = self._example_path.joinpath(
-            "mail_subject_template.html"
-        )
+        subject_template_path = self._example_path.joinpath("mail_subject_template.html")
         # django template simply ignores the missing variables
         msg_data = {"func_name": "lifetime-ann\x00tate", "syntax": "non-leak"}
         subject_data = {

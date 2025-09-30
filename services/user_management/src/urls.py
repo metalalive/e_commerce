@@ -35,18 +35,10 @@ urlpatterns = [
     path(UserMgtCfg.api_url[PermissionView.__name__], PermissionView.as_view()),
     path(UserMgtCfg.api_url[RoleAPIView.__name__][0], RoleAPIView.as_view()),
     path(UserMgtCfg.api_url[RoleAPIView.__name__][1], RoleAPIView.as_view()),
-    path(
-        UserMgtCfg.api_url[UserGroupsAPIView.__name__][0], UserGroupsAPIView.as_view()
-    ),
-    path(
-        UserMgtCfg.api_url[UserGroupsAPIView.__name__][1], UserGroupsAPIView.as_view()
-    ),
-    path(
-        UserMgtCfg.api_url[UserProfileAPIView.__name__][0], UserProfileAPIView.as_view()
-    ),
-    path(
-        UserMgtCfg.api_url[UserProfileAPIView.__name__][1], UserProfileAPIView.as_view()
-    ),
+    path(UserMgtCfg.api_url[UserGroupsAPIView.__name__][0], UserGroupsAPIView.as_view()),
+    path(UserMgtCfg.api_url[UserGroupsAPIView.__name__][1], UserGroupsAPIView.as_view()),
+    path(UserMgtCfg.api_url[UserProfileAPIView.__name__][0], UserProfileAPIView.as_view()),
+    path(UserMgtCfg.api_url[UserProfileAPIView.__name__][1], UserProfileAPIView.as_view()),
     path(
         UserMgtCfg.api_url[AccountActivationView.__name__],
         AccountActivationView.as_view(),

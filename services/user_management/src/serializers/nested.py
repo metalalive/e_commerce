@@ -46,9 +46,7 @@ class BaseQuotaCheckerMixin:
             type(self.child).__qualname__,
         ]
         if not isinstance(value, (int, float)):
-            err_msg = (
-                "Quota value is %s, which is neither integer or float number" % value
-            )
+            err_msg = "Quota value is %s, which is neither integer or float number" % value
             log_msg.extend(["err_msg", err_msg])
             _logger.info(None, *log_msg)
             raise ValueError(err_msg)
@@ -75,9 +73,7 @@ class AugmentUserRefMixin(AugmentEditFieldsMixin):
     }
 
 
-class QuotaCheckerSerializer(
-    AugmentUserRefMixin, BaseQuotaCheckerMixin, BulkUpdateListSerializer
-):
+class QuotaCheckerSerializer(AugmentUserRefMixin, BaseQuotaCheckerMixin, BulkUpdateListSerializer):
     # ensure method resolution order meets application requirement : __mro__
     def __init__(self, *args, **kwargs):
         errmsg = "you haven't configured quota for the item"
@@ -131,9 +127,7 @@ class BulkUserQuotaRelationSerializer(AugmentUserRefMixin, BulkUpdateListSeriali
         mat_ids = self._retrieve_material_ids(data)
         return [item for item in data if item[self.pk_field_name].id not in mat_ids]
 
-    def update(
-        self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs
-    ):
+    def update(self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs):
         self._current_quota_applied = instance
         instance = super().update(
             instance=self._current_quota_applied,
@@ -183,9 +177,7 @@ class EmailSerializer(CommonUserSubformSerializer):
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
-        self._mark_as_creation_on_update(
-            pk_field_name="id", instance=instance, data=data
-        )
+        self._mark_as_creation_on_update(pk_field_name="id", instance=instance, data=data)
 
 
 class PhoneNumberSerializer(CommonUserSubformSerializer):
@@ -197,9 +189,7 @@ class PhoneNumberSerializer(CommonUserSubformSerializer):
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
-        self._mark_as_creation_on_update(
-            pk_field_name="id", instance=instance, data=data
-        )
+        self._mark_as_creation_on_update(pk_field_name="id", instance=instance, data=data)
 
 
 class GeoLocationSerializer(CommonUserSubformSerializer):
@@ -211,9 +201,7 @@ class GeoLocationSerializer(CommonUserSubformSerializer):
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
-        self._mark_as_creation_on_update(
-            pk_field_name="id", instance=instance, data=data
-        )
+        self._mark_as_creation_on_update(pk_field_name="id", instance=instance, data=data)
 
 
 class UserQuotaRelationSerializer(CommonUserSubformSerializer):
@@ -247,9 +235,7 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
             new_expiry = new_expiry.isoformat()
         log_msg.extend(["old_expiry", old_expiry, "new_expiry", new_expiry])
         try:
-            assert (
-                instance.material == validated_data["material"]
-            ), "material does not match"
+            assert instance.material == validated_data["material"], "material does not match"
             instance = super().update(instance=instance, validated_data=validated_data)
         except AssertionError:
             _logger.error(None, *log_msg)
@@ -291,9 +277,7 @@ class _BulkUserPriviledgeAssigner(AugmentUserRefMixin, BulkUpdateListSerializer)
         priv_ids = self._retrieve_priv_ids(data)
         return [item for item in data if item[self.pk_field_name].id not in priv_ids]
 
-    def update(
-        self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs
-    ):
+    def update(self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs):
         self._current_priv_set_applied = instance
         log_msg = [
             "srlz_cls",
@@ -449,9 +433,7 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
         if old_role == new_role:
             if validated_data["expiry"] != instance.expiry:
                 validated_data["approved_by"] = self._account.profile
-                instance = super().update(
-                    instance=instance, validated_data=validated_data
-                )
+                instance = super().update(instance=instance, validated_data=validated_data)
             _logger.debug(None, *log_msg)
         else:
             _logger.error(None, *log_msg)

@@ -15,21 +15,15 @@ class NestedFieldSetupMixin:
         mgt = getattr(instance, name)
         log_msg = ["subform_name", name, "pk_field_name", pk_field_name]
         if isinstance(field, ListSerializer):
+            raw_subform = data.get(name, [])
             try:
-                raw_subform = data.get(name, [])
                 if isinstance(pk_field_name, str):
                     ids = [
-                        d[pk_field_name]
-                        for d in raw_subform
-                        if d.get(pk_field_name, None)
+                        d[pk_field_name] for d in raw_subform if d.get(pk_field_name)
                     ]
                 elif isinstance(pk_field_name, (list, tuple)):  # composite key
                     ids = [
-                        {
-                            col_name: d[col_name]
-                            for col_name in pk_field_name
-                            if d.get(col_name, None)
-                        }
+                        tuple(d[c] for c in pk_field_name if d.get(c))
                         for d in raw_subform
                     ]
                     # raise NotImplementedError()
@@ -37,9 +31,18 @@ class NestedFieldSetupMixin:
                 if mgt:
                     field.instance = mgt.filter(pk__in=ids)
             except (TypeError, AttributeError) as e:
-                _logger.warning(None, *log_msg)
+                _logger.warning(None, "exception", str(e), *log_msg)
                 errmsg = {name: ["improper data format"]}
                 raise RestValidationError(errmsg)
+            except (Exception,) as e:
+                # fmt: off
+                log_msg.extend([
+                    "instance_cls", type(instance).__name__, "data_cls", type(data).__name__,
+                    "raw_subform", str(raw_subform), type(e).__name__, str(e),
+                ])
+                # fmt: on
+                _logger.error(None, *log_msg)
+                raise e
         else:
             field.instance = mgt
             log_msg += ["ID", field.instance.pk]

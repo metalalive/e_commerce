@@ -52,9 +52,7 @@ class AccountCreationRequestTestCase(BaseTestCase):
         url_resource = "account/create"
         self.expect_url_pattern = "/".join([url_host, url_resource, "%s"])
         self.serializer_kwargs = {
-            "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                "body/user_activation_link_send.html"
-            ),
+            "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/user_activation_link_send.html"),
             "subject_template": MAIL_DATA_BASEPATH.joinpath(
                 "subject/user_activation_link_send.txt"
             ),
@@ -65,28 +63,20 @@ class AccountCreationRequestTestCase(BaseTestCase):
         }
 
     def test_new_request_ok(self):
-        req_data = list(
-            map(lambda profile: {"email": profile.emails.last().id}, self._profiles)
-        )
+        req_data = list(map(lambda profile: {"email": profile.emails.last().id}, self._profiles))
         self.serializer_kwargs["data"] = req_data
         serializer = UnauthRstAccountReqSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
         created_requests = serializer.save()
-        expect_mail_ids = list(
-            map(lambda profile: profile.emails.last().id, self._profiles)
-        )
+        expect_mail_ids = list(map(lambda profile: profile.emails.last().id, self._profiles))
         for req in created_requests:
             expect_mail_ids.index(req.email.id)
             self.assertGreater(len(req.hashed_token), 0)
         actual_data = serializer.data
-        self.assertSetEqual(
-            {"email", "time_created", "async_task"}, set(actual_data[0].keys())
-        )
+        self.assertSetEqual({"email", "time_created", "async_task"}, set(actual_data[0].keys()))
 
     def test_invalid_input(self):
-        req_data = list(
-            map(lambda profile: {"email": profile.emails.last().id}, self._profiles)
-        )
+        req_data = list(map(lambda profile: {"email": profile.emails.last().id}, self._profiles))
         invalid_reqs = [{}, {"email": None}, {"email": -123}, {"email": "xyz"}]
         req_data.extend(invalid_reqs)
         self.serializer_kwargs["data"] = req_data
@@ -109,15 +99,11 @@ class AccountCreationRequestTestCase(BaseTestCase):
         serializer = UnauthRstAccountReqSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
         created_requests = serializer.save()
-        self._validate_dup_requests(
-            evicted_req=created_requests[0], saved_req=created_requests[-1]
-        )
+        self._validate_dup_requests(evicted_req=created_requests[0], saved_req=created_requests[-1])
 
     def test_overwrite_existing_request(self):
         dup_email = self._profiles[0].emails.last()
-        existing_req = UnauthRstAccountReqSerializer.Meta.model.objects.create(
-            email=dup_email
-        )
+        existing_req = UnauthRstAccountReqSerializer.Meta.model.objects.create(email=dup_email)
         req_data = list(
             map(lambda profile: {"email": profile.emails.last().id}, self._profiles[:2])
         )
@@ -156,12 +142,8 @@ class LoginAccountCreationTestCase(BaseTestCase):
         )
         self.serializer_kwargs = {
             "mail_kwargs": {
-                "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                    "body/user_activated.html"
-                ),
-                "subject_template": MAIL_DATA_BASEPATH.joinpath(
-                    "subject/user_activated.txt"
-                ),
+                "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/user_activated.html"),
+                "subject_template": MAIL_DATA_BASEPATH.joinpath("subject/user_activated.txt"),
             },
             "passwd_required": True,
             "confirm_passwd": True,
@@ -207,9 +189,7 @@ class LoginAccountCreationTestCase(BaseTestCase):
 
     def test_username_duplicate(self):
         dup_account_data = _fixtures[LoginAccount][0]
-        existing_profile = GenericUserProfile.objects.create(
-            **_fixtures[GenericUserProfile][1]
-        )
+        existing_profile = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][1])
         existing_profile.activate(new_account_data=dup_account_data)
         req_data = dup_account_data.copy()
         req_data["password2"] = req_data["password"]
@@ -251,12 +231,8 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         )
         self.serializer_kwargs = {
             "mail_kwargs": {
-                "msg_template_path": MAIL_DATA_BASEPATH.joinpath(
-                    "body/unauth_passwd_reset.html"
-                ),
-                "subject_template": MAIL_DATA_BASEPATH.joinpath(
-                    "subject/unauth_passwd_reset.txt"
-                ),
+                "msg_template_path": MAIL_DATA_BASEPATH.joinpath("body/unauth_passwd_reset.html"),
+                "subject_template": MAIL_DATA_BASEPATH.joinpath("subject/unauth_passwd_reset.txt"),
             },
             "data": None,
             "passwd_required": True,

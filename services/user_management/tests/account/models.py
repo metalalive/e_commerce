@@ -29,9 +29,7 @@ class ResetRequestCreationTestCase(TransactionTestCase):
         UnauthResetAccountRequest.objects.all().delete()
 
     def test_save_then_read(self):
-        rst_req = UnauthResetAccountRequest.objects.create(
-            email=self._profile.emails.first()
-        )
+        rst_req = UnauthResetAccountRequest.objects.create(email=self._profile.emails.first())
         token = rst_req.token
         self.assertIsNotNone(token)
         self.assertTrue(isinstance(token, str))
@@ -46,13 +44,9 @@ class ResetRequestCreationTestCase(TransactionTestCase):
         self.assertIsNotNone(rst_req)
         self.assertFalse(rst_req.is_expired)
         # assume it is expired
-        req_valid_secs = (
-            UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(3, 15)
-        )
+        req_valid_secs = UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(3, 15)
         mocked_nowtime = django_timezone.now() + timedelta(seconds=req_valid_secs)
-        with patch(
-            "user_management.models.auth.django_timezone.now"
-        ) as mock_nowtime_fn:
+        with patch("user_management.models.auth.django_timezone.now") as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_nowtime
             self.assertTrue(rst_req.is_expired)
         rst_req = None
@@ -70,14 +64,10 @@ class ResetRequestCreationTestCase(TransactionTestCase):
         rst_reqs.append(UnauthResetAccountRequest.objects.create(email=emails[0]))
         dup_hash_token = rst_reqs[-1].hashed_token
         rst_reqs.append(
-            UnauthResetAccountRequest.objects.create(
-                email=emails[1], hashed_token=dup_hash_token
-            )
+            UnauthResetAccountRequest.objects.create(email=emails[1], hashed_token=dup_hash_token)
         )
         rst_reqs.append(
-            UnauthResetAccountRequest.objects.create(
-                email=emails[0], hashed_token=dup_hash_token
-            )
+            UnauthResetAccountRequest.objects.create(email=emails[0], hashed_token=dup_hash_token)
         )
         hashed_tokens = list(map(lambda obj: obj.hashed_token, rst_reqs))
         distinct_hashed_tokens = set(hashed_tokens)
@@ -121,9 +111,7 @@ class ResetRequestDeletionTestCase(TransactionTestCase):
             self._profile.emails.last().rst_account_reqs.last(),
             self._profile_2nd.emails.last().rst_account_reqs.first(),
         ]
-        req_valid_secs = (
-            UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(5, 15)
-        )
+        req_valid_secs = UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(5, 15)
         mocked_expired_time = django_timezone.now() - timedelta(seconds=req_valid_secs)
         with patch("django.utils.timezone.now") as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_expired_time
@@ -137,16 +125,10 @@ class ResetRequestDeletionTestCase(TransactionTestCase):
         expect_value = set(
             map(lambda obj: (obj.email.user_id, obj.email.addr), expect_expired_reqs)
         )
-        actual_value = set(
-            map(lambda d: (d["email__user_id"], d["email__addr"]), deleted_items)
-        )
+        actual_value = set(map(lambda d: (d["email__user_id"], d["email__addr"]), deleted_items))
         self.assertSetEqual(expect_value, actual_value)
-        req_hashed_tokens = tuple(
-            map(lambda obj: obj.hashed_token, expect_expired_reqs)
-        )
-        qset = UnauthResetAccountRequest.objects.filter(
-            hashed_token__in=req_hashed_tokens
-        )
+        req_hashed_tokens = tuple(map(lambda obj: obj.hashed_token, expect_expired_reqs))
+        qset = UnauthResetAccountRequest.objects.filter(hashed_token__in=req_hashed_tokens)
         self.assertFalse(qset.exists())
 
 
@@ -163,18 +145,14 @@ class LoginAccountDeletionTestCase(TransactionTestCase):
         )
         tuple(
             map(
-                lambda profile: profile.roles.create(
-                    approved_by=profiles[0], role=superuser_role
-                ),
+                lambda profile: profile.roles.create(approved_by=profiles[0], role=superuser_role),
                 profiles,
             )
         )
         account_data_iter = iter(_fixtures[LoginAccount])
         tuple(
             map(
-                lambda profile: profile.activate(
-                    new_account_data=next(account_data_iter)
-                ),
+                lambda profile: profile.activate(new_account_data=next(account_data_iter)),
                 profiles,
             )
         )
