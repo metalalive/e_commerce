@@ -416,7 +416,7 @@ class ProfileUpdateTestCase(ProfileUpdateBaseTestCase):
             evicted = req_data_item["quota"].pop()
             req_data_item["quota"].append(new_data)
             # --- emails ---
-            req_data_item["emails"][0]["addr"] = "%s@t0ward.c10k" % "".join(
+            req_data_item["emails"][0]["addr"] = "%s@example.org" % "".join(
                 random.choices(string.ascii_letters, k=8)
             )
             evicted = req_data_item["emails"].pop()
@@ -457,7 +457,7 @@ class ProfileUpdateTestCase(ProfileUpdateBaseTestCase):
         req_data = self.request_data
         req_data[0]["first_name"] = "Jose"
         # --- emails ---
-        req_data[0]["emails"][0]["addr"] = "%s@t0ward.c10k" % "".join(
+        req_data[0]["emails"][0]["addr"] = "%s@example.org" % "".join(
             random.choices(string.ascii_letters, k=8)
         )
         evicted = req_data[0]["emails"].pop()  # noqa: F841

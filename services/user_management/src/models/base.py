@@ -233,6 +233,7 @@ class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFiel
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
 
+    pk = models.CompositePrimaryKey("user_type_id", "user_id", "material_id")
     material = models.ForeignKey(
         to=QuotaMaterial,
         on_delete=models.CASCADE,
@@ -242,18 +243,6 @@ class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFiel
         related_name="usr_relations",
     )
     maxnum = models.PositiveSmallIntegerField(default=1)
-    id = models.CharField(max_length=18, primary_key=True)
-
-    def refresh_pk(self) -> str:
-        _user_type = self.user_type.id & 0xFF
-        _user_id = self.user_id
-        _material = self.material.id
-        self.id = "{:02X}{:08X}{:08X}".format(_user_type, _user_id, _material)
-        return self.id
-
-    def save(self, *args, **kwargs):
-        self.refresh_pk()
-        super().save(*args, **kwargs)
 
 
 class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
@@ -730,6 +719,7 @@ class GenericUserAppliedRole(
     class Meta:
         db_table = "generic_user_applied_role"
 
+    pk = models.CompositePrimaryKey("user_type_id", "user_id", "role_id")
     # * in case the staff who approved these role requests are deleted, the approved_by field should be
     #   modified to default superuser. So  a profile for default superuser will be necessary
     role = models.ForeignKey(
@@ -748,19 +738,6 @@ class GenericUserAppliedRole(
         related_name="approval_role",
         on_delete=models.SET_NULL,
     )
-    id = models.CharField(max_length=18, primary_key=True)
-
-    def format_pk(usr_type: int, usr_id: int, role_id: int) -> str:
-        usr_type = usr_type & 0xFF
-        return "{:02X}{:08X}{:08X}".format(usr_type, usr_id, role_id)
-
-    def refresh_pk(self) -> str:
-        self.id = type(self).format_pk(self.user_type.id, self.user_id, self.role.id)
-        return self.id
-
-    def save(self, *args, **kwargs):
-        self.refresh_pk()
-        super().save(*args, **kwargs)
 
 
 class GenericUserGroupRelation(SoftDeleteObjectMixin):
@@ -770,6 +747,7 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
     class Meta:
         db_table = "generic_user_group_relation"
 
+    pk = models.CompositePrimaryKey("group_id", "profile_id")
     # fmt: off
     group = models.ForeignKey(GenericUserGroup, blank=False, on_delete=models.CASCADE, db_column="group", related_name="profiles")
     profile = models.ForeignKey(GenericUserProfile, blank=False, on_delete=models.CASCADE, db_column="profile", related_name="groups")
@@ -777,15 +755,5 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
         GenericUserProfile, blank=True, null=True, db_column="approved_by",
         related_name="approval_group", on_delete=models.SET_NULL
     )
-    id = models.CharField(max_length=16, primary_key=True)
     # fmt: on
 
-    def refresh_pk(self) -> str:
-        grp_id = self.group.id
-        uprof_id = self.profile.id
-        self.id = "{:08X}{:08X}".format(grp_id, uprof_id)
-        return self.id
-
-    def save(self, *args, **kwargs):
-        self.refresh_pk()
-        super().save(*args, **kwargs)

@@ -69,7 +69,7 @@
 },
 {
     "model": "user_management.genericuserappliedrole",
-    "pk": "FF0000000100000001",
+    "pk": [-1, 1, 1],
     "fields": {
         "time_deleted": null,
         "user_type": -1,
@@ -81,7 +81,7 @@
 },
 {
     "model": "user_management.genericuserappliedrole",
-    "pk": "FF0000000200000002",
+    "pk": [-1, 2, 2],
     "fields": {
         "time_deleted": null,
         "user_type": -1,

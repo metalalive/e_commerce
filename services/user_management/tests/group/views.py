@@ -358,7 +358,7 @@ class GroupUpdateTestCase(GroupBaseUpdateTestCase):
             root.value["quota"].append(new_data)
             # --- emails ---
             new_data = self._gen_emails(num=1)
-            root.value["emails"][0]["addr"] = "%s@t0ward.c10k" % "".join(
+            root.value["emails"][0]["addr"] = "%s@example.io" % "".join(
                 random.choices(string.ascii_letters, k=8)
             )
             evicted = root.value["emails"].pop()

@@ -112,21 +112,6 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
-            name='UserQuotaRelation',
-            fields=[
-                ('time_deleted', models.DateTimeField(blank=True, default=None, editable=False, null=True)),
-                ('user_id', models.PositiveIntegerField(db_column='user_id')),
-                ('expiry', models.DateTimeField(blank=True, null=True)),
-                ('maxnum', models.PositiveSmallIntegerField(default=1)),
-                ('id', models.CharField(max_length=18, primary_key=True, serialize=False)),
-                ('material', models.ForeignKey(db_column='material', on_delete=django.db.models.deletion.CASCADE, related_name='usr_relations', to='user_management.quotamaterial')),
-                ('user_type', models.ForeignKey(db_column='user_type', limit_choices_to=models.Q(models.Q(('app_label', 'user_management'), ('model', 'GenericUserProfile')), models.Q(('app_label', 'user_management'), ('model', 'GenericUserGroup')), _connector='OR'), on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-            ],
-            options={
-                'db_table': 'user_quota_relation',
-            },
-        ),
-        migrations.CreateModel(
             name='UsermgtSoftDeleteRecord',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -189,19 +174,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='GenericUserGroupRelation',
-            fields=[
-                ('time_deleted', models.DateTimeField(blank=True, default=None, editable=False, null=True)),
-                ('id', models.CharField(max_length=16, primary_key=True, serialize=False)),
-                ('approved_by', models.ForeignKey(blank=True, db_column='approved_by', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approval_group', to='user_management.genericuserprofile')),
-                ('group', models.ForeignKey(db_column='group', on_delete=django.db.models.deletion.CASCADE, related_name='profiles', to='user_management.genericusergroup')),
-                ('profile', models.ForeignKey(db_column='profile', on_delete=django.db.models.deletion.CASCADE, related_name='groups', to='user_management.genericuserprofile')),
-            ],
-            options={
-                'db_table': 'generic_user_group_relation',
-            },
-        ),
-        migrations.CreateModel(
             name='GenericUserGroupClosure',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -213,21 +185,6 @@ class Migration(migrations.Migration):
             options={
                 'db_table': 'generic_user_group_closure',
                 'abstract': False,
-            },
-        ),
-        migrations.CreateModel(
-            name='GenericUserAppliedRole',
-            fields=[
-                ('time_deleted', models.DateTimeField(blank=True, default=None, editable=False, null=True)),
-                ('user_id', models.PositiveIntegerField(db_column='user_id')),
-                ('expiry', models.DateTimeField(blank=True, null=True)),
-                ('id', models.CharField(max_length=18, primary_key=True, serialize=False)),
-                ('approved_by', models.ForeignKey(blank=True, db_column='approved_by', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approval_role', to='user_management.genericuserprofile')),
-                ('role', models.ForeignKey(db_column='role', on_delete=django.db.models.deletion.CASCADE, related_name='users_applied', to='user_management.role')),
-                ('user_type', models.ForeignKey(db_column='user_type', limit_choices_to=models.Q(models.Q(('app_label', 'user_management'), ('model', 'GenericUserProfile')), models.Q(('app_label', 'user_management'), ('model', 'GenericUserGroup')), _connector='OR'), on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-            ],
-            options={
-                'db_table': 'generic_user_applied_role',
             },
         ),
         migrations.CreateModel(

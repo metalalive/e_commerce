@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.contenttypes.models import ContentType
 from django.db.models.constants import LOOKUP_SEP
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.auth.models import Permission
@@ -175,6 +176,14 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
             ("phones", "id"),
             ("locations", "id"),
         ]
+        if instance:
+            content_type_id = ContentType.objects.get_for_model(type(instance)).id
+            for d in data.get("roles", []):
+                d["user_type"] = content_type_id
+                d["user_id"] = instance.id
+            for d in data.get("quota", []):
+                d["user_type"] = content_type_id
+                d["user_id"] = instance.id
         for s_name, pk_name in subform_keys:
             self._setup_subform_instance(
                 name=s_name, instance=instance, data=data, pk_field_name=pk_name
@@ -185,6 +194,13 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
             self.fields[s_name].read_only = False
         log_msg = ["roles_data", data.get("roles")]
         _logger.debug(None, *log_msg)
+        if instance:
+            for d in data.get("roles", []):
+                d.pop("user_type")
+                d.pop("user_id")
+            for d in data.get("quota", []):
+                d.pop("user_type")
+                d.pop("user_id")
 
     def _instant_update_contact_quota(self, _final_quota):
         usermgt_materials_code = tuple(
@@ -319,12 +335,18 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
     def extra_setup_before_validation(self, instance, data):
         super().extra_setup_before_validation(instance=instance, data=data)
         subform_keys = [("groups", ("group", "profile"))]
+        if instance:
+            for d in data.get("groups", []):
+                d["profile"] = instance.id
         for s_name, pk_name in subform_keys:
             self._setup_subform_instance(
                 name=s_name, instance=instance, data=data, pk_field_name=pk_name
             )
             self._append_user_field(name=s_name, instance=instance, data=data)
             self.fields[s_name].read_only = False
+        if instance:
+            for d in data.get("groups", []):
+                d.pop("profile")
         skip_edit_permission_data = False
         if not self._account.is_superuser and self.instance:
             logged_in_profile = self._account.profile

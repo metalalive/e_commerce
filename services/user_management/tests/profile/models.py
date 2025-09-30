@@ -621,7 +621,7 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertSetEqual({6, 8}, set(grp_ids))
         self._profile.delete(hard=True)
         qset = GenericUserGroupRelation.objects.all(with_deleted=True).filter(
-            id={"profile": prof_id, "group__in": grp_ids}
+            profile__id=prof_id, group__in=grp_ids
         )
         self.assertFalse(qset.exists())
         qset = GenericUserProfile.objects.all(with_deleted=True).filter(id=prof_id)
