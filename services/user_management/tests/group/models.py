@@ -316,21 +316,15 @@ class GroupDeletionTestCase(TransactionTestCase):
     def _get_affected_paths(self, delete_ids, data):
         out = {}
         for del_id in delete_ids:
-            filtered = filter(
-                lambda d: d["depth"] > 0 and d["ancestor"] == del_id, data
-            )
+            filtered = filter(lambda d: d["depth"] > 0 and d["ancestor"] == del_id, data)
             affected_descs = list(map(lambda d: d["descendant"], filtered))
-            filtered = filter(
-                lambda d: d["depth"] > 0 and d["descendant"] == del_id, data
-            )
+            filtered = filter(lambda d: d["depth"] > 0 and d["descendant"] == del_id, data)
             affected_ascs = list(map(lambda d: d["ancestor"], filtered))
             out[del_id] = {"asc": affected_ascs, "desc": affected_descs}
         return out
 
     def _assert_hierarchy_change(self, nodes_before_delete, nodes_after_delete):
-        path_map = {
-            (item["ancestor"], item["descendant"]): item for item in nodes_before_delete
-        }
+        path_map = {(item["ancestor"], item["descendant"]): item for item in nodes_before_delete}
         affected_path_map = self._get_affected_paths(
             delete_ids=self._delete_grp_ids, data=nodes_before_delete
         )
@@ -379,9 +373,7 @@ class GroupDeletionTestCase(TransactionTestCase):
         grps = GenericUserGroup.objects.filter(id__in=self._delete_grp_ids)
         grps.delete(hard=True)
 
-        qset = GenericUserGroup.objects.filter(
-            id__in=self._delete_grp_ids, with_deleted=True
-        )
+        qset = GenericUserGroup.objects.filter(id__in=self._delete_grp_ids, with_deleted=True)
         self.assertFalse(qset.exists())
         closure_qset = GenericUserGroupClosure.objects.filter(
             ancestor__in=self._delete_grp_ids, with_deleted=True
@@ -427,25 +419,17 @@ class GroupDeletionTestCase(TransactionTestCase):
         )
         grp_hier_before_delete = list(grp_hier_before_delete)
 
-        closure_qset = GenericUserGroupClosure.objects.filter(
-            ancestor__in=self._delete_grp_ids
-        )
+        closure_qset = GenericUserGroupClosure.objects.filter(ancestor__in=self._delete_grp_ids)
         expect_softdelete_ascs_ids = list(closure_qset.values_list("id", flat=True))
-        closure_qset = GenericUserGroupClosure.objects.filter(
-            descendant__in=self._delete_grp_ids
-        )
+        closure_qset = GenericUserGroupClosure.objects.filter(descendant__in=self._delete_grp_ids)
         expect_softdelete_descs_ids = list(closure_qset.values_list("id", flat=True))
 
         grps = GenericUserGroup.objects.filter(id__in=self._delete_grp_ids)
         grps.delete(profile_id=self._profile.id)
         # check soft-deleted closure nodes
-        closure_qset = GenericUserGroupClosure.objects.filter(
-            ancestor__in=self._delete_grp_ids
-        )
+        closure_qset = GenericUserGroupClosure.objects.filter(ancestor__in=self._delete_grp_ids)
         self.assertFalse(closure_qset.exists())
-        closure_qset = GenericUserGroupClosure.objects.filter(
-            descendant__in=self._delete_grp_ids
-        )
+        closure_qset = GenericUserGroupClosure.objects.filter(descendant__in=self._delete_grp_ids)
         self.assertFalse(closure_qset.exists())
         closure_qset = GenericUserGroupClosure.objects.filter(
             ancestor__in=self._delete_grp_ids, with_deleted=True
@@ -455,12 +439,8 @@ class GroupDeletionTestCase(TransactionTestCase):
             descendant__in=self._delete_grp_ids, with_deleted=True
         )
         actual_softdelete_descs_ids = list(closure_qset.values_list("id", flat=True))
-        self.assertSetEqual(
-            set(expect_softdelete_ascs_ids), set(actual_softdelete_ascs_ids)
-        )
-        self.assertSetEqual(
-            set(expect_softdelete_descs_ids), set(actual_softdelete_descs_ids)
-        )
+        self.assertSetEqual(set(expect_softdelete_ascs_ids), set(actual_softdelete_ascs_ids))
+        self.assertSetEqual(set(expect_softdelete_descs_ids), set(actual_softdelete_descs_ids))
         # check group hierarchy after the soft-delete operation
         grp_hier_after_delete = GenericUserGroupClosure.objects.values(
             "id", "depth", "ancestor", "descendant"
@@ -508,9 +488,7 @@ class GroupDeletionTestCase(TransactionTestCase):
 
         grps = GenericUserGroup.objects.filter(id__in=self._delete_grp_ids)
         grps.delete(profile_id=self._profile.id)
-        grps = GenericUserGroup.objects.get_deleted_set().filter(
-            id__in=self._delete_grp_ids
-        )
+        grps = GenericUserGroup.objects.get_deleted_set().filter(id__in=self._delete_grp_ids)
         grps.undelete(profile_id=self._profile.id)
 
         grp_hier_after_undelete = GenericUserGroupClosure.objects.values(
@@ -531,9 +509,7 @@ class GroupDeletionTestCase(TransactionTestCase):
             self.assertEqual(expect_num, 0)
         # check undeleted emails
         expect_undelete_emails = _data[EmailAddress]
-        actual_undelete_emails = list(
-            self._chosen_grp.emails.all().values("id", "addr")
-        )
+        actual_undelete_emails = list(self._chosen_grp.emails.all().values("id", "addr"))
         expect_undelete_emails = sort_nested_object(expect_undelete_emails)
         actual_undelete_emails = sort_nested_object(actual_undelete_emails)
         self.assertListEqual(expect_undelete_emails, actual_undelete_emails)
@@ -541,15 +517,11 @@ class GroupDeletionTestCase(TransactionTestCase):
         expect_undelete_role_rels = set(
             map(lambda obj: obj.role.id, self._objs[GenericUserAppliedRole])
         )
-        actual_undelete_role_rels = set(
-            self._chosen_grp.roles.all().values_list("role", flat=True)
-        )
+        actual_undelete_role_rels = set(self._chosen_grp.roles.all().values_list("role", flat=True))
         self.assertSetEqual(expect_undelete_role_rels, actual_undelete_role_rels)
         # check soft-deleted quota arrangements
         expect_undelete_quota_rels = set(
-            map(
-                lambda obj: (obj.material.id, obj.maxnum), self._objs[UserQuotaRelation]
-            )
+            map(lambda obj: (obj.material.id, obj.maxnum), self._objs[UserQuotaRelation])
         )
         actual_undelete_quota_rels = set(
             self._chosen_grp.quota.all().values_list(
@@ -559,9 +531,7 @@ class GroupDeletionTestCase(TransactionTestCase):
         )
         self.assertSetEqual(expect_undelete_quota_rels, actual_undelete_quota_rels)
 
-    def _bulk_undelete_evict_hierarchy(
-        self, delete_grp_ids, delete_2nd_grp_id, expect_evict_ids
-    ):
+    def _bulk_undelete_evict_hierarchy(self, delete_grp_ids, delete_2nd_grp_id, expect_evict_ids):
         grp_hier_before_delete = GenericUserGroupClosure.objects.values(
             "id", "depth", "ancestor", "descendant"
         )
@@ -583,16 +553,11 @@ class GroupDeletionTestCase(TransactionTestCase):
         )
         grp_hier_after_undelete = list(grp_hier_after_undelete)
 
-        delete_ops_history = (
-            expect_evict_ids.copy()
-        )  # (delete_grp_ids[0], delete_2nd_grp_id,)
+        delete_ops_history = expect_evict_ids.copy()  # (delete_grp_ids[0], delete_2nd_grp_id,)
         delete_ops_history.append(delete_2nd_grp_id)
 
         def _fn(d: Dict) -> bool:
-            return (
-                d["descendant"] in expect_evict_ids
-                and d["ancestor"] in expect_evict_ids
-            )
+            return d["descendant"] in expect_evict_ids and d["ancestor"] in expect_evict_ids
 
         undel_grps = list(filter(_fn, grp_hier_before_delete))
 
@@ -600,8 +565,7 @@ class GroupDeletionTestCase(TransactionTestCase):
             delete_ids=delete_ops_history, data=grp_hier_before_delete
         )
         grp_hier_before_delete_map = {
-            (item["ancestor"], item["descendant"]): item
-            for item in grp_hier_before_delete
+            (item["ancestor"], item["descendant"]): item for item in grp_hier_before_delete
         }
         for grp_id in delete_ops_history:
             path_map = affected_path_map[grp_id]

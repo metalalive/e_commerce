@@ -93,9 +93,7 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
     def test_verify_token_not_found(self):
         mock_request = self.base_mock_request
         mock_request.method = "DELETE"
-        mock_request.is_secure.return_value = (
-            False  # TODO, test for is_secure() is True
-        )
+        mock_request.is_secure.return_value = False  # TODO, test for is_secure() is True
         mock_callback = Mock(csrf_exempt=False)
         response = self.middleware.process_view(
             request=mock_request,
@@ -110,12 +108,8 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
     def test_verify_invalid_cookie_token(self):
         mock_request = self.base_mock_request
         mock_request.method = "PUT"
-        mock_request.is_secure.return_value = (
-            False  # TODO, test for is_secure() is True
-        )
-        mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = (
-            "invalid_csrf_token_in_cookie"
-        )
+        mock_request.is_secure.return_value = False  # TODO, test for is_secure() is True
+        mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = "invalid_csrf_token_in_cookie"
         mock_callback = Mock(csrf_exempt=False)
         response = self.middleware.process_view(
             request=mock_request,
@@ -130,12 +124,8 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
     def test_verify_missing_header_token(self):
         mock_request = self.base_mock_request
         mock_request.method = "POST"
-        mock_request.is_secure.return_value = (
-            False  # TODO, test for is_secure() is True
-        )
-        mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = mock_request.META[
-            "CSRF_COOKIE"
-        ]
+        mock_request.is_secure.return_value = False  # TODO, test for is_secure() is True
+        mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = mock_request.META["CSRF_COOKIE"]
         mock_callback = Mock(csrf_exempt=False)
         response = self.middleware.process_view(
             request=mock_request,
@@ -150,9 +140,7 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
     def test_verify_token_ok(self):
         mock_request = self.base_mock_request
         mock_request.method = "POST"
-        mock_request.is_secure.return_value = (
-            False  # TODO, test for is_secure() is True
-        )
+        mock_request.is_secure.return_value = False  # TODO, test for is_secure() is True
         expect_tok = mock_request.META["CSRF_COOKIE"]
         mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = expect_tok
         mock_request.META[django_settings.CSRF_HEADER_NAME] = expect_tok

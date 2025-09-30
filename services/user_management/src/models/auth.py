@@ -118,9 +118,7 @@ class UserManager(BaseUserManager):
 
         return self._create_user(username, password, **extra_fields)
 
-    def with_perm(
-        self, perm, is_active=True, include_superusers=True, backend=None, obj=None
-    ):
+    def with_perm(self, perm, is_active=True, include_superusers=True, backend=None, obj=None):
         if backend is None:
             backends = auth._get_backends(return_tuples=True)
             if len(backends) == 1:
@@ -131,9 +129,7 @@ class UserManager(BaseUserManager):
                     "therefore must provide the `backend` argument."
                 )
         elif not isinstance(backend, str):
-            raise TypeError(
-                "backend must be a dotted import path string (got %r)." % backend
-            )
+            raise TypeError("backend must be a dotted import path string (got %r)." % backend)
         else:
             backend = auth.load_backend(backend)
         if hasattr(backend, "with_perm"):
@@ -159,8 +155,7 @@ class PermissionsMixin(models.Model):
         _("superuser status"),
         default=False,
         help_text=_(
-            "Designates that this user has all permissions without "
-            "explicitly assigning them."
+            "Designates that this user has all permissions without " "explicitly assigning them."
         ),
     )
     # in this mixin class I remove `groups` and `user_permissions` m2m fields because
@@ -239,9 +234,7 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin, MinimumInfoMixin):
         _("username"),
         max_length=32,
         unique=True,
-        help_text=_(
-            "Required. 64 characters or fewer. Letters, digits and @/./+/-/_ only."
-        ),
+        help_text=_("Required. 64 characters or fewer. Letters, digits and @/./+/-/_ only."),
         validators=[username_validator],
         error_messages={
             "unique": _("A user with that username already exists."),
@@ -321,9 +314,7 @@ class LoginAccount(AbstractUser):
         # if other words, there must be at least one admin user (superuser = True) ready for the backend site,
         # (this seems difficult to be achieved by CheckConstraint)
         if account.is_superuser:
-            num_superusers = (
-                type(account).objects.filter(is_superuser=True, is_active=True).count()
-            )
+            num_superusers = type(account).objects.filter(is_superuser=True, is_active=True).count()
             log_args = [
                 "account_id",
                 account.pk,
@@ -422,12 +413,7 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
 
     @_atomicity_fn()
     def save(
-        self,
-        force_insert=False,
-        force_update=False,
-        using=None,
-        update_fields=None,
-        **kwargs
+        self, force_insert=False, force_update=False, using=None, update_fields=None, **kwargs
     ):
         assert (
             self.email.user_type.model.lower() == "genericuserprofile"

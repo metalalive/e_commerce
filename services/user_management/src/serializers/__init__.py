@@ -137,12 +137,8 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
             _validation_error_callback=self._validate_quota_error_callback,
         )
         self.fields["emails"] = EmailSerializer(many=True, instance=instance, data=data)
-        self.fields["phones"] = PhoneNumberSerializer(
-            many=True, instance=instance, data=data
-        )
-        self.fields["locations"] = GeoLocationSerializer(
-            many=True, instance=instance, data=data
-        )
+        self.fields["phones"] = PhoneNumberSerializer(many=True, instance=instance, data=data)
+        self.fields["locations"] = GeoLocationSerializer(many=True, instance=instance, data=data)
         super().__init__(instance=instance, data=data, **kwargs)
 
     def run_validation(self, data=empty):
@@ -203,16 +199,12 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
                 d.pop("user_id")
 
     def _instant_update_contact_quota(self, _final_quota):
-        usermgt_materials_code = tuple(
-            map(lambda opt: opt.value, QuotaMaterial._MatCodeOptions)
-        )
+        usermgt_materials_code = tuple(map(lambda opt: opt.value, QuotaMaterial._MatCodeOptions))
         orm_filter_kwargs = {
             "app_code": AppCodeOptions.user_management,
             LOOKUP_SEP.join(["mat_code", "in"]): usermgt_materials_code,
         }
-        mat_ids = QuotaMaterial.objects.filter(**orm_filter_kwargs).values(
-            "id", "mat_code"
-        )
+        mat_ids = QuotaMaterial.objects.filter(**orm_filter_kwargs).values("id", "mat_code")
         mat_id_map = {v["mat_code"]: v["id"] for v in mat_ids}
         subform_keys = ["emails", "phones", "locations"]
         for k in subform_keys:
@@ -242,9 +234,7 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
         with self.atomicity():
             instance = super().create(validated_data=validated_data)
             for k in subform_keys:
-                self.fields[k].create(
-                    validated_data=validated_subform_data[k], usr=instance
-                )
+                self.fields[k].create(validated_data=validated_subform_data[k], usr=instance)
         return instance
 
     def update(self, instance, validated_data):
@@ -271,9 +261,7 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
 
 class BulkGenericUserProfileSerializer(BulkUpdateListSerializer):
     def update(self, instance, validated_data, **kwargs):
-        instance = super().update(
-            instance=instance, validated_data=validated_data, **kwargs
-        )
+        instance = super().update(instance=instance, validated_data=validated_data, **kwargs)
         # TODO, check whether any editing profile contains superuser or staff role, for
         # refreshing is_staff , is_superuser flags in users' login account
         self.child.Meta.model.update_accounts_privilege(profiles=instance)
@@ -296,9 +284,7 @@ class LoginAccountExistField(ChoiceField):
                 out = self._activation_status.ACCOUNT_DEACTIVATED.value
         except ObjectDoesNotExist:
             rst_req_exists = (
-                instance.emails.filter(rst_account_reqs__isnull=False)
-                .distinct()
-                .exists()
+                instance.emails.filter(rst_account_reqs__isnull=False).distinct().exists()
             )
             if rst_req_exists:
                 out = self._activation_status.ACTIVATION_REQUEST.value
@@ -369,9 +355,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
         if skip_edit_permission_data:
             grp_ids = self.instance.groups.values_list("group", flat=True)
             groups_qset = GenericUserGroup.objects.filter(id__in=grp_ids)
-            direct_quota_arrangements = dict(
-                self.instance.quota.values_list("material", "maxnum")
-            )
+            direct_quota_arrangements = dict(self.instance.quota.values_list("material", "maxnum"))
             _final_quota = self._estimate_hierarchy_quota(
                 override=direct_quota_arrangements, groups=groups_qset
             )
@@ -383,9 +367,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
         if any(value) or self._account.is_superuser:
             pass
         else:
-            err_msg = (
-                "non-admin user has to select at least one group for the new profile"
-            )
+            err_msg = "non-admin user has to select at least one group for the new profile"
             raise ValidationError(err_msg)
         return value
 
@@ -393,9 +375,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
         grp_ids = tuple(map(lambda obj: obj.id, self._applied_groups))
         groups_qset = GenericUserGroup.objects.filter(id__in=grp_ids)
         override = {oq["material"].id: oq["maxnum"] for oq in value}
-        _final_quota = self._estimate_hierarchy_quota(
-            override=override, groups=groups_qset
-        )
+        _final_quota = self._estimate_hierarchy_quota(override=override, groups=groups_qset)
         self._instant_update_contact_quota(_final_quota)
         return value
 
@@ -414,9 +394,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
         with self.atomicity():
             instance = super().create(validated_data=validated_data)
             for k in subform_keys:
-                self.fields[k].create(
-                    validated_data=validated_subform_data[k], usr=instance
-                )
+                self.fields[k].create(validated_data=validated_subform_data[k], usr=instance)
         return instance
 
     def update(self, instance, validated_data):
@@ -457,17 +435,11 @@ class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
     CLOSURE_MODEL_CLS = GenericUserGroupClosureSerializer.Meta.model
     PK_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.id.field.name
     DEPTH_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.depth.field.name
-    ANCESTOR_FIELD_NAME = (
-        GenericUserGroupClosureSerializer.Meta.model.ancestor.field.name
-    )
-    DESCENDANT_FIELD_NAME = (
-        GenericUserGroupClosureSerializer.Meta.model.descendant.field.name
-    )
+    ANCESTOR_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.ancestor.field.name
+    DESCENDANT_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.descendant.field.name
 
     def update(self, instance, validated_data, **kwargs):
-        instance = super().update(
-            instance=instance, validated_data=validated_data, **kwargs
-        )
+        instance = super().update(instance=instance, validated_data=validated_data, **kwargs)
         grp_ids = list(map(lambda obj: obj.id, instance))
         # TODO, check whether any editing group contains superuser or staff role, for
         # refreshing is_staff , is_superuser flags in users' login account
@@ -494,9 +466,7 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
         # `max-num-emails = 4` is applied to group A, then group B will NOT automatically have
         # the same quota arrangement.
         _final_quota = {
-            v["material"] if isinstance(v["material"], int) else v["material"].id: v[
-                "maxnum"
-            ]
+            v["material"] if isinstance(v["material"], int) else v["material"].id: v["maxnum"]
             for v in value
         }
         self._instant_update_contact_quota(_final_quota)
@@ -513,9 +483,7 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
     def create(self, validated_data, **kwargs):
         with self.atomicity():
             instance = super().create(validated_data=validated_data, **kwargs)
-            self._account.profile.groups.create(
-                group=instance, approved_by=self._account.profile
-            )
+            self._account.profile.groups.create(group=instance, approved_by=self._account.profile)
         return instance
 
     def to_representation(self, instance):

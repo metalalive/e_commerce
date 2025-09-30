@@ -51,9 +51,7 @@ class BaseViewTestCase(
         self._grp_map = self._setup_groups_hierarchy()
         self._profile = self._primitives[GenericUserProfile][0]
         self._profile_2nd = self._primitives[GenericUserProfile][1]
-        self.profile_data_for_test = _fixtures[GenericUserProfile][
-            self.num_default_profiles :
-        ]
+        self.profile_data_for_test = _fixtures[GenericUserProfile][self.num_default_profiles :]
         self._setup_user_roles(
             profile=self._profile,
             approved_by=self._profile_2nd,
@@ -87,9 +85,7 @@ class BaseViewTestCase(
             chosen_role.permissions.set(qset)
         else:
             chosen_role.permissions.clear()
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         return acs_tok_resp["access_token"]
 
 
@@ -108,9 +104,7 @@ class ProfileCreationTestCase(BaseViewTestCase):
         access_token = self._prepare_access_token(
             new_perms_info=["view_role", "view_genericuserprofile"]
         )
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
         err_info = response.json()
@@ -123,9 +117,7 @@ class ProfileCreationTestCase(BaseViewTestCase):
         access_token = self._prepare_access_token(
             new_perms_info=["view_genericuserprofile", "add_genericuserprofile"]
         )
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         profs_data_gen = listitem_rand_assigner(
             list_=self.profile_data_for_test,
             min_num_chosen=num_profiles,
@@ -175,9 +167,7 @@ class ProfileBaseUpdateTestCase(BaseViewTestCase):
         access_token = self._prepare_access_token(
             new_perms_info=["view_genericuserprofile", "add_genericuserprofile"]
         )
-        api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         profs_data_gen = listitem_rand_assigner(
             list_=self.profile_data_for_test,
             min_num_chosen=self.num_profiles,
@@ -228,14 +218,10 @@ class ProfileUpdateTestCase(ProfileBaseUpdateTestCase):
         access_token = self._prepare_access_token(
             new_perms_info=["view_genericuserprofile", "change_genericuserprofile"]
         )
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         req_data = self.request_data
         for req_data_item in req_data:
-            req_data_item["last_name"] = "".join(
-                random.choices(string.ascii_letters, k=6)
-            )
+            req_data_item["last_name"] = "".join(random.choices(string.ascii_letters, k=6))
             # --- group ---
             applied_grps = tuple(map(lambda d: d["group"], req_data_item["groups"]))
             available_grps = filter(
@@ -255,14 +241,10 @@ class ProfileUpdateTestCase(ProfileBaseUpdateTestCase):
         access_token = self._prepare_access_token(
             new_perms_info=["view_genericuserprofile", "change_genericuserprofile"]
         )
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         req_data = self.request_data
         for req_data_item in req_data:
-            req_data_item["last_name"] = "".join(
-                random.choices(string.ascii_letters, k=6)
-            )
+            req_data_item["last_name"] = "".join(random.choices(string.ascii_letters, k=6))
             req_data_item["roles"][0]["expiry"] = gen_expiry_time(
                 minutes_valid=random.randrange(23, 29)
             )
@@ -396,18 +378,12 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
         for del_kwargs in behavior_sequence:
             self._single_undel_operation(**del_kwargs)
 
-    def _single_softdel_operation(
-        self, profile, req_data, login_password, delay_interval_sec=2
-    ):
+    def _single_softdel_operation(self, profile, req_data, login_password, delay_interval_sec=2):
         self._client.cookies.clear()
         self._auth_setup(testcase=self, profile=profile, login_password=login_password)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         body = list(map(lambda d: {"id": d["id"]}, req_data))
         self.api_call_kwargs.update(
             {
@@ -420,25 +396,17 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
         deleted_prof_ids = list(map(lambda d: d["id"], req_data))
         qset = GenericUserProfile.objects.filter(id__in=deleted_prof_ids)
         self.assertFalse(qset.exists())
-        qset = GenericUserProfile.objects.get_deleted_set().filter(
-            id__in=deleted_prof_ids
-        )
-        self.assertSetEqual(
-            set(qset.values_list("id", flat=True)), set(deleted_prof_ids)
-        )
+        qset = GenericUserProfile.objects.get_deleted_set().filter(id__in=deleted_prof_ids)
+        self.assertSetEqual(set(qset.values_list("id", flat=True)), set(deleted_prof_ids))
         time.sleep(delay_interval_sec)
         return response
 
     def _single_undel_operation(self, profile, req_data, login_password):
         self._client.cookies.clear()
         self._auth_setup(testcase=self, profile=profile, login_password=login_password)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         body = {"ids": list(map(lambda d: d["id"], req_data))}
         self.api_call_kwargs.update(
             {
@@ -455,9 +423,7 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
         expect_items_iter = iter(expect_items)
         for actual_item in actual_items:
             expect_item = next(expect_items_iter)
-            compare_result = self._value_compare_fn(
-                val_a=actual_item, val_b=expect_item
-            )
+            compare_result = self._value_compare_fn(val_a=actual_item, val_b=expect_item)
             self.assertTrue(compare_result)
         return response
 
@@ -527,15 +493,12 @@ class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
         # the same group as the same profile does
         self._profile.groups.filter(group__id=3).delete(hard=True)
         access_token = self._prepare_access_token(new_perms_info=["view_role"])
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         # set up account status
         profile_ids = list(map(lambda d: d["id"], self.request_data))
         profiles = GenericUserProfile.objects.filter(id__in=profile_ids)
         _info = [
-            (profiles[idx], _fixtures[LoginAccount][2 + idx])
-            for idx in range(1, len(profile_ids))
+            (profiles[idx], _fixtures[LoginAccount][2 + idx]) for idx in range(1, len(profile_ids))
         ]
         for profile, account_data in _info:
             _setup_login_account(account_data=account_data, profile_obj=profile)
@@ -604,15 +567,11 @@ class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
 
     def test_multiple_items_partial(self):
         profile_ids = list(map(lambda d: d["id"], self.request_data))
-        self.api_call_kwargs.update(
-            {"path": self.paths[0], "method": "get", "ids": profile_ids}
-        )
+        self.api_call_kwargs.update({"path": self.paths[0], "method": "get", "ids": profile_ids})
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         fetch_profiles_data = response.json()
-        self.verify_data(
-            actual_data=self._test_profiles, expect_data=fetch_profiles_data
-        )
+        self.verify_data(actual_data=self._test_profiles, expect_data=fetch_profiles_data)
         self.assertEqual(
             fetch_profiles_data[0]["auth"],
             LoginAccountExistField._activation_status.ACCOUNT_NON_EXISTENT.value,
@@ -643,9 +602,7 @@ class ProfileSearchTestCase(ProfileBaseUpdateTestCase):
         self.api_call_kwargs = client_req_csrf_setup()
         # the user does NOT have `view_genericuserprofile` permission
         access_token = self._prepare_access_token(new_perms_info=["view_role"])
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         self.api_call_kwargs.update({"path": self.path, "method": "get"})
 
     def _gen_quota(self, num=None):
@@ -711,9 +668,7 @@ class ProfileSearchTestCase(ProfileBaseUpdateTestCase):
         # ----------------- search user profiles that belong to given group name
         chosen_grp_id = self.request_data[0]["groups"][0]["group"]
         chosen_group = next(
-            filter(
-                lambda obj: obj.id == chosen_grp_id, self._primitives[GenericUserGroup]
-            )
+            filter(lambda obj: obj.id == chosen_grp_id, self._primitives[GenericUserGroup])
         )
         keyword = chosen_group.name
         self.api_call_kwargs["extra_query_params"]["search"] = keyword

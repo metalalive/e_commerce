@@ -35,9 +35,9 @@ class AbstractUserRelation(models.Model):
     class Meta:
         abstract = True
 
-    allowed_models = models.Q(
-        app_label="user_management", model="GenericUserProfile"
-    ) | models.Q(app_label="user_management", model="GenericUserGroup")
+    allowed_models = models.Q(app_label="user_management", model="GenericUserProfile") | models.Q(
+        app_label="user_management", model="GenericUserGroup"
+    )
     user_type = models.ForeignKey(
         to=ContentType,
         on_delete=models.CASCADE,
@@ -161,12 +161,8 @@ class PhoneNumber(AbstractUserRelation):
         regex=r"^\+?1?\d{7,15}$",
         message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits",
     )
-    country_code = models.CharField(
-        max_length=3, validators=[ccode_validator], unique=False
-    )
-    line_number = models.CharField(
-        max_length=15, validators=[linenum_validator], unique=False
-    )
+    country_code = models.CharField(max_length=3, validators=[ccode_validator], unique=False)
+    line_number = models.CharField(max_length=15, validators=[linenum_validator], unique=False)
 
 
 # it is possible that one user has multiple address locations to record
@@ -288,9 +284,7 @@ class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
     def undelete(self, *args, **kwargs):
         if kwargs.get("changeset", None) is None:
             profile_id = kwargs.get("profile_id", None)
-            kwargs["changeset"] = self.determine_change_set(
-                profile_id=profile_id, create=False
-            )
+            kwargs["changeset"] = self.determine_change_set(profile_id=profile_id, create=False)
         changeset_id = kwargs["changeset"].pk
         # recover this node first
         status = super().undelete(*args, **kwargs)
@@ -354,9 +348,7 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
 
     @get_paths_through_processing_node(with_deleted=False)
     def _decrease_subtree_pathlen(self, affected_paths):
-        affected_paths_log = affected_paths.values(
-            "pk", "ancestor__pk", "descendant__pk", "depth"
-        )
+        affected_paths_log = affected_paths.values("pk", "ancestor__pk", "descendant__pk", "depth")
         log_args = ["affected_paths", affected_paths_log]
         for a in affected_paths:
             if a.depth > 1:
@@ -369,9 +361,7 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
 
     @get_paths_through_processing_node()
     def _increase_subtree_pathlen(self, affected_paths):
-        affected_paths_log = affected_paths.values(
-            "pk", "ancestor__pk", "descendant__pk", "depth"
-        )
+        affected_paths_log = affected_paths.values("pk", "ancestor__pk", "descendant__pk", "depth")
         log_args = ["affected_paths", affected_paths_log]
         for a in affected_paths:
             if a.depth < 1:
@@ -414,9 +404,7 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         ]
         _logger.info(None, *log_args)
         # load user profiles that already activated their accounts
-        profiles = GenericUserProfile.objects.filter(
-            pk__in=profile_ids, account__isnull=False
-        )
+        profiles = GenericUserProfile.objects.filter(pk__in=profile_ids, account__isnull=False)
         return profiles
 
 
@@ -500,11 +488,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
             status = super().undelete(*args, **kwargs)
         except ObjectDoesNotExist as e:
             err_msg = e.args[0]
-            if (
-                hard_delete
-                or (not ops_prof_id)
-                or err_msg != self._changeset_not_found_err_msg
-            ):
+            if hard_delete or (not ops_prof_id) or err_msg != self._changeset_not_found_err_msg:
                 raise
             prof_cls_ct = ContentType.objects.get_for_model(self)
             qset = self.SOFTDELETE_CHANGESET_MODEL.objects.filter(
@@ -518,16 +502,10 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
             ops_prof = type(self).objects.get(id=ops_prof_id)
             ops_prof_can_undelete = ops_prof.privilege_status == ops_prof.SUPERUSER
             if not ops_prof_can_undelete:
-                related_field_name = LOOKUP_SEP.join(
-                    ["group", "descendants", "descendant", "id"]
-                )
-                valid_grp_ids = ops_prof.groups.values_list(
-                    related_field_name, flat=True
-                )
+                related_field_name = LOOKUP_SEP.join(["group", "descendants", "descendant", "id"])
+                valid_grp_ids = ops_prof.groups.values_list(related_field_name, flat=True)
                 related_field_name = LOOKUP_SEP.join(["group", "id", "in"])
-                applied_grp_set = GenericUserGroupRelation.objects.all(
-                    with_deleted=True
-                )
+                applied_grp_set = GenericUserGroupRelation.objects.all(with_deleted=True)
                 qset = applied_grp_set.filter(
                     **{related_field_name: valid_grp_ids, "profile": self}
                 )
@@ -595,9 +573,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         quota_exp_field = ["ancestors", "ancestor", "quota", "expiry"]
         quota_mat_field = LOOKUP_SEP.join(quota_mat_field)
         quota_val_field = LOOKUP_SEP.join(quota_val_field)
-        cond_before_groupby = UserQuotaRelation.expiry_condition(
-            field_name=quota_exp_field
-        )
+        cond_before_groupby = UserQuotaRelation.expiry_condition(field_name=quota_exp_field)
         cond_after_groupby = models.Q(max_num_chosen__gt=0)
         qset = (
             groups.filter(cond_before_groupby)
@@ -635,9 +611,9 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
     def inherit_roles(self):
         grp_ct = ContentType.objects.get_for_model(GenericUserGroup)
         grp_ids = self.groups.values_list("group__pk", flat=True)
-        asc_ids = GenericUserGroupClosure.objects.filter(
-            descendant__pk__in=grp_ids
-        ).values_list("ancestor__id", flat=True)
+        asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list(
+            "ancestor__id", flat=True
+        )
         role_rel_cls = self.roles.model
         valid_role_rel_cond = (
             models.Q(user_type=grp_ct)
@@ -655,9 +631,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
     def direct_roles(self):
         role_rel_cls = self.roles.model
         valid_role_rel_cond = role_rel_cls.expiry_condition()
-        role_ids = self.roles.filter(valid_role_rel_cond).values_list(
-            "role__id", flat=True
-        )
+        role_ids = self.roles.filter(valid_role_rel_cond).values_list("role__id", flat=True)
         role_cls = role_rel_cls.role.field.related_model
         roles = role_cls.objects.filter(id__in=role_ids)
         return roles
@@ -710,9 +684,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
 #### end of GenericUserProfile
 
 
-class GenericUserAppliedRole(
-    AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFieldMixin
-):
+class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFieldMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
 
@@ -756,4 +728,3 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
         related_name="approval_group", on_delete=models.SET_NULL
     )
     # fmt: on
-

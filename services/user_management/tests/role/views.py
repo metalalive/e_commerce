@@ -49,9 +49,7 @@ def _setup_user_roles(profile, approved_by, extra_role_data=None):
     return roles
 
 
-class PermissionTestCase(
-    TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin
-):
+class PermissionTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
     path = "/permissions"
 
     def setUp(self):
@@ -63,9 +61,7 @@ class PermissionTestCase(
             "last_name": "Iswatching",
         }
         self._profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
-        self._roles = _setup_user_roles(
-            profile=self._profile, approved_by=self._profile_2nd
-        )
+        self._roles = _setup_user_roles(profile=self._profile, approved_by=self._profile_2nd)
         self.api_call_kwargs = client_req_csrf_setup()
         self.api_call_kwargs.update({"path": self.path, "method": "get"})
 
@@ -78,15 +74,11 @@ class PermissionTestCase(
             content_type__app_label="user_management", codename="view_quotamaterial"
         )
         self._roles[1].permissions.set(qset)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 401)
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
         # post, put, delete methods are not allowed
@@ -100,13 +92,9 @@ class PermissionTestCase(
             content_type__app_label="user_management", codename="view_role"
         )
         self._roles[1].permissions.set(qset)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         actual_perms = response.json()
@@ -132,9 +120,7 @@ class RoleCreationTestCase(
         self._profile, _ = self._auth_setup(testcase=self, is_superuser=False)
         profile_2nd_data = {"id": 6, "first_name": "Stan", "last_name": "Marsh"}
         self._profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
-        self._roles = _setup_user_roles(
-            profile=self._profile, approved_by=self._profile_2nd
-        )
+        self._roles = _setup_user_roles(profile=self._profile, approved_by=self._profile_2nd)
         self._permissions = Permission.objects.all()
         self.api_call_kwargs = client_req_csrf_setup()
         self.api_call_kwargs.update({"path": self.path, "method": "post"})
@@ -149,13 +135,9 @@ class RoleCreationTestCase(
             q_cond |= Q(content_type__app_label=applabel, codename__in=codenames)
         qset = Permission.objects.filter(q_cond)
         self._roles[1].permissions.set(qset)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=new_perms_info.keys()
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=new_perms_info.keys())
         access_token = acs_tok_resp["access_token"]
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
 
     def test_no_permission(self):
         data = {"user_management": ["view_quotamaterial", "view_role"]}
@@ -317,13 +299,9 @@ class _RoleBaseUpdateTestCase(
         )
         if qset.exists():
             self._roles[1].permissions.set(qset)
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
-        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
 
 
 class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
@@ -373,9 +351,7 @@ class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
         # subcase #3, attempts to overwrite reserved roles
         body = list(
             map(
-                lambda role: {
-                    "permissions": list(role.permissions.values_list("id", flat=True))
-                },
+                lambda role: {"permissions": list(role.permissions.values_list("id", flat=True))},
                 self._roles[2:],
             )
         )
@@ -402,9 +378,9 @@ class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
     def test_bulk_ok(self):
         self._prepare_access_token(new_perms_info=["view_role", "change_role"])
         body = list(map(_srlz_fn, self._roles[2:]))
-        all_perm_ids = self._permissions.filter(
-            codename__contains="generic"
-        ).values_list("id", flat=True)
+        all_perm_ids = self._permissions.filter(codename__contains="generic").values_list(
+            "id", flat=True
+        )
         for item in body:
             perm_ids = all_perm_ids[:3]
             all_perm_ids = all_perm_ids[3:]
@@ -449,9 +425,7 @@ class RoleDeletionTestCase(_RoleBaseUpdateTestCase):
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 409)
         err_info = response.json()
-        expect_err_msg = (
-            "not allowed to delete preserved role ID = {%s}" % ROLE_ID_STAFF
-        )
+        expect_err_msg = "not allowed to delete preserved role ID = {%s}" % ROLE_ID_STAFF
         self.assertIn(expect_err_msg, err_info[non_fd_err_key])
         # subcase #2 : text id which contains English letter
         delete_ids.append("32s8")
@@ -492,9 +466,7 @@ class RoleQueryTestCase(_RoleBaseUpdateTestCase):
                 "name": "unapplied role 003",
             },
         ]
-        self._unapplied_roles = tuple(
-            map(lambda d: Role.objects.create(**d), extra_role_data)
-        )
+        self._unapplied_roles = tuple(map(lambda d: Role.objects.create(**d), extra_role_data))
         perms = self._permissions.filter(codename__contains="phone")
         perms_iter = iter(perms)
         for ur in self._unapplied_roles:

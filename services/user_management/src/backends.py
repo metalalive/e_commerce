@@ -24,13 +24,9 @@ class ExtendedModelBackend(ModelBackend):
     that only staff is allowed to login
     """
 
-    def authenticate(
-        self, request, username=None, password=None, is_staff_only=True, **kwargs
-    ):
+    def authenticate(self, request, username=None, password=None, is_staff_only=True, **kwargs):
         """further check superuser or staff status of logged-in user, if specified"""
-        user = super().authenticate(
-            request=request, username=username, password=password, **kwargs
-        )
+        user = super().authenticate(request=request, username=username, password=password, **kwargs)
         log_args = [
             "account",
             user,
@@ -42,14 +38,10 @@ class ExtendedModelBackend(ModelBackend):
         if user and not user.is_active:
             log_args.extend(["is_active", user.is_active])
             _logger.warning(None, *log_args)
-            raise PermissionDenied(
-                "inactive users are not allowed to log in to this site"
-            )
+            raise PermissionDenied("inactive users are not allowed to log in to this site")
         if is_staff_only and user:
             if not (user.is_superuser or user.is_staff):
-                log_args.extend(
-                    ["is_superuser", user.is_superuser, "is_staff", user.is_staff]
-                )
+                log_args.extend(["is_superuser", user.is_superuser, "is_staff", user.is_staff])
                 _logger.warning(None, *log_args)
                 # abort authentication process, for non-staff users
                 raise PermissionDenied(

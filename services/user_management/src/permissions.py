@@ -29,13 +29,9 @@ class ModelLvlPermsPermissions(DRFBasePermission, JWTclaimPermissionMixin):
         return self._has_permission(tok_payld=request.auth, method=request.method)
 
 
-class RolePermissions(
-    DjangoModelPermissions, BaseFilterBackend, JWTclaimPermissionMixin
-):
+class RolePermissions(DjangoModelPermissions, BaseFilterBackend, JWTclaimPermissionMixin):
     message = {
-        api_settings.NON_FIELD_ERRORS_KEY: [
-            "you do not have permission to perform the operation"
-        ]
+        api_settings.NON_FIELD_ERRORS_KEY: ["you do not have permission to perform the operation"]
     }
     perms_map = {
         "GET": [
@@ -109,20 +105,14 @@ def _get_valid_groups(account):
 def _get_valid_profs(account):
     valid_grp_ids = _get_valid_groups(account=account)
     field_name = LOOKUP_SEP.join(["group", "id", "in"])
-    applied_grp_set = GenericUserGroupRelation.objects.filter(
-        **{field_name: valid_grp_ids}
-    )
+    applied_grp_set = GenericUserGroupRelation.objects.filter(**{field_name: valid_grp_ids})
     valid_prof_ids = applied_grp_set.values_list("profile__id", flat=True).distinct()
     return valid_prof_ids
 
 
-class UserGroupsPermissions(
-    DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin
-):
+class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin):
     message = {
-        api_settings.NON_FIELD_ERRORS_KEY: [
-            "not allowed to perform this action on the group(s)"
-        ]
+        api_settings.NON_FIELD_ERRORS_KEY: ["not allowed to perform this action on the group(s)"]
     }
     perms_map = {
         "GET": ["view_genericusergroup"],
@@ -221,9 +211,7 @@ def _profile_has_hierarchy_permission(request, pk_field_name):
 
 class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
     message = {
-        api_settings.NON_FIELD_ERRORS_KEY: [
-            "not allowed to perform this action on the profile(s)"
-        ]
+        api_settings.NON_FIELD_ERRORS_KEY: ["not allowed to perform this action on the profile(s)"]
     }
     perms_map = {
         "GET": [],  # TODO: implement field-level visibility
@@ -255,9 +243,7 @@ class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
         # at ancestor group.
         if result:
             if not account.is_superuser and request.method.upper() in ("PUT", "DELETE"):
-                result = _profile_has_hierarchy_permission(
-                    request=request, pk_field_name="id"
-                )
+                result = _profile_has_hierarchy_permission(request=request, pk_field_name="id")
         else:
             # logged-in users that do not have access permission can only read/write his/her own profile
             account_prof_id = str(account.profile.id)
@@ -308,9 +294,7 @@ class AccountDeactivationPermission(DRFBasePermission, JWTclaimPermissionMixin):
         # each authorized user can only deactivate his/her own account,
         # while superuser can deactivate several accounts (of other users) in one API call.
         if result and not account.is_superuser:
-            result = _profile_has_hierarchy_permission(
-                request=request, pk_field_name="profile"
-            )
+            result = _profile_has_hierarchy_permission(request=request, pk_field_name="profile")
         return result
 
 
@@ -337,9 +321,7 @@ class AccountActivationPermission(AccountDeactivationPermission):
             }
             try:
                 qset = GenericUserProfile.objects.filter(**filter_kwargs).distinct()
-                existing_email_ids = qset.values_list(
-                    LOOKUP_SEP.join(["emails", "id"]), flat=True
-                )
+                existing_email_ids = qset.values_list(LOOKUP_SEP.join(["emails", "id"]), flat=True)
                 result = email_ids == set(existing_email_ids)
             except ValueError:
                 result = False

@@ -46,9 +46,7 @@ class GetProfileCase(
         perm_objs = []
         actions = ("add", "change", "delete", "view")
         for app_label, model_name_list in self._permission_info.items():
-            data = map(
-                lambda name: {"model": name, "app_label": app_label}, model_name_list
-            )
+            data = map(lambda name: {"model": name, "app_label": app_label}, model_name_list)
             objs = map(lambda d: ContentType.objects.create(**d), data)
             ct_objs.extend(list(objs))
         for action in actions:
@@ -69,10 +67,7 @@ class GetProfileCase(
             tuple(map(lambda obj: obj.delete(), perm_objs))
             tuple(map(lambda obj: obj.delete(), ct_objs))
         except ProgrammingError as e:
-            if (
-                e.args[0] == NO_SUCH_TABLE
-                and e.args[1].find("auth_group_permissions") > 0
-            ):
+            if e.args[0] == NO_SUCH_TABLE and e.args[1].find("auth_group_permissions") > 0:
                 pass
             else:
                 raise
@@ -80,10 +75,7 @@ class GetProfileCase(
     def init_primitive(self):
         keys = (Role, QuotaMaterial, GenericUserGroup)
         data_map = dict(map(lambda cls: (cls, _fixtures[cls]), keys))
-        objs = {
-            k_cls: list(map(lambda d: k_cls(**d), data))
-            for k_cls, data in data_map.items()
-        }
+        objs = {k_cls: list(map(lambda d: k_cls(**d), data)) for k_cls, data in data_map.items()}
         for cls in keys:
             cls.objects.bulk_create(objs[cls])
         # the profiles that were already created, will be used to create another new profiles
@@ -151,9 +143,7 @@ class GetProfileCase(
                 actual_quota = data.get("quota")
                 self.assertIsNotNone(actual_perms)
                 self.assertIsNotNone(actual_quota)
-                expect_profile = next(
-                    filter(lambda obj: obj.id == data["id"], chosen_profiles)
-                )
+                expect_profile = next(filter(lambda obj: obj.id == data["id"], chosen_profiles))
                 expect_perms = serialize_profile_permissions(
                     expect_profile, app_labels=[chosen_app_label]
                 )
@@ -177,13 +167,9 @@ class GetProfileCase(
                 actual_phones = data.get("phones")
                 self.assertIsNotNone(actual_emails)
                 self.assertIsNotNone(actual_phones)
-                expect_profile = next(
-                    filter(lambda obj: obj.id == data["id"], chosen_profiles)
-                )
+                expect_profile = next(filter(lambda obj: obj.id == data["id"], chosen_profiles))
                 expect_emails = expect_profile.emails.values("id", "addr")
-                expect_phones = expect_profile.phones.values(
-                    "id", "country_code", "line_number"
-                )
+                expect_phones = expect_profile.phones.values("id", "country_code", "line_number")
                 actual_emails = sorted(actual_emails, key=lambda d: d["id"])
                 actual_phones = sorted(actual_phones, key=lambda d: d["id"])
                 expect_emails = sorted(expect_emails, key=lambda d: d["id"])
@@ -216,9 +202,7 @@ class GetProfileCase(
         eager_result = get_profile.apply_async(kwargs=input_kwargs, headers=headers)
         self.assertEqual(eager_result.state, CeleryStates.FAILURE)
         self.assertTrue(isinstance(eager_result.result, ValueError))
-        self.assertTrue(
-            eager_result.result.args[0].startswith("src_app_label is required")
-        )
+        self.assertTrue(eager_result.result.args[0].startswith("src_app_label is required"))
         chosen_app_label = "non_existent_service"
         headers = {"src_app": chosen_app_label}
         eager_result = get_profile.apply_async(kwargs=input_kwargs, headers=headers)
@@ -426,9 +410,7 @@ class ProfileDescendantValidityCase(TransactionTestCase):
 
     def init_primitive(self):
         objs = {}
-        grp_objs = list(
-            map(lambda d: GenericUserGroup(**d), _fixtures[GenericUserGroup])
-        )
+        grp_objs = list(map(lambda d: GenericUserGroup(**d), _fixtures[GenericUserGroup]))
         GenericUserGroup.objects.bulk_create(grp_objs)
         grp_obj_map = dict(map(lambda obj: (obj.id, obj), grp_objs))
         objs[GenericUserGroup] = grp_obj_map
@@ -472,9 +454,7 @@ class ProfileDescendantValidityCase(TransactionTestCase):
         grp_2 = self._primitives[GenericUserGroup][11]
         prof = grp.profiles.first().profile
         prof.groups.create(group=grp_2, approved_by=prof)
-        all_prof_ids = set(
-            map(lambda obj: obj.id, self._primitives[GenericUserProfile])
-        )
+        all_prof_ids = set(map(lambda obj: obj.id, self._primitives[GenericUserProfile]))
         descs = list(all_prof_ids - {prof.id})
         descs.extend([-995, -994, -993])
         input_kwargs = {"asc": prof.id, "descs": descs}
@@ -482,9 +462,7 @@ class ProfileDescendantValidityCase(TransactionTestCase):
         self.assertEqual(eager_result.state, CeleryStates.SUCCESS)
         actual_value = sorted(eager_result.result)
         expect_grp_ids = (4, 6, 7, 11, 13, 14)
-        expect_grps = map(
-            lambda gid: self._primitives[GenericUserGroup][gid], expect_grp_ids
-        )
+        expect_grps = map(lambda gid: self._primitives[GenericUserGroup][gid], expect_grp_ids)
         expect_prof_ids = map(
             lambda g: list(g.profiles.values_list("profile__pk", flat=True)),
             expect_grps,

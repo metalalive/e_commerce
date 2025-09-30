@@ -30,9 +30,7 @@ _logger = logging.getLogger(__name__)
 
 
 class MailSourceValidator:
-    err_msg_pattern = (
-        "current email (ID=%s) comes from %s (ID=%s) , which is NOT a user profile"
-    )
+    err_msg_pattern = "current email (ID=%s) comes from %s (ID=%s) , which is NOT a user profile"
 
     def __call__(self, value):
         model_cls = value.user_type.model_class()
@@ -155,9 +153,7 @@ class UsernameUniquenessValidator:
             except DjangoValidationError as e:
                 err_list = e.error_dict.get(self._account.USERNAME_FIELD, [])
                 err_list = tuple(
-                    filter(
-                        lambda item: item.message.find("already exist") > 0, err_list
-                    )
+                    filter(lambda item: item.message.find("already exist") > 0, err_list)
                 )
                 if any(err_list):
                     errmsg = err_list[0].message
@@ -260,7 +256,9 @@ class LoginAccountSerializer(Serializer):
             except ObjectDoesNotExist:
                 account = None
         else:
-            errmsg = "caller must provide either `account` or `rst_req`, both of them must NOT be null"
+            errmsg = (
+                "caller must provide either `account` or `rst_req`, both of them must NOT be null"
+            )
             log_msg.extend(["errmsg", errmsg])
             _logger.error(None, *log_msg)
             raise AssertionError(errmsg)

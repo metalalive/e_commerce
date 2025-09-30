@@ -78,9 +78,7 @@ class CorsMiddlewareTestCase(SimpleTestCase):
         response = self.middleware(request=self.base_mock_request)
         self.assertEqual(int(response.status_code), 200)
         headers = dict(response.items())
-        self.assertGreaterEqual(
-            cors_conf.PREFLIGHT_MAX_AGE, int(headers[ACCESS_CONTROL_MAX_AGE])
-        )
+        self.assertGreaterEqual(cors_conf.PREFLIGHT_MAX_AGE, int(headers[ACCESS_CONTROL_MAX_AGE]))
         expect_value = cors_conf.ALLOWED_HEADERS
         actual_value = headers[ACCESS_CONTROL_ALLOW_HEADERS].split(",")
         self.assertSetEqual(set(actual_value), set(expect_value))

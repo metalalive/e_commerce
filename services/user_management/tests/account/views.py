@@ -28,9 +28,7 @@ from tests.common import (
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
 
-class BaseViewTestCase(
-    TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin
-):
+class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
     def _setup_user_roles(self, profile, approved_by, roles=None):
         roles = roles or []
         role_rel_data = {
@@ -59,9 +57,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         num_emails_per_usr = 3
         # all user profiles are in the same group for simplicity
         group = GenericUserGroup.objects.create(**_fixtures[GenericUserGroup][0])
-        GenericUserGroupClosure.objects.create(
-            id=1, depth=0, ancestor=group, descendant=group
-        )
+        GenericUserGroupClosure.objects.create(id=1, depth=0, ancestor=group, descendant=group)
         profiles = list(
             map(
                 lambda d: GenericUserProfile.objects.create(**d),
@@ -103,9 +99,7 @@ class AccountActivationTestCase(BaseViewTestCase):
             is_superuser=False,
             new_account_data=_fixtures[LoginAccount][0].copy(),
         )
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         default_user_access_token = acs_tok_resp["access_token"]
         api_call_kwargs = client_req_csrf_setup()
         api_call_kwargs.update({"path": self.path, "method": "post"})
@@ -130,9 +124,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         self.assertEqual(int(response.status_code), 201)
         result = response.json()
         # TODO, examine the extra field `async_task`
-        expect_email_ids = set(
-            UnauthResetAccountRequest.objects.values_list("email", flat=True)
-        )
+        expect_email_ids = set(UnauthResetAccountRequest.objects.values_list("email", flat=True))
         actual_email_ids = set(map(lambda d: d["email"], result))
         self.assertSetEqual(expect_email_ids, actual_email_ids)
 
@@ -153,11 +145,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
         # subcase #3 , non-existent email ID
-        body = list(
-            map(
-                lambda profile: {"email": profile.emails.last().id}, self._test_profiles
-            )
-        )
+        body = list(map(lambda profile: {"email": profile.emails.last().id}, self._test_profiles))
         body.append({"email": 9999})
         self.api_call_kwargs["body"] = body
         response = self._send_request_to_backend(**self.api_call_kwargs)
@@ -166,11 +154,7 @@ class AccountActivationTestCase(BaseViewTestCase):
     def test_overwrite_existing_request(self):
         dup_email = self._test_profiles[0].emails.last()
         existing_req = UnauthResetAccountRequest.objects.create(email=dup_email)
-        body = list(
-            map(
-                lambda profile: {"email": profile.emails.last().id}, self._test_profiles
-            )
-        )
+        body = list(map(lambda profile: {"email": profile.emails.last().id}, self._test_profiles))
         self.api_call_kwargs["body"] = body
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 201)
@@ -196,9 +180,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         self._test_profiles[-1].account.refresh_from_db()
         self.assertTrue(self._test_profiles[-1].account.is_active)
         result = response.json()
-        expect_email_ids = set(
-            UnauthResetAccountRequest.objects.values_list("email", flat=True)
-        )
+        expect_email_ids = set(UnauthResetAccountRequest.objects.values_list("email", flat=True))
         actual_email_ids = set(map(lambda d: d["email"], result))
         self.assertSetEqual(expect_email_ids, actual_email_ids)
 
@@ -211,9 +193,7 @@ class AccountDeactivationTestCase(BaseViewTestCase):
         num_profiles = 5
         # all user profiles are in the same group for simplicity
         group = GenericUserGroup.objects.create(**_fixtures[GenericUserGroup][0])
-        GenericUserGroupClosure.objects.create(
-            id=1, depth=0, ancestor=group, descendant=group
-        )
+        GenericUserGroupClosure.objects.create(id=1, depth=0, ancestor=group, descendant=group)
         profiles = list(
             map(
                 lambda d: GenericUserProfile.objects.create(**d),
@@ -251,9 +231,7 @@ class AccountDeactivationTestCase(BaseViewTestCase):
         account_data_iter = iter(account_data)
         tuple(
             map(
-                lambda profile: profile.activate(
-                    new_account_data=next(account_data_iter)
-                ),
+                lambda profile: profile.activate(new_account_data=next(account_data_iter)),
                 profiles,
             )
         )
@@ -264,9 +242,7 @@ class AccountDeactivationTestCase(BaseViewTestCase):
             is_superuser=False,
             login_password=_fixtures[LoginAccount][0]["password"],
         )
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         default_user_access_token = acs_tok_resp["access_token"]
         api_call_kwargs = client_req_csrf_setup()
         api_call_kwargs.update({"path": self.path, "method": "post"})
@@ -319,9 +295,7 @@ class AccountCreationTestCase(BaseViewTestCase):
         email_data = _fixtures[EmailAddress][0]
         profile.emails.create(**email_data)
         self._profile = profile
-        self._rst_req = UnauthResetAccountRequest.objects.create(
-            email=profile.emails.first()
-        )
+        self._rst_req = UnauthResetAccountRequest.objects.create(email=profile.emails.first())
         api_call_kwargs = client_req_csrf_setup()
         path = self.path % self._rst_req.token
         api_call_kwargs.update({"path": path, "method": "post"})
@@ -347,9 +321,7 @@ class AccountCreationTestCase(BaseViewTestCase):
         # subcase #1, token expired
         exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
         mocked_nowtime = django_timezone.now() + timedelta(seconds=exceed_valid_secs)
-        with patch(
-            "user_management.models.auth.django_timezone.now"
-        ) as mock_nowtime_fn:
+        with patch("user_management.models.auth.django_timezone.now") as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_nowtime
             response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 401)
@@ -456,9 +428,7 @@ class UnauthPasswordResetTestCase(BaseViewTestCase):
         profile.activate(new_account_data=account_data)
         self._profile = profile
         self._old_passwd = account_data["password"]
-        self._rst_req = UnauthResetAccountRequest.objects.create(
-            email=profile.emails.first()
-        )
+        self._rst_req = UnauthResetAccountRequest.objects.create(email=profile.emails.first())
         api_call_kwargs = client_req_csrf_setup()
         path = self.path % self._rst_req.token
         api_call_kwargs.update({"path": path, "method": "patch"})
@@ -486,9 +456,7 @@ class UnauthPasswordResetTestCase(BaseViewTestCase):
         # subcase #1, token expired
         exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
         mocked_nowtime = django_timezone.now() + timedelta(seconds=exceed_valid_secs)
-        with patch(
-            "user_management.models.auth.django_timezone.now"
-        ) as mock_nowtime_fn:
+        with patch("user_management.models.auth.django_timezone.now") as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_nowtime
             response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 401)
@@ -539,23 +507,17 @@ class AuthEditAccountTestCase(BaseViewTestCase):
             is_superuser=False,
             login_password=account_data["password"],
         )
-        acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
-        )
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=["user_management"])
         access_token = acs_tok_resp["access_token"]
         api_call_kwargs = client_req_csrf_setup()
-        api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
-            ["Bearer", access_token]
-        )
+        api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(["Bearer", access_token])
         self.api_call_kwargs = api_call_kwargs
 
     def test_modify_username_ok(self):
         old_uname = self._account_data["username"]
         new_uname = "NoRoom4error"
         body = {"username": new_uname, "old_uname": old_uname}
-        self.api_call_kwargs.update(
-            {"body": body, "path": "/account/username", "method": "patch"}
-        )
+        self.api_call_kwargs.update({"body": body, "path": "/account/username", "method": "patch"})
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         self._profile.refresh_from_db()
@@ -569,16 +531,12 @@ class AuthEditAccountTestCase(BaseViewTestCase):
             "password2": new_passwd,
             "old_passwd": old_passwd,
         }
-        self.api_call_kwargs.update(
-            {"body": body, "path": "/account/password", "method": "patch"}
-        )
+        self.api_call_kwargs.update({"body": body, "path": "/account/password", "method": "patch"})
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         self._client.cookies.clear()
         with self.assertRaises(AssertionError) as error_caught:
-            self._auth_setup(
-                testcase=self, profile=self._profile, login_password=old_passwd
-            )
+            self._auth_setup(testcase=self, profile=self._profile, login_password=old_passwd)
         self.assertEqual("401 != 200", error_caught.exception.args[0])
         _, response = self._auth_setup(
             testcase=self, profile=self._profile, login_password=new_passwd

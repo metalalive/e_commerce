@@ -52,10 +52,7 @@ class HttpRequestDataGenGroup(HttpRequestDataGen, UserNestedFieldSetupMixin):
     def init_primitive(self):
         keys = (Role, QuotaMaterial, GenericUserProfile)
         data_map = dict(map(lambda cls: (cls, _fixtures[cls]), keys))
-        objs = {
-            k_cls: list(map(lambda d: k_cls(**d), data))
-            for k_cls, data in data_map.items()
-        }
+        objs = {k_cls: list(map(lambda d: k_cls(**d), data)) for k_cls, data in data_map.items()}
         for cls in keys:
             cls.objects.bulk_create(objs[cls])
         self._primitives = objs
@@ -65,9 +62,7 @@ class HttpRequestDataGenGroup(HttpRequestDataGen, UserNestedFieldSetupMixin):
         return super()._gen_roles(role_objs=self._primitives[Role], num=num)
 
     def _gen_quota(self, num=None):
-        return super()._gen_quota(
-            quota_mat_objs=self._primitives[QuotaMaterial], num=num
-        )
+        return super()._gen_quota(quota_mat_objs=self._primitives[QuotaMaterial], num=num)
 
     def _gen_name(self):
         num_valid_grps = len(_fixtures[GenericUserGroup])
@@ -77,10 +72,7 @@ class HttpRequestDataGenGroup(HttpRequestDataGen, UserNestedFieldSetupMixin):
     def _write_value_fn(self, node):
         # this function has to ensure that _gen_quota() runs prior to other functions
         # which generate emails, locations, phone-numbers
-        out = {
-            fname: getattr(self, "_gen_%s" % fname)()
-            for fname in _nested_field_names.keys()
-        }
+        out = {fname: getattr(self, "_gen_%s" % fname)() for fname in _nested_field_names.keys()}
         out["name"] = self._gen_name()
         node.value = out
 
@@ -105,9 +97,7 @@ class HttpRequestDataGenGroup(HttpRequestDataGen, UserNestedFieldSetupMixin):
         req_data["_unik_key"] = next(_auto_inc_gen)
         out = [req_data]
         for child in curr_node.children:
-            child_req_data = self._tree_to_req_data(
-                curr_node=child, parent_data=req_data
-            )
+            child_req_data = self._tree_to_req_data(curr_node=child, parent_data=req_data)
             out.extend(child_req_data)
         return out
 

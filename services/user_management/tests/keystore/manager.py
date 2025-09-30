@@ -37,9 +37,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
         "persist_pubkey_handler": {
             "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
             "init_kwargs": {
-                "filepath": os.path.join(
-                    srv_basepath, "./tmp/cache/test/jwks/pubkey/current.json"
-                ),
+                "filepath": os.path.join(srv_basepath, "./tmp/cache/test/jwks/pubkey/current.json"),
                 "name": "pubkey",
                 "expired_after_days": 11,
                 "flush_threshold": 4,
@@ -55,9 +53,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
             del_dir, del_file = _setup_keyfile(filepath=filepath)
             item = {"del_dir": del_dir, "del_file": del_file, "filepath": filepath}
             self.tear_down_files[label] = item
-            _clean_prev_persisted_filedata(
-                **self._init_config[label]["init_kwargs"].copy()
-            )
+            _clean_prev_persisted_filedata(**self._init_config[label]["init_kwargs"].copy())
         self._init_num_keypairs = 5
         self._keystore = create_keystore_helper(
             cfg=self._init_config, import_fn=import_module_string
@@ -79,9 +75,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
                 del_file=item["del_file"],
             )
 
-    def _common_validate_after_rotate(
-        self, filter_key_fn, expect_num_privkeys, expect_num_pubkeys
-    ):
+    def _common_validate_after_rotate(self, filter_key_fn, expect_num_privkeys, expect_num_pubkeys):
         actual_num_privkeys = len(self._keystore._persistence["secret"])
         actual_num_pubkeys = len(self._keystore._persistence["pubkey"])
         self.assertEqual(expect_num_privkeys, actual_num_privkeys)
@@ -133,9 +127,7 @@ class JwkKeystoreTestCase(unittest.TestCase):
         evicted_kids = tuple(map(lambda item: item["kid"], result["evict"]))
         bound_fn = staticmethod(partial(filter_key_fn, keytype="secret"))
         filtered = filter(bound_fn, self._keys_metadata)
-        self._keys_metadata = list(
-            filter(lambda item: item["kid"] not in evicted_kids, filtered)
-        )
+        self._keys_metadata = list(filter(lambda item: item["kid"] not in evicted_kids, filtered))
         self._keys_metadata.extend(result["new"])
         expect_num_pubkeys = total_num_keys + self._init_num_keypairs
         self._common_validate_after_rotate(
@@ -213,7 +205,5 @@ class JwkKeystoreTestCase(unittest.TestCase):
         encoded_token = jwt.encode(
             expect_payld, jwk_priv.key, algorithm=rawdata_privkey["alg"], headers={}
         )
-        decoded_payld = jwt.decode(
-            encoded_token, jwk_pub.key, algorithms=rawdata_pubkey["alg"]
-        )
+        decoded_payld = jwt.decode(encoded_token, jwk_pub.key, algorithms=rawdata_pubkey["alg"])
         self.assertDictEqual(expect_payld, decoded_payld)

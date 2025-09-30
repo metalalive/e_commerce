@@ -21,9 +21,7 @@ from .common import HttpRequestDataGenGroup, GroupVerificationMixin, _nested_fie
 non_field_err_key = drf_default_settings["NON_FIELD_ERRORS_KEY"]
 
 
-class GroupCommonTestCase(
-    TransactionTestCase, HttpRequestDataGenGroup, GroupVerificationMixin
-):
+class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVerificationMixin):
     usermgt_material_data = tuple(
         filter(
             lambda d: d["app_code"] == AppCodeOptions.user_management,
@@ -41,9 +39,7 @@ class GroupCommonTestCase(
             profile_obj=self._primitives[GenericUserProfile][0],
             roles=roles_without_superuser,
         )
-        self.assertEqual(
-            self._login_user_profile.privilege_status, GenericUserProfile.STAFF
-        )
+        self.assertEqual(self._login_user_profile.privilege_status, GenericUserProfile.STAFF)
 
     def tearDown(self):
         pass
@@ -87,9 +83,7 @@ class GroupCommonTestCase(
         self.assertListEqual(not_matched, [])
         self.assertEqual(len(matched), len(origin_trees))
         self._login_user_profile.refresh_from_db()
-        applied_grp_ids = self._login_user_profile.groups.values_list(
-            "group", flat=True
-        )
+        applied_grp_ids = self._login_user_profile.groups.values_list("group", flat=True)
         grp_ids_uncovered = set(obj_ids) - set(applied_grp_ids)
         self.assertFalse(any(grp_ids_uncovered))
         return saved_trees
@@ -141,12 +135,8 @@ class GroupCreationTestCase(GroupCommonTestCase):
             serializer.is_valid(raise_exception=True)
             actual_instances = serializer.save()
             obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
-            obj_ids = obj_ids + tuple(
-                existing_trees.entity_data.values_list("id", flat=True)
-            )
-            entity_data, closure_data = self.load_closure_data(
-                node_ids=obj_ids
-            )  # serializer.data
+            obj_ids = obj_ids + tuple(existing_trees.entity_data.values_list("id", flat=True))
+            entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)  # serializer.data
             trees_after_save = TreeNodeMixin.gen_from_closure_data(
                 entity_data=entity_data,
                 closure_data=closure_data,
@@ -172,12 +162,8 @@ class GroupCreationTestCase(GroupCommonTestCase):
             write_value_fn=self._write_value_fn,
         )
         req_data = self.trees_to_req_data(trees=appending_trees)
-        non_root_data = map(
-            lambda idx: {"idx": idx, "data": req_data[idx]}, range(len(req_data))
-        )
-        non_root_data = list(
-            filter(lambda d: d["data"]["new_parent"] is not None, non_root_data)
-        )
+        non_root_data = map(lambda idx: {"idx": idx, "data": req_data[idx]}, range(len(req_data)))
+        non_root_data = list(filter(lambda d: d["data"]["new_parent"] is not None, non_root_data))
         idx = random.randrange(0, len(non_root_data))
         loop_data_start = non_root_data[idx]
         loop_data_end = req_data[0]
@@ -215,9 +201,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
             write_value_fn=self._write_value_fn,
         )
         missing_role_id = trees[0].value["roles"][0]["role"]
-        self._login_user_profile.roles.filter(role__id=missing_role_id).delete(
-            hard=True
-        )
+        self._login_user_profile.roles.filter(role__id=missing_role_id).delete(hard=True)
         req_data = self.trees_to_req_data(trees=trees)
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
@@ -226,9 +210,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
             serializer.is_valid(raise_exception=True)
         self.assertIsNotNone(error_caught.exception)
         err_info = error_caught.exception.detail
-        expect_value = "Role is NOT assigned to current login user: %s" % (
-            missing_role_id
-        )
+        expect_value = "Role is NOT assigned to current login user: %s" % (missing_role_id)
         actual_value = err_info[0]["roles"][0]["role"][0]
         actual_value = str(actual_value)
         self.assertEqual(expect_value, actual_value)
@@ -374,17 +356,13 @@ class GroupCreationTestCase(GroupCommonTestCase):
         self.assertEqual(expect_errmsg, actual_errmsg)
         expect_errmsg = (
             expect_errmsg_pattern
-            % _info_map[QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value][
-                "maxnum"
-            ]
+            % _info_map[QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value]["maxnum"]
         )
         actual_errmsg = str(err_info[1]["phones"][non_field_err_key][0])
         self.assertEqual(expect_errmsg, actual_errmsg)
         expect_errmsg = (
             expect_errmsg_pattern
-            % _info_map[QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value][
-                "maxnum"
-            ]
+            % _info_map[QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value]["maxnum"]
         )
         actual_errmsg = str(err_info[2]["locations"][non_field_err_key][0])
         self.assertEqual(expect_errmsg, actual_errmsg)
@@ -437,9 +415,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
         for info_item in _info_map.values():
             related_field_name = info_item["field"]
             manager = getattr(group, related_field_name)
-            invalid_nested_id_exists = manager.filter(
-                id=invalid_id_nested_field
-            ).exists()
+            invalid_nested_id_exists = manager.filter(id=invalid_id_nested_field).exists()
             self.assertFalse(invalid_nested_id_exists)
 
 
@@ -497,9 +473,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             root.value["quota"].extend(quota_data)
             root.value["emails"].extend(self._gen_emails(num=contact_quota_maxnum))
             root.value["phones"].extend(self._gen_phones(num=contact_quota_maxnum))
-            root.value["locations"].extend(
-                self._gen_locations(num=contact_quota_maxnum)
-            )
+            root.value["locations"].extend(self._gen_locations(num=contact_quota_maxnum))
         req_data = self.trees_to_req_data(trees=origin_trees)
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
@@ -554,9 +528,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
 
     def test_bulk_with_hierarchy_change(self):
         for root in self.existing_trees:
-            new_grp_name = "my group %s" % "".join(
-                random.choices(string.ascii_letters, k=8)
-            )
+            new_grp_name = "my group %s" % "".join(random.choices(string.ascii_letters, k=8))
             root.value["name"] = new_grp_name
             # --- role ---
             applied_roles = tuple(map(lambda d: d["role"], root.value["roles"]))
@@ -569,9 +541,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             evicted = root.value["roles"].pop()
             root.value["roles"].append(new_data)
             # --- quota ---
-            applied_quota_mats = tuple(
-                map(lambda d: d["material"], root.value["quota"])
-            )
+            applied_quota_mats = tuple(map(lambda d: d["material"], root.value["quota"]))
             available_quota_mats = filter(
                 lambda material: material.id not in applied_quota_mats,
                 self._primitives[QuotaMaterial],
@@ -595,9 +565,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             root.value["emails"].extend(new_data)
             # --- phones ---
             new_data = self._gen_phones(num=1)
-            root.value["phones"][0]["line_number"] = str(
-                random.randrange(0x10000000, 0xFFFFFFFF)
-            )
+            root.value["phones"][0]["line_number"] = str(random.randrange(0x10000000, 0xFFFFFFFF))
             evicted = root.value["phones"].pop()
             root.value["phones"].extend(new_data)
             # --- locations ---
@@ -611,9 +579,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         self.existing_trees[1].parent = new_parent_node
         self.existing_trees[2].parent = new_parent_node
         moving_nodes = self.existing_trees.copy()
-        edited_tree = self._perform_update(
-            moving_nodes, account=self._login_user_profile.account
-        )
+        edited_tree = self._perform_update(moving_nodes, account=self._login_user_profile.account)
         matched, not_matched = TreeNodeMixin.compare_trees(
             trees_a=[self.existing_trees[0]],
             trees_b=edited_tree,
@@ -627,9 +593,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         root_node = self.existing_trees[0]
         # -----------------------------------------------
         applied_roles = tuple(map(lambda d: d["role"], root_node.value["roles"]))
-        available_roles = filter(
-            lambda role: role.id not in applied_roles, self._primitives[Role]
-        )
+        available_roles = filter(lambda role: role.id not in applied_roles, self._primitives[Role])
         new_role = next(available_roles)
         new_data = {"expiry": gen_expiry_time(), "role": new_role.id}
         root_node.value["roles"][0]["expiry"] = gen_expiry_time()
@@ -642,9 +606,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             profile_obj=self._primitives[GenericUserProfile][2],
             roles=roles_without_superuser,
         )
-        edited_tree = self._perform_update(
-            [root_node], account=another_login_profile.account
-        )
+        edited_tree = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
         actual_value = edited_tree[0].value
         compare_result = self._value_compare_roles_fn(expect_value, actual_value)
@@ -665,9 +627,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
     def test_another_user_edits_quota(self):
         root_node = self.existing_trees[0]
         # -----------------------------------------------
-        applied_quota_mats = tuple(
-            map(lambda d: d["material"], root_node.value["quota"])
-        )
+        applied_quota_mats = tuple(map(lambda d: d["material"], root_node.value["quota"]))
         available_quota_mats = filter(
             lambda material: material.id not in applied_quota_mats,
             self._primitives[QuotaMaterial],
@@ -689,9 +649,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             profile_obj=self._primitives[GenericUserProfile][2],
             roles=roles_without_superuser,
         )
-        edited_tree = self._perform_update(
-            [root_node], account=another_login_profile.account
-        )
+        edited_tree = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
         actual_value = edited_tree[0].value
         compare_result = self._value_compare_quota_fn(expect_value, actual_value)
@@ -742,15 +700,9 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             material = next(material)
             if material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS.value:
                 data["maxnum"] = expect_new_limits["emails"]
-            elif (
-                material.mat_code
-                == QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value
-            ):
+            elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value:
                 data["maxnum"] = expect_new_limits["phones"]
-            elif (
-                material.mat_code
-                == QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value
-            ):
+            elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value:
                 data["maxnum"] = expect_new_limits["locations"]
         root_node.value["emails"].extend(self._gen_emails(num=1))
         root_node.value["locations"].pop()
@@ -802,9 +754,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             )
         error_caught = error_caught.exception
         err_info = error_caught.detail
-        expect_errmsg_pattern = (
-            "will form a loop, which is NOT allowed in closure table"
-        )
+        expect_errmsg_pattern = "will form a loop, which is NOT allowed in closure table"
         pos = err_info[non_field_err_key][0].find(expect_errmsg_pattern)
         self.assertGreater(pos, 0)
 
@@ -937,9 +887,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
         # the updates on account privilege will NOT be done at model level, since it could be time-consuming
         self._perform_update()
         for profile in (
-            tuple(profiles_guest2su)
-            + tuple(profiles_guest2staff)
-            + tuple(profiles_guest_unchanged)
+            tuple(profiles_guest2su) + tuple(profiles_guest2staff) + tuple(profiles_guest_unchanged)
         ):
             self.assertEqual(profile.privilege_status, GenericUserProfile.NONE)
             self.assertFalse(profile.account.is_superuser)
@@ -1019,12 +967,8 @@ class GroupRepresentationTestCase(GroupCommonTestCase):
         self._validate_group(grps_data=grps_data, treenode=saved_trees[0])
         self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0])
         self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[1])
-        self._validate_group(
-            grps_data=grps_data, treenode=saved_trees[0].children[0].children[0]
-        )
-        self._validate_group(
-            grps_data=grps_data, treenode=saved_trees[0].children[0].children[1]
-        )
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0].children[0])
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0].children[1])
         # ---------- check closure structure ---------
         # root
         filtered = filter(lambda d: d["id"] == saved_trees[0].value["id"], grps_data)
@@ -1033,42 +977,24 @@ class GroupRepresentationTestCase(GroupCommonTestCase):
         child_nodes = filter(lambda d: d["depth"] == 1, root_data["descendants"])
         actual_child_ids = list(map(lambda d: d["descendant"]["id"], child_nodes))
         grandchild_nodes = filter(lambda d: d["depth"] == 2, root_data["descendants"])
-        actual_grandchild_ids = list(
-            map(lambda d: d["descendant"]["id"], grandchild_nodes)
-        )
+        actual_grandchild_ids = list(map(lambda d: d["descendant"]["id"], grandchild_nodes))
         self.assertIn(saved_trees[0].children[0].value["id"], actual_child_ids)
         self.assertIn(saved_trees[0].children[1].value["id"], actual_child_ids)
-        self.assertIn(
-            saved_trees[0].children[0].children[0].value["id"], actual_grandchild_ids
-        )
-        self.assertIn(
-            saved_trees[0].children[0].children[1].value["id"], actual_grandchild_ids
-        )
+        self.assertIn(saved_trees[0].children[0].children[0].value["id"], actual_grandchild_ids)
+        self.assertIn(saved_trees[0].children[0].children[1].value["id"], actual_grandchild_ids)
         # child non-leaf node 0
-        filtered = filter(
-            lambda d: d["id"] == saved_trees[0].children[0].value["id"], grps_data
-        )
+        filtered = filter(lambda d: d["id"] == saved_trees[0].children[0].value["id"], grps_data)
         node_data = next(filtered)
-        self.assertEqual(
-            node_data["ancestors"][0]["ancestor"]["id"], saved_trees[0].value["id"]
-        )
+        self.assertEqual(node_data["ancestors"][0]["ancestor"]["id"], saved_trees[0].value["id"])
         child_nodes = filter(lambda d: d["depth"] == 1, node_data["descendants"])
         actual_child_ids = list(map(lambda d: d["descendant"]["id"], child_nodes))
-        self.assertIn(
-            saved_trees[0].children[0].children[0].value["id"], actual_child_ids
-        )
-        self.assertIn(
-            saved_trees[0].children[0].children[1].value["id"], actual_child_ids
-        )
+        self.assertIn(saved_trees[0].children[0].children[0].value["id"], actual_child_ids)
+        self.assertIn(saved_trees[0].children[0].children[1].value["id"], actual_child_ids)
         # child leaf node 1
-        filtered = filter(
-            lambda d: d["id"] == saved_trees[0].children[1].value["id"], grps_data
-        )
+        filtered = filter(lambda d: d["id"] == saved_trees[0].children[1].value["id"], grps_data)
         node_data = next(filtered)
         self.assertFalse(any(node_data["descendants"]))
-        self.assertEqual(
-            node_data["ancestors"][0]["ancestor"]["id"], saved_trees[0].value["id"]
-        )
+        self.assertEqual(node_data["ancestors"][0]["ancestor"]["id"], saved_trees[0].value["id"])
         # grandchild leaf node 0, 1
         filtered = filter(
             lambda d: d["id"] == saved_trees[0].children[0].children[0].value["id"],
@@ -1081,9 +1007,7 @@ class GroupRepresentationTestCase(GroupCommonTestCase):
             parent_nodes_data[0]["ancestor"]["id"],
             saved_trees[0].children[0].value["id"],
         )
-        self.assertEqual(
-            parent_nodes_data[1]["ancestor"]["id"], saved_trees[0].value["id"]
-        )
+        self.assertEqual(parent_nodes_data[1]["ancestor"]["id"], saved_trees[0].value["id"])
 
     def test_partial_representation(self):
         hidden_fields = ("name", "quota", "phones")
@@ -1114,9 +1038,7 @@ class GroupRepresentationTestCase(GroupCommonTestCase):
         for field in hidden_fields:
             with self.assertRaises(KeyError):
                 node_data[field]
-        is_equal = self._value_compare_roles_fn(
-            val_a=node_data, val_b=saved_trees[0].value
-        )
+        is_equal = self._value_compare_roles_fn(val_a=node_data, val_b=saved_trees[0].value)
         self.assertTrue(is_equal)
         is_equal = self._value_compare_contact_fn(
             val_a=node_data["emails"],

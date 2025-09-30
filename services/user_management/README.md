@@ -186,7 +186,7 @@ docker compose --file  ./infra/docker-compose-generic.yml --file ./infra/docker-
 ## Development
 ### Code Formatter
 ```bash
-pipenv run black  --extend-exclude="src/migrations/.*\.py$"  ./src/ ./tests/  ./settings/
+pipenv run black  --line-length=100 --extend-exclude="src/migrations/.*\.py$"  ./src/ ./tests/  ./settings/
 ```
 
 ### Linter
