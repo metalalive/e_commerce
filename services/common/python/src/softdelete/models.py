@@ -183,11 +183,11 @@ class SoftDeleteObjectMixin(models.Model):
         time_deleted_before = self._time_deleted_origin
         time_deleted_after = self.time_deleted
         self._edit_flag = (
-            (self.id is not None)
+            (self.pk is not None)
             and (time_deleted_before is None)
             and (time_deleted_after is None)
         )
-        self._insert_flag = self.id is None
+        self._insert_flag = self.pk is None
         super().save(
             force_insert=force_insert,
             force_update=force_update,
