@@ -58,6 +58,14 @@ jobs:
       runs-on: ubuntu-24.04
       steps:
         - uses: actions/checkout@v4
+        - name: Build Docker image for database
+          uses: docker/build-push-action@v5
+          with:
+            context: infra
+            file: infra/mariadb-ext.dockerfile
+            outputs: type=docker
+            tags: mariadb-ext:11-noble
+            push: false
         - name: Download docker image artifact
           uses: actions/download-artifact@v4
           with:
@@ -66,7 +74,7 @@ jobs:
         - name: Load docker image
           run: |
               docker load --input ${{ runner.temp }}/usrmgt-backend-base.tar
-              docker image ls -a
+              docker image list
         - name: Create dev environment file
           working-directory: services/user_management/infra
           run: |
@@ -104,6 +112,14 @@ jobs:
       needs: init-env-db-migration
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Build Docker image for database
+        uses: docker/build-push-action@v5
+        with:
+          context: infra
+          file: infra/mariadb-ext.dockerfile
+          outputs: type=docker
+          tags: mariadb-ext:11-noble
+          push: false
       - name: Download docker image artifact
         uses: actions/download-artifact@v4
         with:
@@ -112,7 +128,7 @@ jobs:
       - name: Load docker image
         run: |
             docker load --input ${{ runner.temp }}/usrmgt-backend-base.tar
-            docker image ls -a
+            docker image list
       - name: Create dev environment file
         working-directory: services/user_management/infra
         run: |
@@ -138,7 +154,13 @@ jobs:
       - name: run test
         working-directory: services/user_management
         run: |
-            docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  up --abort-on-container-exit
+            docker compose -f ./infra/docker-compose-generic.yml -f ./infra/docker-compose-test.yml --env-file ./infra/interpolation-test.env  up --detach
+      - name: wait until test completed
+        working-directory: .github
+        run: |
+            python3 ./docker_wait.py  --container-name usrmgt-backend-testapp-0  --target-status exited --timeout-secs 2400
+            docker ps --all --filter name=usrmgt-*
+            docker logs usrmgt-backend-testapp-0
         
       - name: Clean up containers and volumes
         if: always()
