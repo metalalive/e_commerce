@@ -1,10 +1,14 @@
+use std::convert::Infallible;
 use std::result::Result;
 use std::sync::Arc;
 
-use hyper::body::{Body as HyperBody, HttpBody};
-use hyper::client::conn::{handshake, SendRequest};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::body::Bytes as HyperBytes;
+use hyper::client::conn::http1::{handshake, SendRequest};
 use hyper::header::{HeaderName, HeaderValue, HOST};
 use hyper::{Method, Request, StatusCode};
+use hyper_util::rt::TokioIo;
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsConnector;
 
@@ -14,7 +18,7 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::error::AppError;
 
 pub(super) struct BaseClient {
-    req_sender: SendRequest<HyperBody>,
+    req_sender: SendRequest<BoxBody<HyperBytes, Infallible>>,
     host: String,
     port: u16,
     logctx: Arc<AppLogContext>,
@@ -41,7 +45,8 @@ impl BaseClient {
                 code: AppErrorCode::CryptoFailure,
                 detail: Some(e.to_string()),
             })?;
-        let (req_sender, connector) = handshake(tls_stream).await.map_err(|e| AppError {
+        let tio = TokioIo::new(tls_stream);
+        let (req_sender, connector) = handshake(tio).await.map_err(|e| AppError {
             code: AppErrorCode::HttpHandshakeFailure,
             detail: Some(e.to_string()),
         })?;
@@ -67,11 +72,11 @@ impl BaseClient {
 
     async fn _execute(
         &mut self,
-        req: Request<HyperBody>,
+        req: Request<BoxBody<HyperBytes, Infallible>>,
     ) -> Result<(Vec<u8>, StatusCode), AppError> {
         let logctx_p = self.logctx.clone();
         let mut resp = self.req_sender.send_request(req).await.map_err(|e| {
-            self.conn_closed = e.is_closed() || !e.is_connect();
+            self.conn_closed = e.is_closed() || !e.is_shutdown();
             let detail = e.to_string();
             app_log_event!(
                 logctx_p,
@@ -88,12 +93,21 @@ impl BaseClient {
         })?;
         let body = resp.body_mut();
         let mut raw_collected = Vec::new();
-        while let Some(r) = body.data().await {
-            let rawbytes = r.map_err(|e| AppError {
-                code: AppErrorCode::DataCorruption,
-                detail: Some(e.to_string()),
-            })?;
-            raw_collected.extend(rawbytes.to_vec());
+        while let Some(frm) = body.frame().await {
+            let rawblk = frm
+                .map_err(|e| AppError {
+                    code: AppErrorCode::DataCorruption,
+                    detail: Some(e.to_string()),
+                })?
+                .into_data()
+                .map_err(|_frm| AppError {
+                    code: AppErrorCode::DataCorruption,
+                    detail: Some(format!(
+                        "http-client, frame2data, {}:{}",
+                        &self.host, self.port
+                    )),
+                })?;
+            raw_collected.extend(rawblk.to_vec());
         } // end of loop
         let status = resp.status();
         app_log_event!(
@@ -115,9 +129,9 @@ impl BaseClient {
         rawbody: Option<Vec<u8>>,
     ) -> Result<(Vec<u8>, StatusCode), AppError> {
         let body = if let Some(v) = rawbody {
-            HyperBody::from(v)
+            BoxBody::new(Full::new(HyperBytes::from(v)))
         } else {
-            HyperBody::empty()
+            BoxBody::new(Empty::new())
         };
         let mut req = Request::builder()
             .uri(resource_path)
