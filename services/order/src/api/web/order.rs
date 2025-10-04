@@ -7,6 +7,7 @@ use axum::http::{
     StatusCode as HttpStatusCode,
 };
 use axum::response::IntoResponse;
+use serde::Deserialize;
 use serde_json;
 
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
@@ -190,12 +191,17 @@ pub(super) async fn return_lines_request_handler(
     (status_code, hdr_map, resp_body)
 } // end of return_lines_request_handler
 
+#[derive(Deserialize)]
+pub(super) struct EditInfoEnableFlag {
+    pub billing: Option<bool>,
+    pub shipping: Option<bool>,
+}
+
 #[debug_handler(state=AppSharedState)]
 pub(super) async fn edit_billing_shipping_handler(
     oid: ExtractPath<String>,
-    _billing: Option<ExtractQuery<bool>>,
-    _shipping: Option<ExtractQuery<bool>>,
-    _authed: AppAuthedClaim,
+    ExtractQuery(enable_flag): ExtractQuery<EditInfoEnableFlag>,
+    authed: AppAuthedClaim,
     ExtractState(_appstate): ExtractState<AppSharedState>,
     _req_body: ExtractJson<OrderEditReqData>,
 ) -> impl IntoResponse {
@@ -207,8 +213,11 @@ pub(super) async fn edit_billing_shipping_handler(
     app_log_event!(
         log_ctx,
         AppLogLevel::INFO,
-        "edited contact info of the order {} ",
-        oid.clone()
+        "edited contact info, order:{}, usr-prof:{}, billing:{:?}, shipping:{:?}",
+        oid.clone(),
+        authed.profile,
+        enable_flag.billing,
+        enable_flag.shipping
     );
     (HttpStatusCode::OK, hdr_map, serial_resp_body)
 }

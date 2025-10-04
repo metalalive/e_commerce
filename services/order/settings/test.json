@@ -78,13 +78,13 @@
         "cors": "common/data/cors.json",
 	"max_connections": 50,
         "routes": [
-            {"path":"/cart/:seq_num", "handler":"retrieve_cart_lines"},
-            {"path":"/cart/:seq_num", "handler":"modify_cart_lines"},
-            {"path":"/cart/:seq_num", "handler":"discard_cart"},
+            {"path":"/cart/{seq_num}", "handler":"retrieve_cart_lines"},
+            {"path":"/cart/{seq_num}", "handler":"modify_cart_lines"},
+            {"path":"/cart/{seq_num}", "handler":"discard_cart"},
             {"path":"/policy/products", "handler":"modify_product_policy"},
             {"path":"/order",  "handler":"create_new_order"},
-            {"path":"/order/:oid/return", "handler":"return_lines_request"},
-            {"path":"/order/:oid", "handler":"access_existing_order"}
+            {"path":"/order/{oid}/return", "handler":"return_lines_request"},
+            {"path":"/order/{oid}", "handler":"access_existing_order"}
         ]
     },
     "limit_req_body_in_bytes": 10485760,

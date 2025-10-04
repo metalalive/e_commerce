@@ -3,6 +3,7 @@ use std::env;
 use std::io::ErrorKind;
 use std::sync::atomic::Ordering;
 
+use axum::body::Body as AxumBody;
 use axum::extract::{Json as ExtractJson, State as ExtractState};
 use axum::http::{
     header as HttpHeader, HeaderMap as HttpHeaderMap, HeaderValue as HttpHeaderValue,
@@ -10,8 +11,8 @@ use axum::http::{
 };
 use axum::response::IntoResponse;
 use axum::routing;
-use http_body::{Body, Limited};
-use hyper::{Body as HyperBody, Request};
+use http_body_util::BodyExt;
+use hyper::Request;
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceBuilder};
 
@@ -21,7 +22,7 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::{ut_setup_share_state, MockConfidential, EXAMPLE_REL_PATH};
 use order::api::web::ApiRouteTableType;
-use order::network::{app_web_service, middleware, net_server_listener};
+use order::network::{app_web_service, middleware, net_listener};
 use order::AppSharedState;
 
 #[derive(Deserialize, Serialize)]
@@ -43,11 +44,11 @@ async fn ut_endpoint_handler(
     (HttpStatusCode::OK, hdr_map, serial_resp_body)
 }
 
-fn ut_service_req_setup(method: &str, uri: &str) -> Request<HyperBody> {
+fn ut_service_req_setup(method: &str, uri: &str) -> Request<AxumBody> {
     let body = {
         let d = UTendpointData { gram: 76 };
         let d = serde_json::to_string(&d).unwrap();
-        HyperBody::from(d)
+        AxumBody::from(d)
     };
     let req = Request::builder()
         .method(method)
@@ -60,21 +61,19 @@ fn ut_service_req_setup(method: &str, uri: &str) -> Request<HyperBody> {
 
 #[tokio::test]
 async fn app_web_service_ok() {
-    type UTestHttpBody = HyperBody;
     let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
-    let rtable: ApiRouteTableType<UTestHttpBody> =
+    let rtable: ApiRouteTableType =
         HashMap::from([("gram_increment", routing::post(ut_endpoint_handler))]);
-    let (mut service, num_routes) =
-        app_web_service::<UTestHttpBody>(&cfg.api_server.listen, rtable, shr_state);
+    let (mut service, num_routes) = app_web_service(&cfg.api_server.listen, rtable, shr_state);
     assert_eq!(num_routes, 1);
     let req = ut_service_req_setup("POST", "/1.0.33/gram/increment");
     let result = service.call(req).await;
     assert!(result.is_ok());
     let mut r = result.unwrap();
     assert_eq!(r.status(), HttpStatusCode::OK);
-    let rawdata = r.body_mut().data().await;
-    let rawdata = rawdata.unwrap().unwrap().to_vec();
+    let rawfrm = r.body_mut().frame().await.unwrap();
+    let rawdata = rawfrm.unwrap().into_data().unwrap().to_vec();
     let data = serde_json::from_slice::<UTendpointData>(rawdata.as_slice()).unwrap();
     assert_eq!(data.gram, 77);
 } // end of fn app_web_service_ok
@@ -85,9 +84,9 @@ async fn net_server_listener_ok_1() {
     // some platforms seem to allow callers to reuse the same port so the same port
     // binding function can be invoked several times, set this case to `ignore` and
     // let users run this test case in their own local environment.
-    let result = net_server_listener("localhost".to_string(), 8086);
+    let result = net_listener("localhost".to_string(), 8086).await;
     assert!(result.is_ok());
-    let result = net_server_listener("localhost".to_string(), 8086);
+    let result = net_listener("localhost".to_string(), 8086).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::IOerror(ErrorKind::AddrInUse));
@@ -96,9 +95,9 @@ async fn net_server_listener_ok_1() {
 
 #[tokio::test]
 async fn net_server_listener_ok_2() {
-    let result = net_server_listener("localhost".to_string(), 65535);
+    let result = net_listener("localhost".to_string(), 65535).await;
     assert!(result.is_ok());
-    let result = net_server_listener("nonexist.org.12345".to_string(), 0);
+    let result = net_listener("nonexist.org.12345".to_string(), 0).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::IOerror(ErrorKind::AddrNotAvailable));
@@ -126,13 +125,11 @@ fn middleware_cors_error_cfg() {
 
 #[tokio::test]
 async fn middleware_req_body_limit() {
-    type UTestHttpBody = Limited<HyperBody>;
     let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
-    let rtable: ApiRouteTableType<UTestHttpBody> =
+    let rtable: ApiRouteTableType =
         HashMap::from([("gram_increment", routing::post(ut_endpoint_handler))]);
-    let (service, num_routes) =
-        app_web_service::<UTestHttpBody>(&cfg.api_server.listen, rtable, shr_state);
+    let (service, num_routes) = app_web_service(&cfg.api_server.listen, rtable, shr_state);
     assert_eq!(num_routes, 1);
     let req = ut_service_req_setup("POST", "/1.0.33/gram/increment");
     let reqlm = middleware::req_body_limit(2);
@@ -146,14 +143,12 @@ async fn middleware_req_body_limit() {
 
 #[tokio::test]
 async fn middleware_shutdown_detection() {
-    type UTestHttpBody = HyperBody;
     let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
     let (mock_flag, mock_num_reqs) = (shr_state.shutdown(), shr_state.num_requests());
-    let rtable: ApiRouteTableType<UTestHttpBody> =
+    let rtable: ApiRouteTableType =
         HashMap::from([("modify_product_policy", routing::put(ut_endpoint_handler))]);
-    let (leaf_service, num_routes) =
-        app_web_service::<UTestHttpBody>(&cfg.api_server.listen, rtable, shr_state);
+    let (leaf_service, num_routes) = app_web_service(&cfg.api_server.listen, rtable, shr_state);
     assert_eq!(num_routes, 1);
     let sh_detect =
         middleware::ShutdownDetectionLayer::new(mock_flag.clone(), mock_num_reqs.clone());

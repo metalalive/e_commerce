@@ -101,7 +101,7 @@ impl AbstractCurrencyExchange for AppCurrencyExchange {
                 detail: Some(e.to_string()),
             })?
         };
-        let mut _client = BaseClient::try_build(
+        let mut s_client = BaseClient::try_build(
             self._host.clone(),
             self._port,
             &self._secure_connector,
@@ -111,7 +111,7 @@ impl AbstractCurrencyExchange for AppCurrencyExchange {
         let headers = vec![(AUTHORIZATION, auth_tok)];
         let resource_path =
             format!("/api/latest.json?symbols={symbols}&prettyprint=false&show_alternative=false");
-        let (rawbody, status) = _client
+        let (rawbody, status) = s_client
             .execute(resource_path.as_str(), Method::GET, headers, None)
             .await?;
         if status.is_success() {

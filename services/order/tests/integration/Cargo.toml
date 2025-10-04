@@ -6,12 +6,12 @@ edition = "2021"
 [dependencies]
 serde = {version="1.0", features=["rc"]}
 serde_json = "1.0"
-tokio = {version="^1.29", features=["rt", "macros"]}
-tower = "^0.4.13"
-http = "0.2"
-http-body = "^0.4.6"
-axum-core = "^0.3.4"
-hyper = {version="^0.14", features=["client", "runtime", "tcp", "http1"]}
+tokio = {version="^1.47", features=["rt", "macros"]}
+tower = "^0.5.2"
+http = "^1.3.1"
+http-body-util = "^0.1.3"
+axum-core = "^0.5.5"
+hyper = {version="^1.7.0", features=["client", "http1"]}
 chrono  = {version="0.4.31", features=["std", "alloc", "serde"]}
 
 order = {path="../..", default-features=false}
