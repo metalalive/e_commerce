@@ -13,16 +13,17 @@ use axum::http::request::Parts;
 use chrono::{DateTime, Duration, FixedOffset, Local as LocalTime};
 use serde::{Deserialize, Serialize};
 
+use axum::body::Body as AxumBody;
 use axum::extract::FromRequestParts;
-use axum::headers::authorization::Bearer;
-use axum::headers::Authorization;
-use axum::response::IntoResponse;
-use axum::{Error as AxumError, RequestPartsExt, TypedHeader};
-use http_body::combinators::UnsyncBoxBody;
-use http_body::Body as HttpBody;
-use hyper::body::Bytes as HyBodyBytes;
-use hyper::client::conn as ClientConn;
-use hyper::{header, Body as HyperBody, Request, Response, StatusCode, Uri};
+use axum::RequestPartsExt;
+use axum_extra::TypedHeader;
+use headers::authorization::Bearer;
+use headers::Authorization;
+use http_body_util::{BodyExt, Empty};
+use hyper::body::{Bytes as HyBodyBytes, Incoming as HyIncoming};
+use hyper::client::conn::http1::{handshake, Connection as HyClientConn, SendRequest};
+use hyper::{header, Request, Response, StatusCode, Uri};
+use hyper_util::rt::TokioIo;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio::task;
@@ -44,7 +45,7 @@ use crate::{AppAuthCfg, AppSharedState};
 
 const MAX_NBYTES_LOADED_RESPONSE_KEYSTORE: usize = 102400;
 
-type ApiRespBody = UnsyncBoxBody<HyBodyBytes, AxumError>;
+type UnauthRespBody = AxumBody;
 
 #[async_trait]
 pub trait AbstractAuthKeystore: Send + Sync {
@@ -113,7 +114,7 @@ pub struct AppAuthClaimQuota {
 // TODO, reuse `AppAuthedClaim` and parameterize `AppAuthPermissionCode`
 // and `AppAuthQuotaMatCode` for different applications
 // (possible approaches are generic type or macro)
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct AppAuthedClaim {
     pub profile: u32,
     pub iat: i64,
@@ -123,13 +124,15 @@ pub struct AppAuthedClaim {
     pub quota: Vec<AppAuthClaimQuota>,
 }
 
-fn error_response() -> Response<ApiRespBody> {
-    (StatusCode::UNAUTHORIZED, "").into_response()
+fn error_response() -> Response<UnauthRespBody> {
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .body(AxumBody::empty())
+        .unwrap()
 }
 
-#[async_trait]
 impl FromRequestParts<AppSharedState> for AppAuthedClaim {
-    type Rejection = Response<ApiRespBody>;
+    type Rejection = Response<UnauthRespBody>;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -324,8 +327,8 @@ impl AppAuthKeystore {
         url: &Uri,
     ) -> DefaultResult<
         (
-            ClientConn::SendRequest<HyperBody>,
-            ClientConn::Connection<TcpStream, HyperBody>,
+            SendRequest<Empty<HyBodyBytes>>,
+            HyClientConn<TokioIo<TcpStream>, Empty<HyBodyBytes>>,
         ),
         AppError,
     > {
@@ -342,13 +345,17 @@ impl AppAuthKeystore {
             .as_u16();
         let addr = format!("{host}:{port}");
         match TcpStream::connect(addr).await {
-            Ok(stream) => match ClientConn::handshake(stream).await {
-                Ok(m) => Ok(m),
-                Err(net_e) => Err(AppError {
-                    detail: Some(net_e.to_string()),
-                    code: err_code_hyper2app(&net_e),
-                }),
-            },
+            Ok(stream) => {
+                match handshake::<TokioIo<TcpStream>, Empty<HyBodyBytes>>(TokioIo::new(stream))
+                    .await
+                {
+                    Ok(m) => Ok(m),
+                    Err(net_e) => Err(AppError {
+                        detail: Some(net_e.to_string()),
+                        code: err_code_hyper2app(&net_e),
+                    }),
+                }
+            }
             Err(net_e) => Err(AppError {
                 detail: Some(net_e.to_string()),
                 code: AppErrorCode::IOerror(net_e.kind()),
@@ -359,15 +366,15 @@ impl AppAuthKeystore {
     async fn _request_to_key_server(
         &self,
         url: &Uri,
-        mut sender: ClientConn::SendRequest<HyperBody>,
-    ) -> DefaultResult<Response<HyperBody>, AppError> {
+        mut sender: SendRequest<Empty<HyBodyBytes>>,
+    ) -> DefaultResult<Response<HyIncoming>, AppError> {
         let hostname = url.host().unwrap();
         let req = Request::builder()
             .uri(url.path())
             .method(hyper::Method::GET)
             .header(header::ACCEPT, HTTP_CONTENT_TYPE_JSON)
             .header(header::HOST, hostname)
-            .body(HyperBody::empty())
+            .body(Empty::new())
             .map_err(|net_e| AppError {
                 detail: Some(net_e.to_string()),
                 code: AppErrorCode::InvalidInput,
@@ -391,15 +398,16 @@ impl AppAuthKeystore {
 
     async fn resp_body_to_keys(
         &self,
-        mut resp: Response<HyperBody>,
+        mut resp: Response<HyIncoming>,
     ) -> DefaultResult<JwkSet, AppError> {
         // TODO, generalize using macro, generic type parameter cause
         let body = resp.body_mut();
         let mut raw_collected: Vec<u8> = Vec::new();
-        while let Some(data) = body.data().await {
-            let result = match data {
+        while let Some(frm) = body.frame().await {
+            let result = match frm {
                 Ok(raw) => {
-                    raw_collected.extend(raw.to_vec());
+                    let rawblk = raw.into_data().unwrap(); // TODO, error handling
+                    raw_collected.extend(rawblk.to_vec());
                     let result = serde_json::from_slice::<JwkSet>(raw_collected.as_slice());
                     if let Ok(out) = result {
                         Some(Ok(out))
@@ -429,7 +437,7 @@ impl AppAuthKeystore {
 } // end of fn AppAuthKeystore
 
 fn err_code_hyper2app(value: &hyper::Error) -> AppErrorCode {
-    if value.is_connect() {
+    if value.is_closed() {
         AppErrorCode::IOerror(ErrorKind::NotConnected)
     } else if value.is_parse() || value.is_incomplete_message() {
         AppErrorCode::DataCorruption
@@ -462,7 +470,7 @@ where
     // response body type of authentication middleware is coupled to web API endpoints
     // TODO, better design approach
     type RequestBody = REQB;
-    type ResponseBody = ApiRespBody;
+    type ResponseBody = UnauthRespBody;
     type Future = Pin<
         Box<
             dyn Future<
@@ -477,14 +485,14 @@ where
 
     fn authorize(&mut self, request: Request<REQB>) -> Self::Future {
         type AuthTokenHdr = TypedHeader<Authorization<Bearer>>;
-        let _logctx = self.logctx.clone();
+        let logctx = self.logctx.clone();
         let ks = self.keystore.clone();
         let fut = async move {
             let (mut parts, body) = request.into_parts();
             let mut resp = error_response();
             match parts.extract::<AuthTokenHdr>().await {
                 Ok(TypedHeader(Authorization(bearer))) => {
-                    match Self::validate_token(ks, bearer.token(), _logctx).await {
+                    match Self::validate_token(ks, bearer.token(), logctx).await {
                         Ok(claim) => {
                             let _ = parts.extensions.insert(claim);
                             Ok(Request::from_parts(parts, body))
@@ -496,7 +504,7 @@ where
                     }
                 }
                 Err(e) => {
-                    if let Some(lctx) = _logctx {
+                    if let Some(lctx) = logctx {
                         app_log_event!(
                             lctx,
                             AppLogLevel::INFO,
@@ -504,7 +512,11 @@ where
                             e
                         );
                     }
-                    let _ = resp.extensions_mut().insert(e);
+                    let ae = AppError {
+                        code: AppErrorCode::InvalidInput,
+                        detail: Some(e.to_string()),
+                    };
+                    let _ = resp.extensions_mut().insert(ae);
                     Err(resp)
                 }
             }

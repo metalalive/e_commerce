@@ -5,10 +5,10 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use axum::extract::rejection::TypedHeaderRejection;
+use axum::body::Body;
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use hyper::header::{HeaderName, HeaderValue};
-use hyper::{Body, Request};
+use hyper::Request;
 use jsonwebtoken::jwk::{Jwk, JwkSet};
 use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey};
 use tower_http::auth::AsyncAuthorizeRequest;
@@ -201,9 +201,10 @@ async fn jwt_verify_rsa_invalid_req_header() {
     let result = auth.authorize(mock_req).await;
     assert!(result.is_err());
     let resp = result.unwrap_err();
-    let result = resp.extensions().get::<TypedHeaderRejection>();
+    assert_eq!(resp.status().as_u16(), 401);
+    let result = resp.extensions().get::<AppError>();
     let error = result.unwrap();
-    assert_eq!(error.name().as_str(), "authorization");
+    assert_eq!(error.code, AppErrorCode::DataCorruption);
 }
 
 #[tokio::test]
