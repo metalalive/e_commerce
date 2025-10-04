@@ -1,16 +1,14 @@
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::env;
+use std::result::Result;
 use std::sync::atomic::Ordering;
 
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
-use http_body::Limited;
-use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::signal::unix::{signal, SignalKind};
 use tower::ServiceBuilder;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
-use tower_http::cors::CorsLayer;
 
 use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
@@ -19,70 +17,44 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use order::api::web::route_table;
 use order::constant::hard_limit;
 use order::error::AppError;
-use order::network::{app_web_service, middleware, net_server_listener};
+use order::network::{app_web_service, middleware, net_listener};
 use order::{AppJwtAuthentication, AppSharedState};
 
-type AppFinalHttpBody = Limited<HyperBody>; // HyperBody;
-
-async fn start_server(shr_state: AppSharedState) {
+async fn start_server(shr_state: AppSharedState) -> Result<(), String> {
     let log_ctx_p = shr_state.log_context().clone();
     let cfg = shr_state.config().clone();
     let shutdown_flag = shr_state.shutdown();
     let num_reqs_cnt = shr_state.num_requests();
     let keystore = shr_state.auth_keystore();
-    let routes = route_table::<AppFinalHttpBody>();
-    let listener = &cfg.api_server.listen;
-    let (leaf_service, num_applied) =
-        app_web_service::<AppFinalHttpBody>(listener, routes, shr_state);
+    let routes = route_table();
+    let listenercfg = &cfg.api_server.listen;
+    let (leaf_router, num_applied) = app_web_service(listenercfg, routes, shr_state);
     if num_applied == 0 {
-        app_log_event!(
-            log_ctx_p,
-            AppLogLevel::ERROR,
-            "API-server-start-failure, no-route-created"
-        );
-        return;
+        return Err("API-server-start-failure, no-route-created".to_string());
     }
-    let result = net_server_listener(listener.host.clone(), listener.port);
-    let server_bound = match result {
-        Ok(b) => b,
-        Err(e) => {
-            app_log_event!(
-                log_ctx_p,
-                AppLogLevel::ERROR,
-                "API-server-start-failure, {e}"
-            );
-            return;
-        }
-    };
+    let listener = net_listener(listenercfg.host.clone(), listenercfg.port)
+        .await
+        .map_err(|e| format!("API-server-start-failure, {e}"))?;
     let sh_detect =
         middleware::ShutdownDetectionLayer::new(shutdown_flag.clone(), num_reqs_cnt.clone());
-    let ratelm = middleware::rate_limit(listener.max_connections);
+    let ratelm = middleware::rate_limit(listenercfg.max_connections);
     let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
     let authm = {
         let jwtauth = AppJwtAuthentication::new(keystore, Some(log_ctx_p.clone()));
         AsyncRequireAuthorizationLayer::new(jwtauth)
     };
-    let cors_cfg_fullpath = cfg.basepath.system.clone() + "/" + listener.cors.as_str();
-    let co = match middleware::cors(cors_cfg_fullpath) {
-        Ok(v) => v,
-        Err(e) => {
-            app_log_event!(
-                log_ctx_p,
-                AppLogLevel::ERROR,
-                "cors layer init error, detail: {:?}",
-                e
-            );
-            CorsLayer::new()
-        }
-    };
-    let middlewares_cloneable = ServiceBuilder::new()
-        .layer(sh_detect)
-        .layer(reqlm)
+    let cors_cfg_fullpath = cfg.basepath.system.clone() + "/" + listenercfg.cors.as_str();
+    let co = middleware::cors(cors_cfg_fullpath)
+        .map_err(|e| format!("cors layer init error, detail: {:?}", e))?;
+    // pack layer of services which can be cloned for each inbound connection.
+    let per_conn_service = leaf_router
+        .layer(authm)
         .layer(co)
-        .layer(authm);
-    let merged_service = leaf_service.layer(middlewares_cloneable);
+        .layer(reqlm)
+        .layer(sh_detect)
+        .into_make_service();
+    // add server-wide service layers which are not allowed to be cloned
     let final_service = ServiceBuilder::new()
-        // add middlewares which are not allowed to be cloned
         .layer(ratelm)
         // TODO, FIXME
         // Axum Router assigns itself to Response type parameter of a tower service
@@ -91,14 +63,16 @@ async fn start_server(shr_state: AppSharedState) {
         // (2) adding itself  to the service builder at here
         //
         // Figure out how this happened, is the error resolved in latest version ?
-        .service(merged_service.into_make_service());
-    let srv = server_bound.serve(final_service);
+        .service(per_conn_service);
+
+    let srv = axum::serve(listener, final_service);
+
     let log_ctx_shutdown = log_ctx_p.clone();
     let graceful = srv.with_graceful_shutdown(async move {
         let mut shutdown_signal = signal(SignalKind::terminate()).unwrap();
         shutdown_signal.recv().await;
         shutdown_flag.store(true, Ordering::Relaxed);
-        for _ in 0..6 {
+        for _ in 0..10 {
             let num_reqs_rest = num_reqs_cnt.load(Ordering::Relaxed);
             app_log_event!(
                 log_ctx_shutdown,
@@ -113,8 +87,9 @@ async fn start_server(shr_state: AppSharedState) {
             }
         } // TODO, improve the code at here
     });
-    let _ = graceful.await;
+    let result = graceful.await;
     app_log_event!(log_ctx_p, AppLogLevel::INFO, "API-server-terminating");
+    result.map_err(|e| e.to_string())
 } // end of fn start_server
 
 async fn start_jwks_refresh(shr_state: AppSharedState) {
@@ -196,17 +171,20 @@ fn start_async_runtime(cfg: AppConfig, confidential: Box<dyn AbstractConfidentia
         // rate limiter in crate `tower` requires the timer in the runtime builder
         .enable_time()
         .build();
+    let log_ctx_p = shr_state.log_context().clone();
     match result {
         Ok(rt) => {
             // new worker threads spawned
-            rt.block_on(async move {
+            let r = rt.block_on(async move {
                 let task_jwk = start_jwks_refresh(shr_state.clone());
                 tokio::task::spawn(task_jwk);
-                start_server(shr_state).await;
+                start_server(shr_state).await
             }); // runtime started
+            if let Err(detail) = r {
+                app_log_event!(log_ctx_p, AppLogLevel::ERROR, "{detail}");
+            }
         }
         Err(e) => {
-            let log_ctx_p = shr_state.log_context();
             app_log_event!(
                 log_ctx_p,
                 AppLogLevel::ERROR,
