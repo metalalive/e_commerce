@@ -113,63 +113,62 @@ pub mod middleware {
     }
 
     pub fn cors(cfg_path: String) -> DefaultResult<CorsLayer, AppError> {
-        match File::open(cfg_path) {
-            Ok(f) => match serde_json::from_reader::<File, CorsConfig>(f) {
-                Ok(val) => {
-                    let methods = val
-                        .ALLOWED_METHODS
-                        .iter()
-                        .filter_map(|m| match http::Method::from_bytes(m.as_bytes()) {
-                            Ok(ms) => Some(ms),
-                            Err(_e) => None,
-                        })
-                        .collect::<Vec<http::Method>>();
-                    if val.ALLOWED_METHODS.len() > methods.len() {
-                        return Err(AppError {
-                            detail: Some("invalid-allowed-method".to_string()),
-                            code: AppErrorCode::InvalidInput,
-                        });
-                    }
-                    let headers = val
-                        .ALLOWED_HEADERS
-                        .iter()
-                        .filter_map(|h| match http::HeaderName::from_str(h.as_str()) {
-                            Ok(hs) => Some(hs),
-                            Err(_e) => None,
-                        })
-                        .collect::<Vec<http::HeaderName>>();
-                    if !headers.contains(&http::header::AUTHORIZATION)
-                        || !headers.contains(&http::header::CONTENT_TYPE)
-                        || !headers.contains(&http::header::ACCEPT)
-                    {
-                        return Err(AppError {
-                            detail: Some("invalid-allowed-header".to_string()),
-                            code: AppErrorCode::InvalidInput,
-                        });
-                    }
-                    let origin = val
-                        .ALLOWED_ORIGIN
-                        .order
-                        .parse::<http::HeaderValue>()
-                        .unwrap();
-                    let co = CorsLayer::new()
-                        .allow_origin(origin)
-                        .allow_methods(methods)
-                        .allow_headers(headers)
-                        .allow_credentials(val.ALLOW_CREDENTIALS)
-                        .max_age(Duration::from_secs(val.PREFLIGHT_MAX_AGE));
-                    Ok(co)
-                }
-                Err(e) => Err(AppError {
-                    detail: Some(e.to_string()),
-                    code: AppErrorCode::InvalidJsonFormat,
-                }),
-            },
-            Err(e) => Err(AppError {
-                detail: Some(e.to_string()),
-                code: AppErrorCode::IOerror(e.kind()),
-            }),
-        } // end of file open
+        let f = File::open(cfg_path).map_err(|e| AppError {
+            detail: Some(e.to_string()),
+            code: AppErrorCode::IOerror(e.kind()),
+        })?;
+
+        let val = serde_json::from_reader::<File, CorsConfig>(f).map_err(|e| AppError {
+            detail: Some(e.to_string()),
+            code: AppErrorCode::InvalidJsonFormat,
+        })?;
+
+        let methods = val
+            .ALLOWED_METHODS
+            .iter()
+            .filter_map(|m| match http::Method::from_bytes(m.as_bytes()) {
+                Ok(ms) => Some(ms),
+                Err(_e) => None,
+            })
+            .collect::<Vec<http::Method>>();
+        if val.ALLOWED_METHODS.len() > methods.len() {
+            return Err(AppError {
+                detail: Some("invalid-allowed-method".to_string()),
+                code: AppErrorCode::InvalidInput,
+            });
+        }
+        let headers = val
+            .ALLOWED_HEADERS
+            .iter()
+            .filter_map(|h| match http::HeaderName::from_str(h.as_str()) {
+                Ok(hs) => Some(hs),
+                Err(_e) => None,
+            })
+            .collect::<Vec<http::HeaderName>>();
+        if !headers.contains(&http::header::AUTHORIZATION)
+            || !headers.contains(&http::header::CONTENT_TYPE)
+            || !headers.contains(&http::header::ACCEPT)
+        {
+            return Err(AppError {
+                detail: Some("invalid-allowed-header".to_string()),
+                code: AppErrorCode::InvalidInput,
+            });
+        }
+        let origin = val
+            .ALLOWED_ORIGIN
+            .order
+            .parse::<http::HeaderValue>()
+            .map_err(|e| AppError {
+                detail: Some(format!("invalid-origin-header: {}", e)),
+                code: AppErrorCode::InvalidInput,
+            })?;
+        let co = CorsLayer::new()
+            .allow_origin(origin)
+            .allow_methods(methods)
+            .allow_headers(headers)
+            .allow_credentials(val.ALLOW_CREDENTIALS)
+            .max_age(Duration::from_secs(val.PREFLIGHT_MAX_AGE));
+        Ok(co)
     } // end of fn cors_middleware
 
     pub fn req_body_limit(limit: usize) -> RequestBodyLimitLayer {

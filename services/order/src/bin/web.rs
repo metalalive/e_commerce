@@ -112,23 +112,13 @@ async fn start_jwks_refresh(shr_state: AppSharedState) {
                 match stats.period_next_op.to_std() {
                     Ok(p) => p,
                     Err(e) => {
-                        app_log_event!(
-                            log_ctx,
-                            AppLogLevel::WARNING,
-                            "return period error, reason: {:?} ",
-                            e
-                        );
+                        app_log_event!(log_ctx, AppLogLevel::WARNING, "period-error:{:?} ", e);
                         std::time::Duration::new(period_secs, 0)
                     }
                 }
             }
             Err(e) => {
-                app_log_event!(
-                    log_ctx,
-                    AppLogLevel::ERROR,
-                    "refresh failure JWK set, reason: {:?} ",
-                    e
-                );
+                app_log_event!(log_ctx, AppLogLevel::ERROR, "jwks-refresh-failure:{:?} ", e);
                 std::time::Duration::new(300, 0)
             }
         };
@@ -157,12 +147,8 @@ fn start_async_runtime(cfg: AppConfig, confidential: Box<dyn AbstractConfidentia
             app_log_event!(log_cpy, AppLogLevel::INFO, "[API server] worker started");
         })
         .on_thread_stop(move || {
-            let log_cpy = log_ctx2.clone();
-            app_log_event!(
-                log_cpy,
-                AppLogLevel::INFO,
-                "[API server] worker terminating"
-            );
+            let log_cp = log_ctx2.clone();
+            app_log_event!(log_cp, AppLogLevel::INFO, "[API server] worker terminating");
         })
         .thread_stack_size(stack_nbytes)
         .thread_name("web-api-worker")
@@ -185,12 +171,7 @@ fn start_async_runtime(cfg: AppConfig, confidential: Box<dyn AbstractConfidentia
             }
         }
         Err(e) => {
-            app_log_event!(
-                log_ctx_p,
-                AppLogLevel::ERROR,
-                "async runtime failed to build, {} ",
-                e
-            );
+            app_log_event!(log_ctx_p, AppLogLevel::ERROR, "async-runtime-fail:{e}");
         }
     };
 } // end of start_async_runtime
@@ -209,17 +190,11 @@ fn main() {
         Ok(cfg) => match confidentiality::build_context(&cfg) {
             Ok(confidential) => start_async_runtime(cfg, confidential),
             Err(e) => {
-                println!(
-                    "app failed to init confidentiality handler, error code: {:?} ",
-                    e
-                );
+                println!("fail-init-confidential-handler:{:?} ", e);
             }
         },
         Err(e) => {
-            println!(
-                "app failed to configure, error code: {} ",
-                AppError::from(e)
-            );
+            println!("fail-app-cfg: {}", AppError::from(e));
         }
     };
 } // end of main

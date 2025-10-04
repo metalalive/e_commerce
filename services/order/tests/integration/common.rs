@@ -82,41 +82,30 @@ impl TestWebServer {
     pub async fn to_custom_type<T: for<'a> Deserialize<'a>>(
         body: &mut InnerRespBody,
     ) -> DefaultResult<T, AppError> {
-        let mut _err = AppError {
+        let frame = body
+            .frame()
+            .await
+            .ok_or_else(|| AppError {
+                code: AppErrorCode::Unknown,
+                detail: Some("no response body".to_string()),
+            })?
+            .map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            })?;
+        let data = frame.into_data().map_err(|frm| AppError {
             code: AppErrorCode::Unknown,
-            detail: None,
-        };
-        let x = if let Some(r) = body.frame().await {
-            match r {
-                Ok(b) => b.into_data().unwrap(),
-                Err(e) => {
-                    _err.detail = Some(e.to_string());
-                    return Err(_err);
-                }
-            }
-        } else {
-            let s = "no response body".to_string();
-            _err.detail = Some(s);
-            return Err(_err);
-        };
-        let x = x.to_vec();
-        let x = match String::from_utf8(x) {
-            Ok(b) => b,
-            Err(e) => {
-                let s = e.utf8_error().to_string();
-                _err.detail = Some(s);
-                return Err(_err);
-            }
-        };
-        match serde_json::from_str::<T>(x.as_str()) {
-            Ok(obj) => Ok(obj),
-            Err(e) => {
-                _err.code = AppErrorCode::InvalidJsonFormat;
-                _err.detail = Some(e.to_string());
-                Err(_err)
-            }
-        }
-    } // end of to_custom_type
+            detail: Some(format!("{:?}", frm)),
+        })?;
+        let utf8_string = String::from_utf8(data.to_vec()).map_err(|e| AppError {
+            code: AppErrorCode::Unknown,
+            detail: Some(e.utf8_error().to_string()),
+        })?;
+        serde_json::from_str::<T>(utf8_string.as_str()).map_err(|e| AppError {
+            code: AppErrorCode::InvalidJsonFormat,
+            detail: Some(e.to_string()),
+        })
+    }
 } // end of impl TestWebServer
 
 // higher-ranked trait bound ?
@@ -125,20 +114,12 @@ pub fn deserialize_json_template<T: for<'a> Deserialize<'a>>(
     file_localpath: &str,
 ) -> DefaultResult<T, AppError> {
     let fullpath = basepath.service.clone() + "/" + file_localpath;
-    let reader = match File::open(fullpath) {
-        Ok(g) => g,
-        Err(e) => {
-            return Err(AppError {
-                detail: Some(file_localpath.to_string()),
-                code: AppErrorCode::IOerror(e.kind()),
-            });
-        }
-    };
-    match serde_json::from_reader::<File, T>(reader) {
-        Ok(obj) => Ok(obj),
-        Err(e) => Err(AppError {
-            detail: Some(e.to_string()),
-            code: AppErrorCode::InvalidJsonFormat,
-        }),
-    }
+    let reader = File::open(fullpath).map_err(|e| AppError {
+        detail: Some(file_localpath.to_string()),
+        code: AppErrorCode::IOerror(e.kind()),
+    })?;
+    serde_json::from_reader::<File, T>(reader).map_err(|e| AppError {
+        detail: Some(e.to_string()),
+        code: AppErrorCode::InvalidJsonFormat,
+    })
 }

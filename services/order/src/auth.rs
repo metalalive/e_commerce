@@ -344,23 +344,20 @@ impl AppAuthKeystore {
             })?
             .as_u16();
         let addr = format!("{host}:{port}");
-        match TcpStream::connect(addr).await {
-            Ok(stream) => {
-                match handshake::<TokioIo<TcpStream>, Empty<HyBodyBytes>>(TokioIo::new(stream))
-                    .await
-                {
-                    Ok(m) => Ok(m),
-                    Err(net_e) => Err(AppError {
-                        detail: Some(net_e.to_string()),
-                        code: err_code_hyper2app(&net_e),
-                    }),
-                }
-            }
-            Err(net_e) => Err(AppError {
-                detail: Some(net_e.to_string()),
-                code: AppErrorCode::IOerror(net_e.kind()),
-            }),
-        }
+
+        let stream = TcpStream::connect(addr).await.map_err(|net_e| AppError {
+            detail: Some(net_e.to_string()),
+            code: AppErrorCode::IOerror(net_e.kind()),
+        })?;
+
+        let (sender, connector) =
+            handshake::<TokioIo<TcpStream>, Empty<HyBodyBytes>>(TokioIo::new(stream))
+                .await
+                .map_err(|net_e| AppError {
+                    detail: Some(net_e.to_string()),
+                    code: err_code_hyper2app(&net_e),
+                })?;
+        Ok((sender, connector))
     }
 
     async fn _request_to_key_server(
@@ -404,33 +401,30 @@ impl AppAuthKeystore {
         let body = resp.body_mut();
         let mut raw_collected: Vec<u8> = Vec::new();
         while let Some(frm) = body.frame().await {
-            let result = match frm {
-                Ok(raw) => {
-                    let rawblk = raw.into_data().unwrap(); // TODO, error handling
-                    raw_collected.extend(rawblk.to_vec());
-                    let result = serde_json::from_slice::<JwkSet>(raw_collected.as_slice());
-                    if let Ok(out) = result {
-                        Some(Ok(out))
-                    } else if raw_collected.len() > MAX_NBYTES_LOADED_RESPONSE_KEYSTORE {
-                        Some(Err(AppError {
-                            detail: Some("auth-keys-resp-body".to_string()),
+            let raw = frm.map_err(|net_e| AppError {
+                detail: Some(net_e.to_string()),
+                code: err_code_hyper2app(&net_e),
+            })?;
+            let rawblk = raw.into_data().map_err(|_frm| AppError {
+                detail: Some("auth-keys-resp-body-unexpected-frame".to_string()),
+                code: AppErrorCode::DataCorruption,
+            })?;
+            raw_collected.extend(rawblk.to_vec());
+
+            match serde_json::from_slice::<JwkSet>(raw_collected.as_slice()) {
+                Ok(out) => return Ok(out),
+                Err(_) => {
+                    if raw_collected.len() > MAX_NBYTES_LOADED_RESPONSE_KEYSTORE {
+                        return Err(AppError {
+                            detail: Some("auth-keys-resp-body-exceeded-max-size".to_string()),
                             code: AppErrorCode::ExceedingMaxLimit,
-                        }))
-                    } else {
-                        None
-                    }
+                        });
+                    } // Otherwise, JSON might be incomplete, continue collecting
                 }
-                Err(net_e) => Some(Err(AppError {
-                    detail: Some(net_e.to_string()),
-                    code: err_code_hyper2app(&net_e),
-                })),
-            };
-            if let Some(v) = result {
-                return v;
             }
         }
         Err(AppError {
-            detail: Some("resp-body-recv-complete".to_string()),
+            detail: Some("resp-body-recv-complete-no-valid-json".to_string()),
             code: AppErrorCode::DataCorruption,
         })
     } // end of resp_body_to_keys
@@ -489,37 +483,31 @@ where
         let ks = self.keystore.clone();
         let fut = async move {
             let (mut parts, body) = request.into_parts();
-            let mut resp = error_response();
-            match parts.extract::<AuthTokenHdr>().await {
-                Ok(TypedHeader(Authorization(bearer))) => {
-                    match Self::validate_token(ks, bearer.token(), logctx).await {
-                        Ok(claim) => {
-                            let _ = parts.extensions.insert(claim);
-                            Ok(Request::from_parts(parts, body))
-                        }
-                        Err(e) => {
-                            let _ = resp.extensions_mut().insert(e);
-                            Err(resp)
-                        }
-                    }
-                }
-                Err(e) => {
-                    if let Some(lctx) = logctx {
-                        app_log_event!(
-                            lctx,
-                            AppLogLevel::INFO,
-                            "failed to extract auth header : {:?}",
-                            e
-                        );
+
+            let TypedHeader(Authorization(bearer)) =
+                parts.extract::<AuthTokenHdr>().await.map_err(|e| {
+                    if let Some(lctx) = logctx.as_ref() {
+                        app_log_event!(lctx, AppLogLevel::INFO, "fail-extract-header:{:?}", e);
                     }
                     let ae = AppError {
                         code: AppErrorCode::InvalidInput,
                         detail: Some(e.to_string()),
                     };
+                    let mut resp = error_response();
                     let _ = resp.extensions_mut().insert(ae);
-                    Err(resp)
-                }
-            }
+                    resp
+                })?;
+
+            let claim = Self::validate_token(ks, bearer.token(), logctx)
+                .await
+                .map_err(|e| {
+                    let mut resp = error_response();
+                    let _ = resp.extensions_mut().insert(e);
+                    resp
+                })?;
+
+            let _ = parts.extensions.insert(claim);
+            Ok(Request::from_parts(parts, body))
         };
         Box::pin(fut)
     } // end of fn authorize
@@ -538,37 +526,26 @@ impl AppJwtAuthentication {
         encoded: &str,
         logctx: Option<Arc<AppLogContext>>,
     ) -> DefaultResult<AppAuthedClaim, AppError> {
-        let hdr = match jwt_decode_header(encoded) {
-            Ok(v) => v,
-            Err(ce) => {
-                if let Some(lctx) = logctx.as_ref() {
-                    app_log_event!(
-                        lctx,
-                        AppLogLevel::WARNING,
-                        "failed to decode JWT header : {:?}",
-                        ce
-                    );
-                }
-                return Err(AppError::from(ce));
+        let hdr = jwt_decode_header(encoded).map_err(|ce| {
+            if let Some(lctx) = logctx.as_ref() {
+                app_log_event!(lctx, AppLogLevel::WARNING, "fail-extract-header:{:?}", ce);
             }
-        };
-        if hdr.kid.is_none() {
-            return Err(AppError {
-                code: AppErrorCode::InvalidJsonFormat,
-                detail: Some("jwt-missing-key-id".to_string()),
-            });
-        }
-        let kid = hdr.kid.as_ref().unwrap();
+            AppError::from(ce)
+        })?;
+
+        let kid = hdr.kid.as_ref().ok_or_else(|| AppError {
+            code: AppErrorCode::InvalidJsonFormat,
+            detail: Some("jwt-missing-key-id".to_string()),
+        })?;
         let jwk = ks.find(kid.as_str()).await?;
-        let key = match DecodingKey::from_jwk(&jwk) {
-            Ok(v) => v,
-            Err(ce) => {
-                if let Some(lctx) = logctx.as_ref() {
-                    app_log_event!(lctx, AppLogLevel::ERROR, "Decoding key from jwk : {:?}", ce);
-                }
-                return Err(AppError::from(ce));
+
+        let key = DecodingKey::from_jwk(&jwk).map_err(|ce| {
+            if let Some(lctx) = logctx.as_ref() {
+                app_log_event!(lctx, AppLogLevel::ERROR, "Decoding key from jwk : {:?}", ce);
             }
-        };
+            AppError::from(ce)
+        })?;
+
         let validation = {
             let required_claims = ["profile", "aud", "exp", "iat", "perms", "quota"];
             let mut vd = JwtValidation::new(hdr.alg);
@@ -577,20 +554,15 @@ impl AppJwtAuthentication {
             vd.set_required_spec_claims(&required_claims);
             vd
         };
-        match jwt_decode::<AppAuthedClaim>(encoded, &key, &validation) {
-            Ok(v) => Ok(v.claims),
-            Err(ce) => {
+
+        jwt_decode::<AppAuthedClaim>(encoded, &key, &validation)
+            .map_err(|ce| {
                 if let Some(lctx) = logctx.as_ref() {
-                    app_log_event!(
-                        lctx,
-                        AppLogLevel::WARNING,
-                        "failed to decode jwt : {:?}",
-                        ce
-                    );
+                    app_log_event!(lctx, AppLogLevel::WARNING, "fail-decode-jwt:{:?}", ce);
                 }
-                Err(AppError::from(ce))
-            }
-        }
+                AppError::from(ce)
+            })
+            .map(|v| v.claims)
     } // end of fn validate_token
 } // end of impl AppJwtAuthentication
 

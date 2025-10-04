@@ -60,12 +60,7 @@ fn start_async_runtime(cfg: AppConfig, cfdntl: Box<dyn AbstractConfidentiality>)
         }
         Err(e) => {
             let log_ctx_p = shr_state.log_context();
-            app_log_event!(
-                log_ctx_p,
-                AppLogLevel::ERROR,
-                "async runtime failed to build, {} ",
-                e
-            );
+            app_log_event!(log_ctx_p, AppLogLevel::ERROR, "async-runtime-fail:{e}");
         }
     };
 } // end of start_async_runtime
@@ -86,17 +81,11 @@ fn main() {
                 start_async_runtime(cfg, cfdntl);
             }
             Err(e) => {
-                println!(
-                    "app failed to init confidentiality handler, error code: {:?}",
-                    e
-                );
+                println!("fail-app-confidential-handler:{:?}", e);
             }
         },
         Err(e) => {
-            println!(
-                "app failed to configure, error code: {} ",
-                AppError::from(e)
-            );
+            println!("fail-app-cfg:{}", AppError::from(e));
         }
     };
 } // end of main
