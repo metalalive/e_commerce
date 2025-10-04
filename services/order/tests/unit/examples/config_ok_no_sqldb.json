@@ -53,7 +53,7 @@
             {"path":"/gram/increment", "handler":"gram_increment"},
             {"path":"/policy/products", "handler":"modify_product_policy"},
             {"path":"/order",  "handler":"create_new_order"},
-            {"path":"/order/:oid", "handler":"access_existing_order"}
+            {"path":"/order/{oid}", "handler":"access_existing_order"}
         ]
     },
     "limit_req_body_in_bytes": 10485760,
