@@ -3,10 +3,7 @@ use std::net::ToSocketAddrs;
 use std::result::Result as DefaultResult;
 
 use axum::Router;
-use http_body::Body as HttpBody;
-use hyper::server::conn::AddrIncoming;
-use hyper::server::Builder as HyperSrvBuilder;
-use hyper::server::Server as HyperServer;
+use tokio::net::TcpListener;
 
 use ecommerce_common::error::AppErrorCode;
 
@@ -14,7 +11,7 @@ use crate::api::web::{ApiRouteTableType, ApiRouteType};
 use crate::error::AppError;
 use crate::{AppSharedState, WebApiListenCfg, WebApiRouteCfg};
 
-pub type WebServiceRoute<HB> = Router<(), HB>;
+pub type WebServiceRoute = Router<()>;
 
 // Due to the issues #1110 and discussion #1818 in Axum v0.6.x,
 // the generic type parameter of final router depends all the middleware
@@ -22,18 +19,15 @@ pub type WebServiceRoute<HB> = Router<(), HB>;
 // and response body layer by layer, the type parameter `HB` has to match
 // that at compile time
 
-pub fn app_web_service<HB>(
+pub fn app_web_service(
     cfg: &WebApiListenCfg,
-    rtable: ApiRouteTableType<HB>,
+    rtable: ApiRouteTableType,
     shr_state: AppSharedState,
-) -> (WebServiceRoute<HB>, u16)
-where
-    HB: HttpBody + Send + 'static,
-{
+) -> (WebServiceRoute, u16) {
     // the type parameters for shared state and http body should be explicitly annotated,
     // this function creates a router first then specify type of the shared state later
     // at the end of the same function.
-    let mut router: Router<AppSharedState, HB> = Router::new();
+    let mut router: Router<AppSharedState> = Router::new();
     let iterator = cfg.routes.iter();
     let filt_fn = |&item: &&WebApiRouteCfg| -> bool {
         let hdlr_label = item.handler.as_str();
@@ -44,7 +38,7 @@ where
     for item in filtered {
         let hdlr_label = item.handler.as_str();
         if let Some(route) = rtable.get(hdlr_label) {
-            let route_cpy: ApiRouteType<HB> = route.clone();
+            let route_cpy: ApiRouteType = route.clone();
             router = router.route(item.path.as_str(), route_cpy);
             num_applied += 1u16;
         } // 2 different paths might linked to the same handler
@@ -76,7 +70,9 @@ pub mod middleware {
     use std::task::{Context, Poll};
     use std::time::Duration;
 
+    use axum::body::Bytes as AxumBytes;
     use axum::http;
+    use http_body_util::Full;
     use serde::Deserialize;
     use tower::limit::RateLimitLayer;
     use tower::{Layer, Service};
@@ -100,16 +96,14 @@ pub mod middleware {
         PREFLIGHT_MAX_AGE: u64,
     }
 
-    pub struct ShutdownDetection<S, RespBody> {
+    pub struct ShutdownDetection<S> {
         inner: S, // inner middleware service wrapped by this service
         flag: Arc<AtomicBool>,
         num_reqs: Arc<AtomicU32>,
-        _ghost: std::marker::PhantomData<RespBody>,
     }
-    pub struct ShutdownDetectionLayer<RespBody> {
+    pub struct ShutdownDetectionLayer {
         flag: Arc<AtomicBool>,
         num_reqs: Arc<AtomicU32>,
-        _ghost: std::marker::PhantomData<RespBody>,
     }
 
     pub fn rate_limit(max_conn: u32) -> RateLimitLayer {
@@ -183,12 +177,8 @@ pub mod middleware {
     }
 
     pub enum ShutdownExpRespBody<B> {
-        Normal {
-            inner: B,
-        },
-        ShuttingDown {
-            inner: http_body::Full<axum::body::Bytes>,
-        },
+        Normal { inner: B },
+        ShuttingDown { inner: Full<AxumBytes> },
     }
     impl<B> ShutdownExpRespBody<B> {
         fn normal(inner: B) -> Self {
@@ -197,47 +187,33 @@ pub mod middleware {
 
         fn error() -> Self {
             let msg = b"server-shutting-down".to_vec();
-            let inner = http_body::Full::from(msg);
+            let inner = Full::from(msg);
             Self::ShuttingDown { inner }
         }
     }
     impl<B> http_body::Body for ShutdownExpRespBody<B>
     where
-        B: http_body::Body<Data = axum::body::Bytes> + std::marker::Unpin,
+        B: http_body::Body<Data = AxumBytes> + std::marker::Unpin,
     {
-        type Data = axum::body::Bytes;
+        type Data = AxumBytes;
         type Error = B::Error;
-        fn poll_data(
+        fn poll_frame(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-        ) -> Poll<Option<DefaultResult<Self::Data, Self::Error>>> {
+        ) -> Poll<Option<DefaultResult<http_body::Frame<Self::Data>, Self::Error>>> {
             unsafe {
                 match self.get_unchecked_mut() {
                     Self::ShuttingDown { inner } => {
                         let pinned = Pin::new(inner);
-                        pinned.poll_data(cx).map_err(|err| match err {})
+                        pinned.poll_frame(cx).map_err(|err| match err {})
                     }
                     Self::Normal { inner } => {
                         let pinned = Pin::new(inner);
-                        pinned.poll_data(cx)
+                        pinned.poll_frame(cx)
                     }
                 }
             } // TODO, improve the code, `Pin::get_unchecked_mut()` is the only function
               // which requires to run in unsafe block
-        }
-
-        fn poll_trailers(
-            self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<DefaultResult<Option<http::HeaderMap>, Self::Error>> {
-            unsafe {
-                match self.get_unchecked_mut() {
-                    Self::ShuttingDown { inner } => Pin::new(inner)
-                        .poll_trailers(cx)
-                        .map_err(|err| match err {}),
-                    Self::Normal { inner } => Pin::new(inner).poll_trailers(cx),
-                }
-            }
         }
 
         fn is_end_stream(&self) -> bool {
@@ -255,22 +231,18 @@ pub mod middleware {
         }
     } // end of impl http-body Body for ShutdownExpRespBody
 
-    impl<S, RespBody> ShutdownDetection<S, RespBody> {
+    impl<S> ShutdownDetection<S> {
         fn new(flag: Arc<AtomicBool>, num_reqs: Arc<AtomicU32>, inner: S) -> Self {
-            #[allow(clippy::default_constructed_unit_structs)]
-            let _ghost = std::marker::PhantomData::default();
             Self {
                 inner,
                 flag,
                 num_reqs,
-                _ghost,
             }
         }
     }
-    impl<S, REQ, RespBody> Service<REQ> for ShutdownDetection<S, RespBody>
+    impl<S, REQ> Service<REQ> for ShutdownDetection<S>
     where
-        S: Service<REQ, Response = http::Response<RespBody>>,
-        RespBody: http_body::Body,
+        S: Service<REQ, Response = http::Response<axum::body::Body>>,
         <S as Service<REQ>>::Future: std::future::Future + Send + 'static,
         // It is tricky to correctly set constraint on error type from inner service :
         // - it may be converted to box pointer of some trait object, but it would be
@@ -284,7 +256,7 @@ pub mod middleware {
         // <S as Service<REQ>>::Error: std::error::Error + Send + Sync + 'static ,
         // <S as Service<REQ>>::Error: From<AppError> + Send + Sync + 'static ,
     {
-        type Response = http::Response<ShutdownExpRespBody<RespBody>>;
+        type Response = http::Response<ShutdownExpRespBody<axum::body::Body>>;
         type Error = S::Error; // tower::BoxError;
         type Future = Pin<
             Box<
@@ -322,38 +294,31 @@ pub mod middleware {
             }
         }
     } // end of impl ShutdownDetection
-    impl<RespBody> ShutdownDetectionLayer<RespBody> {
+    impl ShutdownDetectionLayer {
         pub fn new(flag: Arc<AtomicBool>, num_reqs: Arc<AtomicU32>) -> Self {
-            #[allow(clippy::default_constructed_unit_structs)]
-            let _ghost = std::marker::PhantomData::default();
-            Self {
-                flag,
-                num_reqs,
-                _ghost,
-            }
+            Self { flag, num_reqs }
         }
         pub fn number_requests(&self) -> Arc<AtomicU32> {
             self.num_reqs.clone()
         }
     }
-    impl<S, RespBody> Layer<S> for ShutdownDetectionLayer<RespBody> {
-        type Service = ShutdownDetection<S, RespBody>;
+    impl<S> Layer<S> for ShutdownDetectionLayer {
+        type Service = ShutdownDetection<S>;
 
         fn layer(&self, inner: S) -> Self::Service {
             Self::Service::new(self.flag.clone(), self.num_reqs.clone(), inner)
         }
     }
 
-    impl<RespBody> Clone for ShutdownDetectionLayer<RespBody> {
+    impl Clone for ShutdownDetectionLayer {
         fn clone(&self) -> Self {
             Self {
                 flag: self.flag.clone(),
                 num_reqs: self.num_reqs.clone(),
-                _ghost: self._ghost,
             }
         }
     }
-    impl<S, RespBody> Clone for ShutdownDetection<S, RespBody>
+    impl<S> Clone for ShutdownDetection<S>
     where
         S: Clone,
     {
@@ -362,39 +327,33 @@ pub mod middleware {
                 inner: self.inner.clone(),
                 flag: self.flag.clone(),
                 num_reqs: self.num_reqs.clone(),
-                _ghost: self._ghost,
             }
         }
     }
 } // end of inner-module middleware
 
-pub fn net_server_listener(
+pub async fn net_listener(
     mut domain_host: String,
     port: u16,
-) -> DefaultResult<HyperSrvBuilder<AddrIncoming>, AppError> {
+) -> DefaultResult<TcpListener, AppError> {
     if !domain_host.contains(':') {
         domain_host += &":0";
     }
-    match domain_host.to_socket_addrs() {
-        Ok(mut iterator) => loop {
-            match iterator.next() {
-                Some(mut addr) => {
-                    addr.set_port(port);
-                    if let Ok(b) = HyperServer::try_bind(&addr) {
-                        break Ok(b);
-                    }
-                }
-                None => {
-                    break Err(AppError {
-                        detail: Some("failed to bound with all IPs".to_string()),
-                        code: AppErrorCode::IOerror(ErrorKind::AddrInUse),
-                    })
-                }
-            }
-        }, // end of loop
-        Err(e) => Err(AppError {
+    let mut iterator = domain_host.to_socket_addrs().map_err(
+        // IP not found after domain name resolution
+        |e| AppError {
             detail: Some(e.to_string() + ", domain_host:" + &domain_host),
             code: AppErrorCode::IOerror(ErrorKind::AddrNotAvailable),
-        }), // IP not found after domain name resolution
-    }
-} // end of fn net_server_listener
+        },
+    )?;
+    loop {
+        let mut addr = iterator.next().ok_or(AppError {
+            detail: Some("failed to bound with all IPs".to_string()),
+            code: AppErrorCode::IOerror(ErrorKind::AddrInUse),
+        })?;
+        addr.set_port(port);
+        if let Ok(b) = TcpListener::bind(addr).await {
+            break Ok(b);
+        }
+    } // end of loop
+} // end of fn net_listener
