@@ -1,11 +1,11 @@
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+use axum_core::body::Body as AxumBody;
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use http::{Request, StatusCode};
-use http_body::Body as RawHttpBody;
+use http_body_util::BodyExt;
 use hyper::body::Bytes as HyperBytes;
-use hyper::Body as HyperBody;
 use serde_json::{Map as JsnMap, Value as JsnVal};
 
 use ecommerce_common::api::web::dto::{ContactErrorReason, PhoneNumNationErrorReason};
@@ -23,7 +23,7 @@ use order::{
 };
 
 mod common;
-use common::{deserialize_json_template, test_setup_shr_state, ITestFinalHttpBody, TestWebServer};
+use common::{deserialize_json_template, test_setup_shr_state, TestWebServer};
 use tokio::sync::Mutex;
 
 fn itest_clone_authed_claim(src: &AppAuthedClaim) -> AppAuthedClaim {
@@ -52,7 +52,7 @@ fn setup_mock_authed_claim(usr_id: u32) -> AppAuthedClaim {
 
 async fn itest_setup_product_policy(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     req_fpath: &'static str,
     mut authed_claim: AppAuthedClaim,
     expect_status: StatusCode,
@@ -62,7 +62,7 @@ async fn itest_setup_product_policy(
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
         let req_body_template = result.unwrap();
         let rb = serde_json::to_string(&req_body_template).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     {
         let perm = AppAuthClaimPermission {
@@ -88,9 +88,9 @@ async fn itest_setup_product_policy(
     assert_eq!(response.status(), expect_status);
     // required by UnsyncBoxBody, to access raw data of body
     let bd = response.body_mut();
-    let result = bd.data().await;
+    let result = bd.frame().await;
     if let Some(rb) = result {
-        rb.unwrap()
+        rb.unwrap().into_data().unwrap()
     } else {
         HyperBytes::new()
     }
@@ -154,7 +154,7 @@ fn verify_reply_stock_level(
 
 async fn place_new_order_ok(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     req_fpath: &'static str,
     mut authed_claim: AppAuthedClaim,
 ) -> DefaultResult<String, AppError> {
@@ -162,7 +162,7 @@ async fn place_new_order_ok(
     let reqbody = {
         let rb = deserialize_json_template::<OrderCreateReqData>(&cfg.basepath, req_fpath)?;
         let rb = serde_json::to_string(&rb).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     authed_claim.quota = [
         (AppAuthQuotaMatCode::NumEmails, 51),
@@ -189,7 +189,14 @@ async fn place_new_order_ok(
 
     let mut response = TestWebServer::consume(&srv, req).await;
     if response.status() != StatusCode::CREATED {
-        let respbody = response.body_mut().data().await.unwrap().unwrap();
+        let respbody = response
+            .body_mut()
+            .frame()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_data()
+            .unwrap();
         let respbody = String::from_utf8(respbody.to_vec()).unwrap();
         println!("[debug] place-new-order , error-resp-body : {:?}", respbody);
     }
@@ -202,7 +209,7 @@ async fn place_new_order_ok(
 
 async fn itest_return_olines_request(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     req_fpath: &'static str,
     oid: &str,
     mut authed_claim: AppAuthedClaim,
@@ -223,7 +230,7 @@ async fn itest_return_olines_request(
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
         let obj = result.unwrap();
         let rb = serde_json::to_string(&obj).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     let mut req = Request::builder()
         .uri(uri)
@@ -233,12 +240,12 @@ async fn itest_return_olines_request(
         .unwrap();
     let _ = req.extensions_mut().insert(authed_claim);
     let mut response = TestWebServer::consume(&srv, req).await;
-    let resp_body = response.body_mut().data().await.unwrap().unwrap();
+    let resp_body = response.body_mut().frame().await.unwrap().unwrap();
     if response.status() != expect_status {
         println!("reponse serial body : {:?}", resp_body);
     }
     assert_eq!(response.status(), expect_status);
-    resp_body.to_vec()
+    resp_body.into_data().unwrap().to_vec()
 } // end of fn itest_return_olines_request
 
 #[tokio::test]
@@ -506,7 +513,7 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError> {
             FPATH_NEW_ORDER_CONTACT_ERR,
         )?;
         let rb = serde_json::to_string(&rb).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     let uri = format!("/{}/order", listener.api_version);
     let mut req = Request::builder()
@@ -565,7 +572,7 @@ async fn place_new_order_quota_violation() -> DefaultResult<(), AppError> {
             FPATH_NEW_ORDER,
         )?;
         let rb = serde_json::to_string(&rb).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     let uri = format!("/{}/order", listener.api_version);
     let mut req = Request::builder()
@@ -615,7 +622,7 @@ async fn edit_order_contact_ok() -> DefaultResult<(), AppError> {
         rb.billing.contact.first_name.clear();
         rb.billing.contact.first_name.write_str("Satunam").unwrap();
         let rb = serde_json::to_string(&rb).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     let uri = format!(
         "/{ver}/order/{oid}",
@@ -631,7 +638,14 @@ async fn edit_order_contact_ok() -> DefaultResult<(), AppError> {
     let _ = req.extensions_mut().insert(authed_claim);
 
     let response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::OK);
+    let actual_status_code = response.status();
+    if actual_status_code != StatusCode::OK {
+        let result = response.into_body().frame().await.unwrap();
+        let rawbody = result.unwrap().into_data().unwrap();
+        let serialbody = String::from_utf8(rawbody.to_vec()).unwrap();
+        println!("[edit_order_contact_ok] error response body : {serialbody}");
+    }
+    assert_eq!(actual_status_code, StatusCode::OK);
     Ok(())
 }
 
@@ -677,7 +691,7 @@ async fn add_product_policy_permission_error() -> DefaultResult<(), AppError> {
         "/{}/policy/products",
         top_lvl_cfg.api_server.listen.api_version
     );
-    let reqbody = HyperBody::from("[]".to_string());
+    let reqbody = AxumBody::from("[]".to_string());
     let mut req = Request::builder()
         .uri(uri.clone())
         .method("POST")
@@ -755,7 +769,7 @@ async fn add_product_policy_request_error() -> DefaultResult<(), AppError> {
             "/{}/policy/products",
             top_lvl_cfg.api_server.listen.api_version
         );
-        let reqbody = HyperBody::from("[]".to_string());
+        let reqbody = AxumBody::from("[]".to_string());
         let mut req = Request::builder()
             .uri(uri.clone())
             .method("POST")
@@ -797,7 +811,7 @@ async fn add_product_policy_request_error() -> DefaultResult<(), AppError> {
 
 async fn itest_setup_create_order(
     shrstate: AppSharedState,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     time_now: DateTime<FixedOffset>,
     authed_claim: &AppAuthedClaim,
     fpath_prod_policy: &'static str,
@@ -1339,7 +1353,7 @@ async fn replica_order_rsv_inventory() -> DefaultResult<(), AppError> {
 
 async fn itest_cart_modify_request(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     req_fpath: &'static str,
     authed_claim: &AppAuthedClaim,
     seq_num: u8,
@@ -1350,7 +1364,7 @@ async fn itest_cart_modify_request(
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
         let req_body_template = result.unwrap();
         let rb = serde_json::to_string(&req_body_template).unwrap();
-        HyperBody::from(rb)
+        AxumBody::from(rb)
     };
     let mut authed_claim_cpy = itest_clone_authed_claim(&authed_claim);
     {
@@ -1372,9 +1386,9 @@ async fn itest_cart_modify_request(
     assert_eq!(response.status(), expect_status);
     // required by UnsyncBoxBody, to access raw data of body
     let bd = response.body_mut();
-    let result = bd.data().await;
-    if let Some(rb) = result {
-        rb.unwrap()
+    let result = bd.frame().await;
+    if let Some(Ok(rb)) = result {
+        rb.into_data().unwrap()
     } else {
         HyperBytes::new()
     }
@@ -1382,7 +1396,7 @@ async fn itest_cart_modify_request(
 
 async fn itest_cart_discard_request(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     authed_claim: &AppAuthedClaim,
     seq_num: u8,
     expect_status: StatusCode,
@@ -1392,16 +1406,16 @@ async fn itest_cart_discard_request(
     let mut req = Request::builder()
         .uri(uri.clone())
         .method("DELETE")
-        .body(HyperBody::empty())
+        .body(AxumBody::empty())
         .unwrap();
     let _ = req.extensions_mut().insert(authed_claim_cpy);
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), expect_status);
     // required by UnsyncBoxBody, to access raw data of body
     let bd = response.body_mut();
-    let result = bd.data().await;
-    if let Some(rb) = result {
-        rb.unwrap()
+    let result = bd.frame().await;
+    if let Some(Ok(rb)) = result {
+        rb.into_data().unwrap()
     } else {
         HyperBytes::new()
     }
@@ -1409,7 +1423,7 @@ async fn itest_cart_discard_request(
 
 async fn itest_cart_retrieve_request<'a, 'b>(
     cfg: Arc<AppConfig>,
-    srv: Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    srv: Arc<Mutex<WebServiceRoute>>,
     authed_claim: &'a AppAuthedClaim,
     seq_num: u8,
     expect_status: StatusCode,
@@ -1421,7 +1435,7 @@ async fn itest_cart_retrieve_request<'a, 'b>(
         .uri(uri.clone())
         .method("GET")
         .header("accept", "application/json")
-        .body(HyperBody::empty())
+        .body(AxumBody::empty())
         .unwrap();
     let _ = req.extensions_mut().insert(authed_claim_cpy);
     let mut response = TestWebServer::consume(&srv, req).await;

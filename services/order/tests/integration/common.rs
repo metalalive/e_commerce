@@ -5,11 +5,9 @@ use std::fs::File;
 use std::result::Result as DefaultResult;
 use std::sync::{Arc, OnceLock};
 
-use axum_core::Error as AxumCoreError;
+use axum_core::body::Body as AxumBody;
 use http::{Request, Response};
-use http_body::combinators::UnsyncBoxBody;
-use http_body::Body as RawHttpBody; // required by UnsyncBoxBody, to access raw data of body
-use hyper::body::{Body as HyperBody, Bytes as HyperBytes};
+use http_body_util::BodyExt;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tower::Service;
@@ -25,10 +23,9 @@ use order::error::AppError;
 use order::network::{app_web_service, WebServiceRoute};
 use order::AppSharedState;
 
-pub(crate) type ITestFinalHttpBody = HyperBody;
+type InnerRespBody = AxumBody;
 
-static SHARED_WEB_SERVER: OnceLock<Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>> =
-    OnceLock::new();
+static SHARED_WEB_SERVER: OnceLock<Arc<Mutex<WebServiceRoute>>> = OnceLock::new();
 
 static APP_SHARED_STATE_CONTAINER: OnceLock<DefaultResult<order::AppSharedState, AppError>> =
     OnceLock::new();
@@ -59,26 +56,22 @@ pub fn test_setup_shr_state() -> DefaultResult<order::AppSharedState, AppError> 
 }
 
 pub(crate) struct TestWebServer {}
-type InnerRespBody = UnsyncBoxBody<HyperBytes, AxumCoreError>;
 
 impl TestWebServer {
-    pub fn setup(
-        shr_state: order::AppSharedState,
-    ) -> Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>> {
+    pub fn setup(shr_state: order::AppSharedState) -> Arc<Mutex<WebServiceRoute>> {
         let srv_arc_mutex = SHARED_WEB_SERVER.get_or_init(|| {
-            let rtable = route_table::<ITestFinalHttpBody>();
+            let rtable = route_table();
             let top_lvl_cfg = shr_state.config().clone();
             let listener = &top_lvl_cfg.api_server.listen;
-            let (srv_instance, _) =
-                app_web_service::<ITestFinalHttpBody>(listener, rtable, shr_state);
+            let (srv_instance, _) = app_web_service(listener, rtable, shr_state);
             Arc::new(Mutex::new(srv_instance))
         });
         srv_arc_mutex.clone()
     }
 
     pub async fn consume(
-        srv: &Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-        req: Request<HyperBody>,
+        srv: &Arc<Mutex<WebServiceRoute>>,
+        req: Request<AxumBody>,
     ) -> Response<InnerRespBody> {
         let mut guard = srv.lock().await;
         let inner_sv = guard.borrow_mut();
@@ -93,9 +86,9 @@ impl TestWebServer {
             code: AppErrorCode::Unknown,
             detail: None,
         };
-        let x = if let Some(r) = body.data().await {
+        let x = if let Some(r) = body.frame().await {
             match r {
-                Ok(b) => b,
+                Ok(b) => b.into_data().unwrap(),
                 Err(e) => {
                     _err.detail = Some(e.to_string());
                     return Err(_err);
