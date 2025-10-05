@@ -10,10 +10,11 @@ void app_storage_cfg_deinit(app_cfg_t *app_cfg);
 
 int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg);
 
-asa_cfg_t * app_storage_cfg_lookup(const char *alias);
+asa_cfg_t *app_storage_cfg_lookup(const char *alias);
 
-asa_op_base_cfg_t * app_storage__init_asaobj_helper (asa_cfg_t *storage, uint8_t num_cb_args,
-        uint32_t rd_buf_bytes, uint32_t wr_buf_bytes );
+asa_op_base_cfg_t *app_storage__init_asaobj_helper(
+    asa_cfg_t *storage, uint8_t num_cb_args, uint32_t rd_buf_bytes, uint32_t wr_buf_bytes
+);
 
 #ifdef __cplusplus
 } // end of extern C clause

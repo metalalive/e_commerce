@@ -6,15 +6,15 @@ extern "C" {
 
 #include "datatypes.h"
 
-struct  worker_init_data_t{
-    app_cfg_t  *app_cfg;
-    uv_loop_t  *loop;
+struct worker_init_data_t {
+    app_cfg_t   *app_cfg;
+    uv_loop_t   *loop;
     unsigned int cfg_thrd_idx;
 };
 
 app_cfg_t *app_get_global_cfg(void);
 
-void  app_global_cfg_set_exepath(const char *exe_path);
+void app_global_cfg_set_exepath(const char *exe_path);
 
 void deinit_app_cfg(app_cfg_t *app_cfg);
 
@@ -29,5 +29,5 @@ void appcfg_terminate_workers(app_cfg_t *app_cfg, struct worker_init_data_t *dat
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of MEDIA__APP_CFG_H

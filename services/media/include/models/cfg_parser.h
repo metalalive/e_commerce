@@ -1,5 +1,5 @@
-#ifndef  MEDIA__MODELS_CFG_PARSER_H
-#define  MEDIA__MODELS_CFG_PARSER_H
+#ifndef MEDIA__MODELS_CFG_PARSER_H
+#define MEDIA__MODELS_CFG_PARSER_H
 #ifdef __cplusplus
 extern "C" {
 #endif

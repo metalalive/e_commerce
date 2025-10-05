@@ -7,7 +7,7 @@ extern "C" {
 #include <h2o.h>
 
 typedef struct {
-    H2O_VECTOR(uint16_t)  bitrate_kbps;
+    H2O_VECTOR(uint16_t) bitrate_kbps;
 } aav_cfg_resolution_a_t;
 
 typedef struct {
@@ -21,7 +21,7 @@ typedef struct {
 } aav_cfg_resolution_v_t;
 
 typedef struct {
-    aav_cfg_resolution_pix_t  limit;
+    aav_cfg_resolution_pix_t limit;
     struct {
         char *basepath;
     } mask;
@@ -44,12 +44,12 @@ typedef struct {
         aav_cfg_resolution_a_t audio;
         aav_cfg_resolution_v_t video;
     } resolution;
-    aav_cfg_img_t  image;
+    aav_cfg_img_t image;
 } aav_cfg_output_t;
 
 typedef struct {
-    aav_cfg_input_t   input;
-    aav_cfg_output_t  output;
+    aav_cfg_input_t  input;
+    aav_cfg_output_t output;
 } aav_cfg_transcode_t;
 
 #ifdef __cplusplus

@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 
+// clang-format off
 #define _API_MIDDLEWARE_CHAIN_initiate_multipart_upload  \
     8, app_authenticate_user, 1, \
     PERMISSION_CHECK_initiate_multipart_upload, 0,  \
@@ -91,29 +92,31 @@ extern "C" {
     API_FINAL_HANDLER_read_usrlvl_acl, 0, \
     app_deinit_auth_jwt_claims, 1
 
+// clang-format on
+
 // the macro definitions below represent a list of `permission codename` required
 // when accessing an API endpoint
-#define _RESTAPI_PERM_CODES_initiate_multipart_upload "upload_files"
-#define _RESTAPI_PERM_CODES_upload_part               "upload_files"
-#define _RESTAPI_PERM_CODES_complete_multipart_upload "upload_files"
-#define _RESTAPI_PERM_CODES_abort_multipart_upload    "upload_files"
-#define _RESTAPI_PERM_CODES_single_chunk_upload       "upload_files"
-#define _RESTAPI_PERM_CODES_start_transcoding_file    "upload_files"
-#define _RESTAPI_PERM_CODES_discard_ongoing_job       "upload_files"
-#define _RESTAPI_PERM_CODES_monitor_job_progress      "upload_files" 
+#define _RESTAPI_PERM_CODES_initiate_multipart_upload    "upload_files"
+#define _RESTAPI_PERM_CODES_upload_part                  "upload_files"
+#define _RESTAPI_PERM_CODES_complete_multipart_upload    "upload_files"
+#define _RESTAPI_PERM_CODES_abort_multipart_upload       "upload_files"
+#define _RESTAPI_PERM_CODES_single_chunk_upload          "upload_files"
+#define _RESTAPI_PERM_CODES_start_transcoding_file       "upload_files"
+#define _RESTAPI_PERM_CODES_discard_ongoing_job          "upload_files"
+#define _RESTAPI_PERM_CODES_monitor_job_progress         "upload_files"
 #define _RESTAPI_PERM_CODES_initiate_file_nonstream      NULL
 #define _RESTAPI_PERM_CODES_initiate_file_stream         NULL
-#define _RESTAPI_PERM_CODES_fetch_file_streaming_element    NULL
-#define _RESTAPI_PERM_CODES_discard_committed_file    "upload_files"
-#define _RESTAPI_PERM_CODES_edit_filelvl_acl          "edit_file_access_control"
-#define _RESTAPI_PERM_CODES_edit_usrlvl_acl           "edit_file_access_control"
-#define _RESTAPI_PERM_CODES_read_usrlvl_acl           "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_fetch_file_streaming_element NULL
+#define _RESTAPI_PERM_CODES_discard_committed_file       "upload_files"
+#define _RESTAPI_PERM_CODES_edit_filelvl_acl             "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_edit_usrlvl_acl              "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_read_usrlvl_acl              "edit_file_access_control"
 
 // time interval for updating streamable / non-stream resource file
-#define   APP_UPDATE_INTERVAL_SECS      60.0f
-#define   APP_UPDATE_INTERVAL_SECS_STR  "60"
+#define APP_UPDATE_INTERVAL_SECS     60.0f
+#define APP_UPDATE_INTERVAL_SECS_STR "60"
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of  MEDIA__API_CONFIG_H

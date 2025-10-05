@@ -15,5 +15,5 @@ int app_setup_apiview_routes(h2o_hostconf_t *host, json_t *routes_cfg, const cha
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of MEIDA__ROUTES_H

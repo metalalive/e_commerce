@@ -49,11 +49,10 @@ TestSuite *app_views_common_tests(void);
 TestSuite *app_model_query_tests(void);
 TestSuite *app_resource_acl_tests(void);
 
-
 int main(int argc, char **argv) {
     int result = 0;
 
-    TestSuite *suite = create_named_test_suite("media_app_unit_test");
+    TestSuite    *suite = create_named_test_suite("media_app_unit_test");
     TestReporter *reporter = create_text_reporter();
     app_global_cfg_set_exepath("./media/build/unit_test.out");
     add_suite(suite, appserver_cfg_parser_tests());
@@ -100,12 +99,12 @@ int main(int argc, char **argv) {
     add_suite(suite, app_transcoder_img_ffm_out_init_tests());
     add_suite(suite, app_transcoder_img_ffm_out_avctx_tests());
     add_suite(suite, app_transcoder_img_ffm_out_avfilt_tests());
-    
+
     add_suite(suite, app_stream_cache_tests());
     add_suite(suite, app_resource_acl_tests());
     add_suite(suite, app_views_common_tests());
     add_suite(suite, app_appcfg_generic_tests());
-    if(argc > 1) {
+    if (argc > 1) {
         const char *test_name = argv[argc - 1];
         result = run_single_test(suite, test_name, reporter);
     } else {

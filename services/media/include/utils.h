@@ -9,13 +9,13 @@ extern "C" {
 #include <jansson.h>
 
 typedef struct app_llnode_s {
-    char   dummy;
+    char                 dummy;
     struct app_llnode_s *next;
     struct app_llnode_s *prev;
-    char   data[1]; // may extend the storage space based on given type
+    char                 data[1]; // may extend the storage space based on given type
 } app_llnode_t;
 
-void * app_fetch_from_hashmap(struct hsearch_data *hmap, const char *keyword);
+void *app_fetch_from_hashmap(struct hsearch_data *hmap, const char *keyword);
 
 int app_save_int_to_hashmap(struct hsearch_data *hmap, const char *keyword, int value);
 int app_save_ptr_to_hashmap(struct hsearch_data *hmap, const char *keyword, void *value);

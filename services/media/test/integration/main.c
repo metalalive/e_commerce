@@ -1,11 +1,10 @@
 #include "../test/integration/test.h"
 #include "app_server.h"
 
-static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
+static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg) {
     CURLcode res;
-    long expect_resp_code = 204;
-    long actual_resp_code = 0;
+    long     expect_resp_code = 204;
+    long     actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(expect_resp_code, is_equal_to(actual_resp_code));
@@ -13,16 +12,19 @@ static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t 
 
 Ensure(api_abort_multipart_upload_test) {
     char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s?upload_id=%s", "localhost",
-            8010, "/upload/multipart/abort", "1c037a57581e");
+    sprintf(
+        &url[0], "https://%s:%d%s?upload_id=%s", "localhost", 8010, "/upload/multipart/abort", "1c037a57581e"
+    );
     const char *codename_list[2] = {"upload_files", NULL};
-    json_t *header_kv_serials = json_array();
-    json_t *quota = json_array();
+    json_t     *header_kv_serials = json_array();
+    json_t     *quota = json_array();
     add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "DELETE", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath=NULL},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
+    test_setup_pub_t setup_data = {
+        .method = "DELETE",
+        .verbose = 0,
+        .url = &url[0],
+        .req_body = {.serial_txt = NULL, .src_filepath = NULL},
+        .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
     };
     run_client_request(&setup_data, test_verify__abort_multipart_upload, NULL);
@@ -30,23 +32,21 @@ Ensure(api_abort_multipart_upload_test) {
     json_decref(quota);
 }
 
-
-static void test_verify__single_chunk_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
+static void test_verify__single_chunk_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg) {
     CURLcode res;
-    long expect_resp_code = 201;
-    long actual_resp_code = 0;
+    long     expect_resp_code = 201;
+    long     actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(expect_resp_code, is_equal_to(actual_resp_code));
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     json_t *item = NULL;
-    int idx = 0;
+    int     idx = 0;
     json_array_foreach(resp_obj, idx, item) {
         const char *actual_resource_id = json_string_value(json_object_get(item, "resource_id"));
-        const char *actual_file_name   = json_string_value(json_object_get(item, "file_name"));
+        const char *actual_file_name = json_string_value(json_object_get(item, "file_name"));
         assert_that(actual_resource_id, is_not_null);
-        assert_that(actual_file_name  , is_not_null);
+        assert_that(actual_file_name, is_not_null);
     }
     json_decref(resp_obj);
 }
@@ -54,15 +54,16 @@ static void test_verify__single_chunk_upload(CURL *handle, test_setup_priv_t *pr
 Ensure(api_single_chunk_upload_test) {
     // this API endpoint accept multiple files in one flight
     char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s?resource_id=%s,%s", "localhost",
-            8010, "/upload", "bMerI8f", "8fQwhBj");
+    sprintf(&url[0], "https://%s:%d%s?resource_id=%s,%s", "localhost", 8010, "/upload", "bMerI8f", "8fQwhBj");
     const char *codename_list[2] = {"upload_files", NULL};
-    json_t *header_kv_serials = json_array();
-    json_t *quota = json_array();
+    json_t     *header_kv_serials = json_array();
+    json_t     *quota = json_array();
     add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "POST", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath=NULL},
+    test_setup_pub_t setup_data = {
+        .method = "POST",
+        .verbose = 0,
+        .url = &url[0],
+        .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .headers = header_kv_serials
     };
     h2o_vector_reserve(NULL, &setup_data.upload_filepaths, 2);
@@ -74,12 +75,10 @@ Ensure(api_single_chunk_upload_test) {
     json_decref(quota);
 }
 
-
-static void test_verify__discard_ongoing_job(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
+static void test_verify__discard_ongoing_job(CURL *handle, test_setup_priv_t *privdata, void *usr_arg) {
     CURLcode res;
-    long expect_resp_code = 204;
-    long actual_resp_code = 0;
+    long     expect_resp_code = 204;
+    long     actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(expect_resp_code, is_equal_to(actual_resp_code));
@@ -89,13 +88,15 @@ Ensure(api_discard_ongoing_job_test) {
     char url[128] = {0};
     sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/job", "1b2934ad4e2c9");
     const char *codename_list[2] = {"upload_files", NULL};
-    json_t *header_kv_serials = json_array();
-    json_t *quota = json_array();
+    json_t     *header_kv_serials = json_array();
+    json_t     *quota = json_array();
     add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "DELETE", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath=NULL},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
+    test_setup_pub_t setup_data = {
+        .method = "DELETE",
+        .verbose = 0,
+        .url = &url[0],
+        .req_body = {.serial_txt = NULL, .src_filepath = NULL},
+        .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
     };
     run_client_request(&setup_data, test_verify__discard_ongoing_job, NULL);
@@ -103,13 +104,12 @@ Ensure(api_discard_ongoing_job_test) {
     json_decref(quota);
 }
 
-TestSuite *app_api_tests(json_t *root_cfg)
-{
+TestSuite *app_api_tests(json_t *root_cfg) {
     TestSuite *suite = create_test_suite();
     add_suite(suite, api_initiate_multipart_upload_tests(root_cfg));
     add_suite(suite, api_upload_part_tests(root_cfg));
     add_suite(suite, api_complete_multipart_upload_tests());
-#ifdef PROCEED_TRANSCODING_TEST 
+#ifdef PROCEED_TRANSCODING_TEST
     add_suite(suite, api_file_acl_tests());
     add_suite(suite, api_start_transcoding_file_tests());
     add_suite(suite, api_monitor_job_progress_tests());
@@ -128,39 +128,38 @@ TestSuite *app_api_tests(json_t *root_cfg)
 
 static void run_app_server(void *data) {
     test_init_app_data_t *data1 = (test_init_app_data_t *)data;
-    int err = start_application(data1->cfg_file_path, data1->exe_path);
+    int                   err = start_application(data1->cfg_file_path, data1->exe_path);
     fprintf(stderr, "[test][integration] return from app servser, err:%d \n", err);
 } // end of run_app_server()
 
-
 int main(int argc, char **argv) {
     assert(argc > 1);
-    test_init_app_data_t  init_app_data = {
+    test_init_app_data_t init_app_data = {
         .cfg_file_path = argv[argc - 1], // "./media/settings/test.json",
-        .exe_path = argv[argc - 2] // "./media/build/integration_test.out"
+        .exe_path = argv[argc - 2]       // "./media/build/integration_test.out"
     };
-    int tst_result = -1, op_result = 0;
-    uv_thread_t app_tid = 0;
-    json_error_t  j_err = {0};
-    json_t  *root_cfg = json_load_file( init_app_data.cfg_file_path, (size_t)0, &j_err);
+    int          tst_result = -1, op_result = 0;
+    uv_thread_t  app_tid = 0;
+    json_error_t j_err = {0};
+    json_t      *root_cfg = json_load_file(init_app_data.cfg_file_path, (size_t)0, &j_err);
     if (!json_is_object(root_cfg)) {
         fprintf(stderr, "[test] failed to parse config file\n");
         goto done;
     }
-    op_result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
+    op_result = uv_thread_create(&app_tid, run_app_server, (void *)&init_app_data);
     assert(op_result == 0);
     assert(app_tid > 0);
     init_mock_auth_server("./tmp/cache/test/jwks/media-rsa-privkey.json");
-    TestSuite *suite = create_named_test_suite("media_app_integration_test");
+    TestSuite    *suite = create_named_test_suite("media_app_integration_test");
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests(root_cfg));
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    while(1) {
-        if(app_server_ready()) {
+    while (1) {
+        if (app_server_ready()) {
             break;
         } else {
             op_result = pthread_tryjoin_np(app_tid, NULL);
-            if(op_result == 0) {
+            if (op_result == 0) {
                 fprintf(stderr, "[test] app server thread terminated due to some error\n");
                 goto done;
             } // unexpected early thread terminated
@@ -176,10 +175,10 @@ int main(int argc, char **argv) {
     op_result = ETIMEDOUT;
     for (int idx = 0; (op_result != 0) && (idx < 10); idx++) {
         op_result = pthread_tryjoin_np(app_tid, NULL);
-        if(op_result != 0)
+        if (op_result != 0)
             sleep(1);
     }
-    if(op_result != 0) {
+    if (op_result != 0) {
         fprintf(stderr, "[test] app server failed to terminate, error:%d \n", op_result);
         pthread_kill(app_tid, SIGTERM); // forced shutdown
     }

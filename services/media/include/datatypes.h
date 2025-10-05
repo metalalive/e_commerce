@@ -17,32 +17,29 @@ extern "C" {
 #include "rpc/datatypes.h"
 
 // TODO: find better way to synchronize from common/data/app_code.json
-#define APP_CODE  3
-#define APP_LABEL "media"
-#define APP_LABEL_LEN  (sizeof(APP_LABEL) - 1) // 5
+#define APP_CODE      3
+#define APP_LABEL     "media"
+#define APP_LABEL_LEN (sizeof(APP_LABEL) - 1) // 5
 
-#define APP_FILETYPE_LABEL_VIDEO  "video"
-#define APP_FILETYPE_LABEL_IMAGE  "image"
+#define APP_FILETYPE_LABEL_VIDEO "video"
+#define APP_FILETYPE_LABEL_IMAGE "image"
 
-#define APP_GRACEFUL_SHUTDOWN   1
-#define APP_HARD_SHUTDOWN       2 
+#define APP_GRACEFUL_SHUTDOWN 1
+#define APP_HARD_SHUTDOWN     2
 
-#define DATETIME_STR_SIZE    20
-#define USR_ID_STR_SIZE      10
+#define DATETIME_STR_SIZE      20
+#define USR_ID_STR_SIZE        10
 #define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
 // TODO, synchronize following parameters with DB migration config file
-#define APP_RESOURCE_ID_SIZE  8
-#define APP_TRANSCODED_VERSION_SIZE  2
+#define APP_RESOURCE_ID_SIZE        8
+#define APP_TRANSCODED_VERSION_SIZE 2
 
-#define   API_QPARAM_LABEL__RESOURCE_ID    "res_id"
-#define   API_QPARAM_LABEL__STREAM_DOC_ID  "doc_id"
-#define   API_QPARAM_LABEL__DOC_DETAIL     "d_detail"
+#define API_QPARAM_LABEL__RESOURCE_ID   "res_id"
+#define API_QPARAM_LABEL__STREAM_DOC_ID "doc_id"
+#define API_QPARAM_LABEL__DOC_DETAIL    "d_detail"
 
 // valid code options represented for quota arrangement in this application
-typedef enum {
-    MAX_KBYTES_CONSUMED_SPACE = 1,
-    MAX_TRANSCODING_JOBS  = 2
-} quota_mat_code_options;
+typedef enum { MAX_KBYTES_CONSUMED_SPACE = 1, MAX_TRANSCODING_JOBS = 2 } quota_mat_code_options;
 
 typedef void (*h2o_uv_socket_cb)(uv_stream_t *listener, int status);
 
@@ -52,12 +49,12 @@ typedef enum en_run_mode_t {
 } run_mode_t;
 
 struct app_jwks_t {
-    jwks_t *handle;
-    char   *src_url;
-    char   *ca_path;
-    char   *ca_format; // "PEM" or "DES"
-    time_t  last_update;
-    unsigned int  max_expiry_secs;
+    jwks_t      *handle;
+    char        *src_url;
+    char        *ca_path;
+    char        *ca_format; // "PEM" or "DES"
+    time_t       last_update;
+    unsigned int max_expiry_secs;
     // check whether there is any worker thread rotating the jwks (from remote auth server)
     // , this field works atomically to protect state of key rotation operation among
     //  multiple workers
@@ -84,55 +81,55 @@ typedef struct {
 } app_cfg_listener_t;
 
 typedef struct {
-    h2o_globalconf_t   server_glb_cfg;
+    h2o_globalconf_t server_glb_cfg;
     // one app process may require one or more than one listeners
     app_cfg_listener_t **listeners;
-    unsigned int num_listeners;
-    FILE    *pid_file;
-    int      error_log_fd;
+    unsigned int         num_listeners;
+    FILE                *pid_file;
+    int                  error_log_fd;
     // app-level access log , currently there is to need for per-path access log
     h2o_access_log_filehandle_t *access_logger;
-    unsigned int   max_connections;
-    run_mode_t     run_mode;
-    // pointer to  notification in each running threads, which can be accessed when signal handling callback function is invoked
-    H2O_VECTOR(h2o_multithread_receiver_t*) server_notifications;
+    unsigned int                 max_connections;
+    run_mode_t                   run_mode;
+    // pointer to  notification in each running threads, which can be accessed when signal handling
+    // callback function is invoked
+    H2O_VECTOR(h2o_multithread_receiver_t *) server_notifications;
     // length of internal queue for caching TCP fastopen cookies
     unsigned int  tfo_q_len;
     time_t        launch_time;
-    h2o_barrier_t  workers_sync_barrier;
+    h2o_barrier_t workers_sync_barrier;
     H2O_VECTOR(asa_cfg_t) storages;
     // all members in the `state` struct must be modified atomically under multithreaded application
     struct {
-        atomic_int num_curr_connections;  // number of currently handled incoming connections
-        int        num_curr_sessions;     // number of opened incoming connections
+        atomic_int num_curr_connections; // number of currently handled incoming connections
+        int        num_curr_sessions;    // number of opened incoming connections
     } state;
     struct {
-        char *path;
+        char        *path;
         unsigned int threshold_bytes;
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
-    struct app_jwks_t  jwks;
+    struct app_jwks_t jwks;
     H2O_VECTOR(arpc_cfg_t) rpc;
-    aav_cfg_transcode_t  transcoder;
+    aav_cfg_transcode_t transcoder;
     // pointer to path where current executable is placed
-    const char   *exe_path;
+    const char *exe_path;
     // number of workers in the app, defaults to number of CPUs, unrelated to number of listeners
     H2O_VECTOR(uv_thread_t) workers;
     // atomic entity among threads & asynchronous interrupts
-    volatile sig_atomic_t  shutdown_requested; // 1 = graceful shutdown, 2 = hard shutdown
+    volatile sig_atomic_t shutdown_requested; // 1 = graceful shutdown, 2 = hard shutdown
 } app_cfg_t;
-
 
 // data required for network handle (libuv)
 typedef struct {
-    int  ai_flags;
-    int  ai_family;
-    int  ai_socktype;
-    int  ai_protocol;
+    int ai_flags;
+    int ai_family;
+    int ai_socktype;
+    int ai_protocol;
 } uv_nt_handle_data;
 
-#define RESTAPI_HANDLER_ARGS(hdlr_var, req_var)    h2o_handler_t *hdlr_var, h2o_req_t *req_var
+#define RESTAPI_HANDLER_ARGS(hdlr_var, req_var) h2o_handler_t *hdlr_var, h2o_req_t *req_var
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of MEIDA__DATATYPES_H

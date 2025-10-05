@@ -14,5 +14,5 @@ int app_server_ready(void);
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of MEDIA__APP_SERVER_H
