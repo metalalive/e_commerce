@@ -9,8 +9,8 @@
 #include "cfg_parser.h"
 
 Ensure(cfg_pid_file_tests) {
-    int result = 0;
-    json_t *obj = NULL;
+    int       result = 0;
+    json_t   *obj = NULL;
     app_cfg_t app_cfg = {.pid_file = NULL};
     result = appcfg_parse_pid_file(NULL, NULL);
     assert_that(result, is_equal_to(-1));
@@ -23,7 +23,7 @@ Ensure(cfg_pid_file_tests) {
     obj = json_string(filename);
     result = appcfg_parse_pid_file(obj, &app_cfg);
     json_decref(obj);
-    if(app_cfg.pid_file) {
+    if (app_cfg.pid_file) {
         fclose(app_cfg.pid_file);
         remove(filename);
     }
@@ -31,16 +31,15 @@ Ensure(cfg_pid_file_tests) {
     assert_that(app_cfg.pid_file, is_not_equal_to(NULL));
 }
 
-
 Ensure(cfg_max_conn_tests) {
-    int result = 0;
-    json_t *obj = NULL;
+    int       result = 0;
+    json_t   *obj = NULL;
     app_cfg_t app_cfg = {.max_connections = 0};
     obj = json_integer((json_int_t)INT_MAX);
     result = parse_cfg_max_conns(obj, &app_cfg);
     json_decref(obj);
     assert_that(app_cfg.max_connections, is_equal_to(0));
-    struct rlimit curr_setting = {.rlim_cur=0 , .rlim_max=0};
+    struct rlimit curr_setting = {.rlim_cur = 0, .rlim_max = 0};
     getrlimit(RLIMIT_NOFILE, &curr_setting);
     curr_setting.rlim_cur = curr_setting.rlim_max + 1;
     obj = json_integer((json_int_t)curr_setting.rlim_cur);
@@ -54,8 +53,8 @@ Ensure(cfg_max_conn_tests) {
     assert_that(app_cfg.max_connections, is_equal_to(curr_setting.rlim_cur));
 } // end of cfg_max_conn_tests
 
-
-// static void _test_gen_x509_cert(EVP_PKEY *pkey, const char *cert_path, int not_before, int not_after)
+// static void _test_gen_x509_cert(EVP_PKEY *pkey, const char *cert_path, int not_before, int
+// not_after)
 // {
 //     FILE *file = NULL;
 //     X509 *x509 = X509_new();
@@ -65,40 +64,37 @@ Ensure(cfg_max_conn_tests) {
 //     X509_set_pubkey(x509, pkey);
 //     X509_NAME *subj_name = X509_get_subject_name(x509);
 //     X509_NAME_add_entry_by_txt(subj_name, "C",  MBSTRING_ASC, (unsigned char *)"TW", -1, -1, 0);
-//     X509_NAME_add_entry_by_txt(subj_name, "O",  MBSTRING_ASC, (unsigned char *)"My company Inc.", -1, -1, 0);
-//     X509_NAME_add_entry_by_txt(subj_name, "CN", MBSTRING_ASC, (unsigned char *)"localhost", -1, -1, 0);
-//     X509_set_issuer_name(x509, subj_name);
-//     X509_sign(x509, pkey, NULL);
-//     file = fopen(cert_path, "w+");
-//     PEM_write_X509(file, x509);
-//     fclose(file);
+//     X509_NAME_add_entry_by_txt(subj_name, "O",  MBSTRING_ASC, (unsigned char *)"My company Inc.",
+//     -1, -1, 0); X509_NAME_add_entry_by_txt(subj_name, "CN", MBSTRING_ASC, (unsigned char
+//     *)"localhost", -1, -1, 0); X509_set_issuer_name(x509, subj_name); X509_sign(x509, pkey,
+//     NULL); file = fopen(cert_path, "w+"); PEM_write_X509(file, x509); fclose(file);
 //     X509_free(x509);
 // }
-
 
 Ensure(cfg_listener_ssl_tests) {
     int result = 0;
     // this test case generates self-signed CA certificate
-    const char *privkey_path = "media/data/certs/test/localhost.private.key";
-    const char *cert_path    = "media/data/certs/test/localhost.crt";
-    const char *ciphersuite_list = "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256";
+    const char    *privkey_path = "media/data/certs/test/localhost.private.key";
+    const char    *cert_path = "media/data/certs/test/localhost.crt";
+    const char    *ciphersuite_list = "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256";
     const uint16_t tls12 = 0x0303;
     const uint16_t tls13 = 0x0304;
-    json_t *obj = json_object();
-    json_object_set_new(obj, "cert_file"   , json_string(cert_path));
+    json_t        *obj = json_object();
+    json_object_set_new(obj, "cert_file", json_string(cert_path));
     json_object_set_new(obj, "privkey_file", json_string(privkey_path));
     json_object_set_new(obj, "cipher_suites", json_string(ciphersuite_list));
     struct app_cfg_security_t security = (struct app_cfg_security_t){.ctx = NULL};
-    // SSL_CTX is incomplete type in openssl so it cannot be declared as aggregate value, use pointer instead
-    char mock_ssl_ctx_rawbytes[32] = {0};
-    SSL_CTX  *mock_ssl_ctx = (SSL_CTX  *)&mock_ssl_ctx_rawbytes[0];
+    // SSL_CTX is incomplete type in openssl so it cannot be declared as aggregate value, use
+    // pointer instead
+    char     mock_ssl_ctx_rawbytes[32] = {0};
+    SSL_CTX *mock_ssl_ctx = (SSL_CTX *)&mock_ssl_ctx_rawbytes[0];
     // ensure the files do NOT exist
     // remove(privkey_path);
     // remove(cert_path   );
-    json_object_set_new(obj, "min_version"  , json_integer(tls12));
+    json_object_set_new(obj, "min_version", json_integer(tls12));
     result = parse_cfg_listener_ssl(&security, obj);
     assert_that(result, is_equal_to(EX_CONFIG));
-    json_object_set_new(obj, "min_version"  , json_integer(tls13));
+    json_object_set_new(obj, "min_version", json_integer(tls13));
     { // failed at loading private key
         expect(TLS_server_method);
         expect(SSL_CTX_new, will_return(mock_ssl_ctx));
@@ -119,11 +115,10 @@ Ensure(cfg_listener_ssl_tests) {
         //// EVP_PKEY_assign_RSA(pkey, rsa);
         //// file = fopen(privkey_path, "w+");
         //// // do NOT pass EVP_des_ede3_cbc() to EVP_CIPHER argument
-        //// // , this test case does NOT require to encrypt the PEM file, so disable pass-phrase prompt
-        //// //  (entering the password by human will block automatic testing)
-        //// PEM_write_PrivateKey(file, pkey, NULL, NULL, 0, NULL, NULL);
-        //// fclose(file);
-        //// BN_free(e);
+        //// // , this test case does NOT require to encrypt the PEM file, so disable pass-phrase
+        /// prompt / //  (entering the password by human will block automatic testing) /
+        /// PEM_write_PrivateKey(file, pkey, NULL, NULL, 0, NULL, NULL); / fclose(file); /
+        /// BN_free(e);
         expect(TLS_server_method);
         expect(SSL_CTX_new, will_return(mock_ssl_ctx));
         expect(SSL_CTX_set_options);
@@ -136,13 +131,14 @@ Ensure(cfg_listener_ssl_tests) {
         assert_that(result, is_equal_to(EX_CONFIG));
     }
     { // assume the certificate exists but expires
-        // _test_gen_x509_cert(pkey, cert_path, -240, -120);  // 2 minutes before now, already expired
+        // _test_gen_x509_cert(pkey, cert_path, -240, -120);  // 2 minutes before now, already
+        // expired
         expect(TLS_server_method);
         expect(SSL_CTX_new, will_return(mock_ssl_ctx));
         expect(SSL_CTX_set_options);
         expect(SSL_CTX_ctrl, will_return(1));
         expect(SSL_CTX_set_session_id_context);
-        expect(SSL_CTX_use_PrivateKey_file,        will_return(1));
+        expect(SSL_CTX_use_PrivateKey_file, will_return(1));
         expect(SSL_CTX_use_certificate_chain_file, will_return(1));
         expect(SSL_CTX_get0_certificate);
         expect(X509_get0_notAfter);
@@ -159,7 +155,7 @@ Ensure(cfg_listener_ssl_tests) {
         expect(SSL_CTX_set_options);
         expect(SSL_CTX_ctrl, will_return(1));
         expect(SSL_CTX_set_session_id_context);
-        expect(SSL_CTX_use_PrivateKey_file,        will_return(1));
+        expect(SSL_CTX_use_PrivateKey_file, will_return(1));
         expect(SSL_CTX_use_certificate_chain_file, will_return(1));
         expect(SSL_CTX_get0_certificate);
         expect(X509_get0_notAfter);
@@ -176,13 +172,10 @@ Ensure(cfg_listener_ssl_tests) {
     json_decref(obj);
 } // end of cfg_listener_ssl_tests
 
-
-TestSuite *appserver_cfg_parser_tests(void)
-{
+TestSuite *appserver_cfg_parser_tests(void) {
     TestSuite *suite = create_test_suite();
     add_test(suite, cfg_pid_file_tests);
     add_test(suite, cfg_max_conn_tests);
     add_test(suite, cfg_listener_ssl_tests);
     return suite;
 }
-

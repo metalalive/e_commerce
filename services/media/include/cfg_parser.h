@@ -19,5 +19,5 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg);
 
 #ifdef __cplusplus
 } // end of extern C clause
-#endif 
+#endif
 #endif // end of MEIDA__CFG_PARSER_H

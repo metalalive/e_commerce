@@ -26,91 +26,92 @@ typedef enum {
 } asa_dirent_type_t;
 
 typedef struct {
-    char *name;
-    asa_dirent_type_t  type;
+    char             *name;
+    asa_dirent_type_t type;
 } asa_dirent_t;
 
-typedef void (*asa_mkdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
-typedef void (*asa_rmdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_mkdir_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_rmdir_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_scandir_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_rename_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_unlink_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
-typedef void (*asa_open_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_open_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_close_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
-typedef void (*asa_seek_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t pos);
+typedef void (*asa_seek_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t pos);
 typedef void (*asa_write_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t nwrite);
-typedef void (*asa_read_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t nread);
+typedef void (*asa_read_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t nread);
 
 struct _asa_op_base_cfg_s {
     struct {
         size_t size;
         void **entries;
     } cb_args;
-    struct _asa_cfg_s  *storage;
+    struct _asa_cfg_s *storage;
     void (*deinit)(struct _asa_op_base_cfg_s *);
     struct {
         struct {
-            asa_mkdir_cb_t  cb;
-            int    mode;
+            asa_mkdir_cb_t cb;
+            int            mode;
             struct {
-                char *prefix;
-                char *origin;
-                char *curr_parent;
-                char *tok_saveptr;
-                size_t _fullpath_sz; // size of full path for internal extra check, no need to initialize
+                char  *prefix;
+                char  *origin;
+                char  *curr_parent;
+                char  *tok_saveptr;
+                size_t _fullpath_sz; // size of full path for internal extra check, no need to
+                                     // initialize
             } path;
-            uint8_t  _allow_exists:1;
+            uint8_t _allow_exists : 1;
         } mkdir;
         struct { // delete an empty folder
-            asa_rmdir_cb_t  cb;
-            char  *path; 
+            asa_rmdir_cb_t cb;
+            char          *path;
         } rmdir;
         struct {
-            asa_scandir_cb_t  cb;
-            char  *path;
+            asa_scandir_cb_t cb;
+            char            *path;
             struct { // for app to buffer the result of scandir
-                asa_dirent_t  *data;
-                uint32_t  size;
-                uint32_t  rd_idx;
+                asa_dirent_t *data;
+                uint32_t      size;
+                uint32_t      rd_idx;
             } fileinfo;
         } scandir;
         struct { // move folder
-            asa_rename_cb_t  cb;
+            asa_rename_cb_t cb;
             struct {
-                char  *_new;
-                char  *_old;
+                char *_new;
+                char *_old;
             } path;
         } rename;
         struct { // delete a file
-            asa_unlink_cb_t  cb;
-            char  *path; 
+            asa_unlink_cb_t cb;
+            char           *path;
         } unlink;
         struct {
-            asa_open_cb_t  cb;
-            char  *dst_path; 
-            int    mode;
-            int    flags;
+            asa_open_cb_t cb;
+            char         *dst_path;
+            int           mode;
+            int           flags;
         } open;
         struct {
             asa_close_cb_t cb;
         } close;
         struct {
             asa_write_cb_t cb;
-            char *src;
-            size_t src_sz;
-            size_t src_max_nbytes;
-            int offset;
+            char          *src;
+            size_t         src_sz;
+            size_t         src_max_nbytes;
+            int            offset;
         } write;
         struct {
             asa_read_cb_t cb;
-            char *dst;
-            size_t dst_sz;
-            size_t dst_max_nbytes;
-            int offset;
+            char         *dst;
+            size_t        dst_sz;
+            size_t        dst_max_nbytes;
+            int           offset;
         } read;
         struct {
             asa_seek_cb_t cb;
-            size_t pos;
+            size_t        pos;
         } seek;
     } op;
 }; // end of struct _asa_op_base_cfg_s
@@ -118,27 +119,27 @@ struct _asa_op_base_cfg_s {
 typedef struct _asa_op_base_cfg_s asa_op_base_cfg_t;
 
 typedef struct {
-    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *, uint8_t  allow_exists);
+    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *, uint8_t allow_exists);
     ASA_RES_CODE (*fn_rmdir)(asa_op_base_cfg_t *);
-    ASA_RES_CODE (*fn_open) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_open)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_close)(asa_op_base_cfg_t *);
-    ASA_RES_CODE (*fn_seek) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_seek)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_write)(asa_op_base_cfg_t *);
-    ASA_RES_CODE (*fn_read) (asa_op_base_cfg_t *);
-    ASA_RES_CODE (*fn_unlink) (asa_op_base_cfg_t *);
-    ASA_RES_CODE (*fn_rename) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_read)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_unlink)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_rename)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_scandir)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_scandir_next)(asa_op_base_cfg_t *, asa_dirent_t *);
-    size_t   (*fn_typesize)(void);
+    size_t (*fn_typesize)(void);
 } asa_cfg_ops_t;
 
 typedef struct _asa_cfg_s {
-    char *alias;
-    char *base_path;
-    asa_cfg_ops_t  ops;
+    char         *alias;
+    char         *base_path;
+    asa_cfg_ops_t ops;
 } asa_cfg_t;
 
-#define APP_STORAGE_USE_CURRENT_FILE_OFFSET  -1
+#define APP_STORAGE_USE_CURRENT_FILE_OFFSET -1
 
 #ifdef __cplusplus
 } // end of extern C clause

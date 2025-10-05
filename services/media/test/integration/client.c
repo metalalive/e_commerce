@@ -1,27 +1,24 @@
 #include "../test/integration/test.h"
 
-#define  ITEST_HTTP_TIMEOUT_SECOND_DEFAULT   5
+#define ITEST_HTTP_TIMEOUT_SECOND_DEFAULT 5
 
-static size_t test_read_req_body_cb(char *buf, size_t sz, size_t nitems, void *usrdata)
-{
-   int fd = *(int *)usrdata;
-   size_t max_buf_sz = sz * nitems;
-   size_t nread = read(fd, buf, max_buf_sz);
-   assert(max_buf_sz >= nread);
-   return nread;
+static size_t test_read_req_body_cb(char *buf, size_t sz, size_t nitems, void *usrdata) {
+    int    fd = *(int *)usrdata;
+    size_t max_buf_sz = sz * nitems;
+    size_t nread = read(fd, buf, max_buf_sz);
+    assert(max_buf_sz >= nread);
+    return nread;
 }
 
-static size_t test_write_resp_cb(char *buf, size_t sz, size_t nmemb, void *usrdata)
-{
-   int fd = *(int *)usrdata;
-   size_t max_buf_sz = sz * nmemb;
-   size_t nwrite = write(fd, buf, max_buf_sz);
-   assert(max_buf_sz >= nwrite);
-   return nwrite;
+static size_t test_write_resp_cb(char *buf, size_t sz, size_t nmemb, void *usrdata) {
+    int    fd = *(int *)usrdata;
+    size_t max_buf_sz = sz * nmemb;
+    size_t nwrite = write(fd, buf, max_buf_sz);
+    assert(max_buf_sz >= nwrite);
+    return nwrite;
 }
 
-static void setup_tls_client_request(CURL *handle)
-{
+static void setup_tls_client_request(CURL *handle) {
     CURLcode res;
     // res = curl_easy_setopt(ez_handle, CURLOPT_SSLKEY, "media/data/certs/test/ca.private.key");
     res = curl_easy_setopt(handle, CURLOPT_CAPATH, "media/data/certs/test/ca.crt");
@@ -37,13 +34,11 @@ static void setup_tls_client_request(CURL *handle)
     // res = curl_easy_setopt(handle, , );
 }
 
-
-static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test_setup_pub_t *pubdata)
-{
+static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test_setup_pub_t *pubdata) {
     CURLcode res;
-    json_t *hdr_kv = NULL;
-    size_t req_body_len = 0;
-    int idx = 0;
+    json_t  *hdr_kv = NULL;
+    size_t   req_body_len = 0;
+    int      idx = 0;
     json_array_foreach(pubdata->headers, idx, hdr_kv) {
         assert(json_is_string(hdr_kv));
         privdata->headers = curl_slist_append(privdata->headers, json_string_value(hdr_kv));
@@ -53,13 +48,13 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
     res = curl_easy_setopt(handle, CURLOPT_VERBOSE, (long)pubdata->verbose);
     assert_that(res, is_equal_to(CURLE_OK));
     int timeout_sec = pubdata->http_timeout_sec;
-    if(timeout_sec == 0)
+    if (timeout_sec == 0)
         timeout_sec = ITEST_HTTP_TIMEOUT_SECOND_DEFAULT;
     res = curl_easy_setopt(handle, CURLOPT_TIMEOUT, (long)timeout_sec);
     assert_that(res, is_equal_to(CURLE_OK));
     res = curl_easy_setopt(handle, CURLOPT_URL, pubdata->url);
     assert_that(res, is_equal_to(CURLE_OK));
-    for(idx = 0; idx < pubdata->upload_filepaths.size; idx++) {
+    for (idx = 0; idx < pubdata->upload_filepaths.size; idx++) {
         curl_mimepart *field = NULL;
         field = curl_mime_addpart(privdata->form); // fill in data-upload field
         curl_mime_name(field, "sendfile");
@@ -69,16 +64,16 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
         //// curl_mime_name(field, "filename");
         //// curl_mime_data(field, "other info", CURL_ZERO_TERMINATED);
     }
-    if(pubdata->req_body.serial_txt) {
+    if (pubdata->req_body.serial_txt) {
         req_body_len = strlen(pubdata->req_body.serial_txt);
         write(privdata->fds.req_body, pubdata->req_body.serial_txt, req_body_len);
         lseek(privdata->fds.req_body, 0, SEEK_SET);
-    } else if(pubdata->req_body.src_filepath) {
+    } else if (pubdata->req_body.src_filepath) {
 #define BUF_SZ 128
         req_body_len = 0;
         size_t nread = 0;
-        char buf[BUF_SZ];
-        int fd_in = open(pubdata->req_body.src_filepath, O_RDONLY);
+        char   buf[BUF_SZ];
+        int    fd_in = open(pubdata->req_body.src_filepath, O_RDONLY);
         while ((nread = read(fd_in, &buf[0], BUF_SZ)) > 0) {
             req_body_len += nread;
             write(privdata->fds.req_body, &buf[0], nread);
@@ -88,14 +83,14 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
         lseek(privdata->fds.req_body, 0, SEEK_SET);
 #undef BUF_SZ
     }
-    if(pubdata->req_body.serial_txt || pubdata->req_body.src_filepath) {
+    if (pubdata->req_body.serial_txt || pubdata->req_body.src_filepath) {
         res = curl_easy_setopt(handle, CURLOPT_READFUNCTION, test_read_req_body_cb);
         assert_that(res, is_equal_to(CURLE_OK));
         res = curl_easy_setopt(handle, CURLOPT_READDATA, (void *)&privdata->fds.req_body);
         assert_that(res, is_equal_to(CURLE_OK));
     }
-    if(strcmp(pubdata->method, "POST") == 0) {
-        if(pubdata->upload_filepaths.size > 0) {
+    if (strcmp(pubdata->method, "POST") == 0) {
+        if (pubdata->upload_filepaths.size > 0) {
             res = curl_easy_setopt(handle, CURLOPT_MIMEPOST, privdata->form);
         } else {
             res = curl_easy_setopt(handle, CURLOPT_POST, 1L);
@@ -103,7 +98,7 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
         assert_that(res, is_equal_to(CURLE_OK));
         res = curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, (long)req_body_len);
         assert_that(res, is_equal_to(CURLE_OK));
-        if(req_body_len > 0) {
+        if (req_body_len > 0) {
             res = curl_easy_setopt(handle, CURLOPT_POSTFIELDS, NULL);
             assert_that(res, is_equal_to(CURLE_OK));
         }
@@ -112,12 +107,13 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
         assert_that(res, is_equal_to(CURLE_OK));
         res = curl_easy_setopt(handle, CURLOPT_INFILESIZE, (long)req_body_len);
         assert_that(res, is_equal_to(CURLE_OK));
-        if(req_body_len > 0) {
+        if (req_body_len > 0) {
             res = curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
             assert_that(res, is_equal_to(CURLE_OK));
         }
     }
-    // tell the handle NOT to include headers in response body, in order to separate from response headers
+    // tell the handle NOT to include headers in response body, in order to separate from response
+    // headers
     res = curl_easy_setopt(handle, CURLOPT_HEADER, 0L);
     assert_that(res, is_equal_to(CURLE_OK));
     res = curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, test_write_resp_cb);
@@ -130,38 +126,35 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
     assert_that(res, is_equal_to(CURLE_OK));
 } // end of setup_client_request
 
-
-
-void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, void *cb_arg)
-{
+void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, void *cb_arg) {
     assert(pubdata);
     assert(verify_cb);
     curl_mime *form = NULL;
-    CURL *ez_handle = curl_easy_init();
-    CURLcode res;
+    CURL      *ez_handle = curl_easy_init();
+    CURLcode   res;
     assert(ez_handle);
     char tmpfile_path[3][40] = {
-        "./tmp/media_test_req_body_XXXXXX",
-        "./tmp/media_test_resp_hdr_XXXXXX",
+        "./tmp/media_test_req_body_XXXXXX", "./tmp/media_test_resp_hdr_XXXXXX",
         "./tmp/media_test_resp_body_XXXXXX"
     };
-    if(pubdata->upload_filepaths.size > 0) {
+    if (pubdata->upload_filepaths.size > 0) {
         form = curl_mime_init(ez_handle);
     }
-    test_setup_priv_t privdata = {
-        .headers = NULL,  .form = form,  .expect_resp_code = pubdata->expect_resp_code,
-        .fds = { // constant string argument will cause SegFault
-            .req_body  = mkstemp(&tmpfile_path[0][0]), 
-            .resp_hdr  = mkstemp(&tmpfile_path[1][0]),
-            .resp_body = mkstemp(&tmpfile_path[2][0])
-        }
-    };
+    test_setup_priv_t privdata =
+        {.headers = NULL,
+         .form = form,
+         .expect_resp_code = pubdata->expect_resp_code,
+         .fds = {// constant string argument will cause SegFault
+                 .req_body = mkstemp(&tmpfile_path[0][0]),
+                 .resp_hdr = mkstemp(&tmpfile_path[1][0]),
+                 .resp_body = mkstemp(&tmpfile_path[2][0])
+         }};
     setup_client_request(ez_handle, &privdata, pubdata);
     setup_tls_client_request(ez_handle);
     res = curl_easy_perform(ez_handle); // send synchronous HTTP request
     assert_that(res, is_equal_to(CURLE_OK));
     lseek(privdata.fds.resp_body, 0, SEEK_SET);
-    lseek(privdata.fds.resp_hdr,  0, SEEK_SET);
+    lseek(privdata.fds.resp_hdr, 0, SEEK_SET);
     verify_cb(ez_handle, &privdata, cb_arg);
     // ----- de-init -----
     close(privdata.fds.req_body);
@@ -172,10 +165,9 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, v
     unlink(&tmpfile_path[1][0]);
     unlink(&tmpfile_path[2][0]);
     curl_slist_free_all(privdata.headers);
-    if(form) {
+    if (form) {
         curl_mime_free(form);
         form = NULL;
     }
     curl_easy_cleanup(ez_handle);
 } // end of run_client_request
-

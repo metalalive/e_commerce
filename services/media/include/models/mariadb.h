@@ -7,7 +7,7 @@ extern "C" {
 #include "models/datatypes.h"
 
 enum _dbconn_async_state {
-    DB_ASYNC_INITED     = 0,
+    DB_ASYNC_INITED = 0,
     DB_ASYNC_CONN_START = 1,
     DB_ASYNC_CONN_WAITING,
     DB_ASYNC_CONN_DONE,
@@ -34,27 +34,27 @@ enum _dbconn_async_state {
     DB_ASYNC_CLOSE_DONE
 }; // end of enum _dbconn_async_state
 
-DBA_RES_CODE  app_db_mariadb__global_init(db_pool_t *);
+DBA_RES_CODE app_db_mariadb__global_init(db_pool_t *);
 
-DBA_RES_CODE  app_db_mariadb__global_deinit(db_pool_t *);
+DBA_RES_CODE app_db_mariadb__global_deinit(db_pool_t *);
 
 DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *);
 
 DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *);
 
-uint8_t  app_mariadb_acquire_state_change(db_conn_t *);
+uint8_t app_mariadb_acquire_state_change(db_conn_t *);
 
 void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv_status, int event_flags);
 
-uint8_t  app_mariadb_conn_notified_query_callback(db_query_t *, db_query_result_t *);
+uint8_t app_mariadb_conn_notified_query_callback(db_query_t *, db_query_result_t *);
 
-uint8_t  app_mariadb_conn_is_closed(db_conn_t *);
+uint8_t app_mariadb_conn_is_closed(db_conn_t *);
 
 int app_db_mariadb_get_sock_fd(db_conn_t *); // get low-level socket file descriptor
 
-uint64_t  app_db_mariadb_get_timeout_ms(db_conn_t *);
+uint64_t app_db_mariadb_get_timeout_ms(db_conn_t *);
 
-void  app_db_mariadb__cfg_ops(db_3rdparty_ops_t *);
+void app_db_mariadb__cfg_ops(db_3rdparty_ops_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

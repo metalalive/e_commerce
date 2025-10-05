@@ -15,7 +15,7 @@ DBA_RES_CODE app_db_conn_deinit(db_conn_t *conn);
 
 db_query_t *app_db_conn_get_first_query(db_conn_t *conn);
 
-DBA_RES_CODE  app_db_conn_try_evict_current_processing_query(db_conn_t *conn);
+DBA_RES_CODE app_db_conn_try_evict_current_processing_query(db_conn_t *conn);
 
 DBA_RES_CODE app_db_async_add_poll_event(db_conn_t *conn, uint32_t event_flags);
 
