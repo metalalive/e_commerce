@@ -1,0 +1,11 @@
+
+python3 -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};
+
+python3 -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};
+
+python3 -m media.test.integration.auth  --host=localhost --port=8008  --path2privkey=/app/tmp/cache/test/jwks/media-rsa-privkey.json  --sslcertpath=/app/media/data/certs/test &
+
+make itest_app_server -C ./build
+
+python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};
+

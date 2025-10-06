@@ -1,0 +1,21 @@
+services:
+  run-utest-media:
+    container_name: media-utest-0
+    image: media-backend-base:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_PORT=3313
+      - SYS_BASE_PATH=/app
+      - CGREEN_NO_FORK=xxx
+    env_file:
+      - ./container-test.env
+    working_dir: /app/media/build
+    command: ./unit_test.out
+    volumes:
+      - ../data/test:/app/media/data/test:ro
+      - ../../tmp/proc:/app/tmp/proc
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/buffer/media/test:/app/tmp/buffer/media/test
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+

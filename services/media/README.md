@@ -98,6 +98,11 @@ Note:
 ## Build
 For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/media-ci.yaml)
 
+```bash
+docker build --file ./media/infra/Dockerfile --tag media-backend-base:latest .
+```
+
+
 ### Database setup
 #### Grant access to Database
 - Currently this application works only with MariaDB.
@@ -171,5 +176,10 @@ Note
 | integration test | app server | `make  itest_app_server` |
 | integration test | RPC consumer | `make  itest_rpc_worker` |
 
+### Test
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+    --env-file ./infra/interpolation-test.env up --detach
+```
 ### Reference
 - [API documentation (OpenAPI v3.0 specification)](./apidoc.yaml)
