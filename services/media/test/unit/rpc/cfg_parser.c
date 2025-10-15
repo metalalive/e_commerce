@@ -1,3 +1,4 @@
+#include <sysexits.h>
 #include <cgreen/cgreen.h>
 #include "rpc/cfg_parser.h"
 /*
@@ -178,13 +179,13 @@ Ensure(rpc_caller_cfg_incomplete_setting_tests) {
     }; // end of data_uint
     const char **data_str_ptr = (const char **)data_str;
     uint32_t    *data_uint_ptr = &data_uint[0];
-    app_cfg_t    mock_app_cfg = {0};
+    app_cfg_t    mock_app_cfg = {.exe_path = "media/build/unit_test.out"};
     json_t      *objs = json_array();
+    app_load_envvars(&mock_app_cfg.env_vars);
     app_utest__rpc_cfg_setup(objs, NUM_MSG_BROKERS, data_str_ptr, data_uint_ptr);
-    int err = 0;
     assert_that(mock_app_cfg.rpc.entries, is_null);
-    err = parse_cfg_rpc_caller(objs, &mock_app_cfg);
-    assert_that(err, is_not_equal_to(0));
+    int err = parse_cfg_rpc_caller(objs, &mock_app_cfg);
+    assert_that(err, is_equal_to(EX_CONFIG));
     assert_that(mock_app_cfg.rpc.entries, is_null);
     json_decref(objs);
 } // end of rpc_caller_cfg_incomplete_setting_tests
@@ -358,9 +359,10 @@ Ensure(rpc_caller_cfg_reconfig_tests) {
     }; // end of data_uint
     const char **data_str_ptr = NULL;
     uint32_t    *data_uint_ptr = NULL;
-    app_cfg_t    mock_app_cfg = {0};
+    app_cfg_t    mock_app_cfg = {.exe_path = "media/build/unit_test.out"};
     json_t      *objs = json_array();
-    int          err = 0;
+    int          err = EX_OK;
+    app_load_envvars(&mock_app_cfg.env_vars);
     { // parse configuration for broker #2 and #3
         size_t num_msg_brokers = 2;
         data_str_ptr = (const char **)&data_str[20];
@@ -368,7 +370,7 @@ Ensure(rpc_caller_cfg_reconfig_tests) {
         app_utest__rpc_cfg_setup(objs, num_msg_brokers, data_str_ptr, data_uint_ptr);
         assert_that(mock_app_cfg.rpc.entries, is_null);
         err = parse_cfg_rpc_caller(objs, &mock_app_cfg);
-        assert_that(err, is_equal_to(0));
+        assert_that(err, is_equal_to(EX_OK));
         assert_that(mock_app_cfg.rpc.size, is_equal_to(num_msg_brokers));
         assert_that(mock_app_cfg.rpc.entries, is_not_null);
         utest_app_rpc__verify_broker_2(&mock_app_cfg.rpc.entries[0], data_str_ptr, data_uint_ptr);
@@ -385,7 +387,7 @@ Ensure(rpc_caller_cfg_reconfig_tests) {
         data_uint_ptr = &data_uint[0];
         app_utest__rpc_cfg_setup(objs, num_msg_brokers, data_str_ptr, data_uint_ptr);
         err = parse_cfg_rpc_caller(objs, &mock_app_cfg);
-        assert_that(err, is_equal_to(0));
+        assert_that(err, is_equal_to(EX_OK));
         assert_that(mock_app_cfg.rpc.size, is_equal_to(num_msg_brokers));
         assert_that(mock_app_cfg.rpc.entries, is_not_null);
         utest_app_rpc__verify_broker_1(&mock_app_cfg.rpc.entries[0], data_str_ptr, data_uint_ptr);

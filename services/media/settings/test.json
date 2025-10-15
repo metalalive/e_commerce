@@ -172,7 +172,7 @@
             },
             "image": {
                 "pixel_limit":{"width":2400, "height":1960},
-                "mask":{"basepath":"media/data/test/image/mask"}
+                "mask":{"basepath":"media/data/test/image/mask/index.json"}
             },
             "video": {
                 "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [237, 140], [200, 150], [190,136], [170,128], [160, 120], [156, 90], [150, 102]],

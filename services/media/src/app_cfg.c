@@ -1,5 +1,7 @@
+#include <sysexits.h>
 #include <h2o.h>
 #include "app_cfg.h"
+#include "utils.h"
 #include "models/pool.h"
 #include "transcoder/cfg_parser.h"
 
@@ -48,9 +50,27 @@ static app_cfg_t _app_cfg = {
     .rpc = {.size = 0, .capacity = 0, .entries = NULL},
     .exe_path = NULL,
     .shutdown_requested = 0,
+    .env_vars = {0},
 }; // end of _app_cfg
 
-app_cfg_t *app_get_global_cfg(void) { return &_app_cfg; }
+void app_load_envvars(app_envvars_t *env_vars) {
+    if (!env_vars || env_vars->inited) {
+        return;
+    }
+    env_vars->sys_base_path = getenv("SYS_BASE_PATH");
+    env_vars->db_host = getenv("DB_HOST");
+
+    const char *db_port_str = getenv("DB_PORT");
+    if (db_port_str) {
+        env_vars->db_port = (uint16_t)atoi(db_port_str);
+    }
+    env_vars->inited = 1;
+}
+
+app_cfg_t *app_get_global_cfg(void) {
+    app_load_envvars(&_app_cfg.env_vars);
+    return &_app_cfg;
+}
 
 void app_global_cfg_set_exepath(const char *exe_path
 ) { // caller should ensure this function is invoked each time with single thread
@@ -76,39 +96,44 @@ void deinit_app_cfg(app_cfg_t *app_cfg) {
 
 // side effect of this function is that it left pid file opened, be sure to close the file on
 // program exit
-int appcfg_parse_pid_file(json_t *obj, app_cfg_t *_app_cfg) {
+int appcfg_parse_pid_file(json_t *obj, app_cfg_t *acfg) {
     FILE *_file = NULL;
-    if (json_is_string(obj)) {
+    if (json_is_string(obj) && acfg) {
+        const char *basepath = acfg->env_vars.sys_base_path;
         const char *pid_file_str = json_string_value(obj);
-        _file = fopen(pid_file_str, "w+");
+#define RUNNER(fullpath) fopen(fullpath, "w+")
+        _file = PATH_CONCAT_THEN_RUN(basepath, pid_file_str, RUNNER);
+#undef RUNNER
         if (_file) {
             fprintf(_file, "%d\n", (int)getpid());
             fflush(_file);
-            _app_cfg->pid_file = _file;
+            acfg->pid_file = _file;
         } else {
-            // TODO check errno from <errno.h>
+            return EX_NOINPUT; // from <sysexits.h>
         }
     }
-    return (_file ? 0 : -1);
+    return (_file ? EX_OK : EX_CONFIG);
 } // TODO, remove pid file on program exit
 
-int appcfg_parse_errlog_path(json_t *obj, app_cfg_t *_app_cfg) {
+int appcfg_parse_errlog_path(json_t *obj, app_cfg_t *acfg) {
     int fd = -1;
-    if (json_is_string(obj)) {
+    if (json_is_string(obj) && acfg) {
+        const char *basepath = acfg->env_vars.sys_base_path;
         const char *err_log_path = json_string_value(obj);
-        fd = h2o_access_log_open_log(err_log_path);
+#define RUNNER(fullpath) h2o_access_log_open_log(fullpath)
+        fd = PATH_CONCAT_THEN_RUN(basepath, err_log_path, RUNNER);
+#undef RUNNER
         if (fd != -1) { // redirect stdout and stderr to error log
-            int fd_stdout = 1;
-            int fd_stderr = 2;
+            int fd_stdout = 1, fd_stderr = 2;
             if (dup2(fd, fd_stdout) == -1 || dup2(fd, fd_stderr) == -1) {
                 close(fd);
                 fd = -1;
             } else {
-                _app_cfg->error_log_fd = fd;
+                acfg->error_log_fd = fd;
             } // TODO, close error log fd later at some point
         }
     }
-    return ((fd > 0) ? 0 : -1);
+    return ((fd > 0) ? EX_OK : EX_CONFIG);
 }
 
 int appcfg_parse_num_workers(json_t *obj, app_cfg_t *_app_cfg) {
@@ -146,7 +171,7 @@ int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
         goto error;
     }
     _app_cfg->tmp_buf.threshold_bytes = (unsigned int)threshold;
-    _app_cfg->tmp_buf.path = strdup(path);
+    _app_cfg->tmp_buf.path = strdup(path); // TODO, ensure full path
     return 0;
 error:
     return -1;

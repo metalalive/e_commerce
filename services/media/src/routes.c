@@ -5,6 +5,7 @@
 #include <libelf.h>
 #include <link.h>
 #include <gelf.h>
+#include <sysexits.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
@@ -147,7 +148,7 @@ int app_elf_traverse_functions(const char *exe_path, app_elf_fn_traverse_cb cb, 
     }
     elf_end(elf);
     close(exe_fd);
-    return 0;
+    return EX_OK;
 error:
     if (elf) {
         elf_end(elf);
@@ -241,10 +242,10 @@ int app_setup_apiview_routes(h2o_hostconf_t *host, json_t *routes_cfg, const cha
             );
             goto error;
         } else if (num_routes == 0) {
-            return 0;
+            return EX_OK;
         }
     } else { // skip , no paths is created along with the host conf
-        return 0;
+        return EX_OK;
     }
     app_apiview_cb_arg_t cb_args = {.host = host, .routes_cfg = routes_cfg};
     if (app_elf_traverse_functions(exe_path, _app_elf_traverse_apiviews_cb, (void *)&cb_args) != 0) {
@@ -261,7 +262,7 @@ int app_setup_apiview_routes(h2o_hostconf_t *host, json_t *routes_cfg, const cha
         _compare_from_longer_paths
     );
     setup_default_handlers(host);
-    return 0;
+    return EX_OK;
 error:
     return EX_CONFIG;
 } // end of app_setup_apiview_routes

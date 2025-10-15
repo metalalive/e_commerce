@@ -1,3 +1,4 @@
+#include <sysexits.h>
 #include <openssl/ssl.h>
 #include <sys/resource.h>
 #include <h2o.h>
@@ -13,12 +14,13 @@ Ensure(cfg_pid_file_tests) {
     json_t   *obj = NULL;
     app_cfg_t app_cfg = {.pid_file = NULL};
     result = appcfg_parse_pid_file(NULL, NULL);
-    assert_that(result, is_equal_to(-1));
+    assert_that(result, is_equal_to(EX_CONFIG));
     obj = json_string("/path/to/invalid/not_permitted.pid");
     result = appcfg_parse_pid_file(obj, &app_cfg);
     json_decref(obj);
-    assert_that(result, is_equal_to(-1));
+    assert_that(result, is_equal_to(EX_NOINPUT));
     assert_that(app_cfg.pid_file, is_equal_to(NULL));
+    app_load_envvars(&app_cfg.env_vars);
     const char *filename = "./tmp/proc/media_server_test.pid";
     obj = json_string(filename);
     result = appcfg_parse_pid_file(obj, &app_cfg);
@@ -27,7 +29,7 @@ Ensure(cfg_pid_file_tests) {
         fclose(app_cfg.pid_file);
         remove(filename);
     }
-    assert_that(result, is_equal_to(0));
+    assert_that(result, is_equal_to(EX_OK));
     assert_that(app_cfg.pid_file, is_not_equal_to(NULL));
 }
 

@@ -3,6 +3,7 @@
 #include <h2o/serverutil.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "cfg_parser.h"
 #include "network.h"
 #include "routes.h"
@@ -189,7 +190,7 @@ static void _dummy_cb_on_nt_accept(uv_stream_t *server, int status) {
 }
 
 static int maybe_create_new_listener(
-    const char *host, uint16_t port, json_t *ssl_obj, json_t *routes_cfg, app_cfg_t *_app_cfg
+    const char *host, uint16_t port, json_t *ssl_obj, json_t *routes_cfg, app_cfg_t *appcfg
 ) { // TODO, currently only support TCP handle, would support UDP in future
     struct addrinfo *curr_ainfo = NULL, *res_ainfo = NULL;
     if (!host || port == 0) {
@@ -201,21 +202,24 @@ static int maybe_create_new_listener(
         goto error;
     }
     h2o_hostconf_t *hostcfg = h2o_config_register_host(
-        &_app_cfg->server_glb_cfg, h2o_iovec_init(host, strlen(host)),
+        &appcfg->server_glb_cfg, h2o_iovec_init(host, strlen(host)),
         port
     ); // shared among different resolved IP addresses
-    if (app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
+#define RUNNER(fullpath) app_setup_apiview_routes(hostcfg, routes_cfg, fullpath)
+    int result = PATH_CONCAT_THEN_RUN(appcfg->env_vars.sys_base_path, appcfg->exe_path, RUNNER);
+#undef RUNNER
+    if (result != 0) {
         goto error;
     }
     for (curr_ainfo = res_ainfo; curr_ainfo; curr_ainfo = curr_ainfo->ai_next) {
-        app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_ainfo);
+        app_cfg_listener_t *found = find_existing_listener(appcfg->listeners, curr_ainfo);
         if (found) {
             continue;
         }
         // the default loop works with the 1st. thread of this application
         // (main thread in master mode, the 1st. worker thread in daemon mode)
         uv_handle_t *handle = (uv_handle_t *)create_network_handle(
-            uv_default_loop(), curr_ainfo, _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len
+            uv_default_loop(), curr_ainfo, _dummy_cb_on_nt_accept, appcfg->tfo_q_len
         );
         if (!handle) {
             goto error;
@@ -235,17 +239,17 @@ static int maybe_create_new_listener(
           .ai_protocol = curr_ainfo->ai_protocol};
         handle->data = (void *)nt_attr;
         _new->hostconf = hostcfg;
-        h2o_append_to_null_terminated_list((void ***)&_app_cfg->listeners, (void *)_new);
-        _app_cfg->num_listeners += 1;
+        h2o_append_to_null_terminated_list((void ***)&appcfg->listeners, (void *)_new);
+        appcfg->num_listeners += 1;
     } // end of address iteration
     freeaddrinfo(res_ainfo);
-    return 0;
+    return EX_OK;
 error:
     if (!res_ainfo) {
         freeaddrinfo(res_ainfo);
     }
     h2o_error_printf(
-        "[parsing][tcp-listener] failed to create listener, num-listeners:%u \n", _app_cfg->num_listeners
+        "[parsing][tcp-listener] failed to create listener, num-listeners:%u \n", appcfg->num_listeners
     );
     return EX_CONFIG;
 } // end of maybe_create_new_listener

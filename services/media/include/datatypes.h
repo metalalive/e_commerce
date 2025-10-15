@@ -1,5 +1,6 @@
 #ifndef MEIDA__DATATYPES_H
 #define MEIDA__DATATYPES_H
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -69,6 +70,14 @@ struct app_cfg_security_t {
     // h2o_iovec_t *http2_origin_frame;
 };
 
+// OS-level environment variables
+typedef struct {
+    const char *sys_base_path;
+    const char *db_host;
+    uint16_t    db_port;
+    uint8_t     inited : 1;
+} app_envvars_t;
+
 typedef struct {
     // mirror of host config
     h2o_hostconf_t *hostconf;
@@ -117,6 +126,7 @@ typedef struct {
     H2O_VECTOR(uv_thread_t) workers;
     // atomic entity among threads & asynchronous interrupts
     volatile sig_atomic_t shutdown_requested; // 1 = graceful shutdown, 2 = hard shutdown
+    app_envvars_t         env_vars;
 } app_cfg_t;
 
 // data required for network handle (libuv)
