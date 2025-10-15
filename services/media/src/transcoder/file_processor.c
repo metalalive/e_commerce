@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 
 #include "datatypes.h"
+#include "utils.h"
 #include "transcoder/file_processor.h"
 
 extern atfp_ops_entry_t *_atfp_ops_table[];
@@ -237,17 +238,8 @@ int atfp_check_fileupdate_required(
 #undef ASA_SRC_BASEPATH_PATTERN
 } // end of atfp_check_fileupdate_required
 
-#define ATFP_IMG_MSK_IDX_FILENAME "index.json"
-#define FILEPATH_PATTERN          "%s/%s"
-json_t *atfp_image_mask_pattern_index(const char *_basepath) {
-    size_t filepath_sz = sizeof(ATFP_IMG_MSK_IDX_FILENAME) + sizeof(FILEPATH_PATTERN) + strlen(_basepath);
-    char   filepath[filepath_sz];
-    size_t nwrite =
-        snprintf(&filepath[0], filepath_sz, FILEPATH_PATTERN, _basepath, ATFP_IMG_MSK_IDX_FILENAME);
-    assert(nwrite < filepath_sz);
+json_t *atfp_image_mask_pattern_index(const char *fullpath) {
     // NOTE: currently there are only few mask patterns in use, so the file names are
     //  recorded in plain text file, if it grows larger then move these records to database.
-    return json_load_file(&filepath[0], 0, NULL);
+    return json_load_file(fullpath, 0, NULL);
 }
-#undef FILEPATH_PATTERN
-#undef ATFP_IMG_MSK_IDX_FILENAME

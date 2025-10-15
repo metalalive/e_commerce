@@ -52,7 +52,7 @@
     json_decref(mock_err_info);
 
 Ensure(atfp_img_ffo_test__filt_init_ok) {
-    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
+    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask/index.json")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
     expect(avfilter_inout_alloc, will_return(&mock_filt_in));
     expect(avfilter_graph_alloc, will_return(&mock_filt_grf));
@@ -106,7 +106,7 @@ Ensure(atfp_img_ffo_test__init_gen_filt_spec_error) {
 } // end of  atfp_img_ffo_test__init_gen_filt_spec_error
 
 Ensure(atfp_img_ffo_test__init_filt_ctx_spec_error) {
-    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
+    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask/index.json")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
     expect(avfilter_inout_alloc, will_return(&mock_filt_in));
     expect(avfilter_graph_alloc, will_return(&mock_filt_grf));
@@ -138,7 +138,7 @@ Ensure(atfp_img_ffo_test__init_filt_ctx_spec_error) {
 } // end of  atfp_img_ffo_test__init_filt_ctx_spec_error
 
 Ensure(atfp_img_ffo_test__init_filt_grf_parse_spec_error) {
-    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
+    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask/index.json")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
     expect(avfilter_inout_alloc, will_return(&mock_filt_in));
     expect(avfilter_graph_alloc, will_return(&mock_filt_grf));
@@ -175,7 +175,7 @@ Ensure(atfp_img_ffo_test__init_filt_grf_parse_spec_error) {
 } // end of  atfp_img_ffo_test__init_filt_grf_parse_spec_error
 
 Ensure(atfp_img_ffo_test__init_filt_grf_conn_error) {
-    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
+    UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask/index.json")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
     expect(avfilter_inout_alloc, will_return(&mock_filt_in));
     expect(avfilter_graph_alloc, will_return(&mock_filt_grf));

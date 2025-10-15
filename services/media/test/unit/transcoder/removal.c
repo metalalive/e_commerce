@@ -1,6 +1,11 @@
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
+#include "app_cfg.h"
+#include "utils.h"
 #include <uv.h>
 
 #include "storage/localfs.h"
@@ -18,9 +23,20 @@
 #define UTEST_RESC_DISCARDING_PATH  UTEST_RESOURCE_BASEPATH "/" ATFP__DISCARDING_FOLDER_NAME
 #define UTEST_RESC_COMMITTED_PATH   UTEST_RESOURCE_BASEPATH "/" ATFP__COMMITTED_FOLDER_NAME
 
+#define UT_RESC_TRANSCODING_LOCALPATH \
+    UTEST_USER_ID_STR "/" UTEST_UPLD_REQ_ID_STR "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME
+#define UT_RESC_DISCARDING_LOCALPATH \
+    UTEST_USER_ID_STR "/" UTEST_UPLD_REQ_ID_STR "/" ATFP__DISCARDING_FOLDER_NAME
+#define UT_RESC_COMMITTED_LOCALPATH \
+    UTEST_USER_ID_STR "/" UTEST_UPLD_REQ_ID_STR "/" ATFP__COMMITTED_FOLDER_NAME
+
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
 #define WR_BUF_MAX_SZ                  0
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define RUNNER_OPEN_CREATE(fullpath)   open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+#define RUNNER_ACCESS_F_OK(fullpath)   access(fullpath, F_OK)
 
 static ASA_RES_CODE utest_storage_rmdir(asa_op_base_cfg_t *asaobj) {
     const char *path = asaobj->op.rmdir.path;
@@ -51,33 +67,32 @@ static void _utest_remove_version_unlinkfile_done(asa_op_base_cfg_t *asaobj, ASA
 }
 
 static void utest_storage_remove_version(atfp_t *processor, const char *status) {
-    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
-    json_t            *err_info = processor->data.error;
-    uint32_t           _usr_id = processor->data.usr_id;
-    uint32_t           _upld_req_id = processor->data.upld_req_id;
-    const char        *version = processor->data.version;
-    int                err = mock(processor, status, _usr_id, _upld_req_id, version);
+    json_t     *err_info = processor->data.error;
+    uint32_t    _usr_id = processor->data.usr_id;
+    uint32_t    _upld_req_id = processor->data.upld_req_id;
+    const char *version = processor->data.version;
+    int         err = mock(processor, status, _usr_id, _upld_req_id, version);
     if (err) {
         json_object_set_new(err_info, "transcode", json_string("[utest][storage] assertion failure"));
-    } else {
-        size_t fullpath_sz = strlen(asa_remote->storage->base_path) + 1 + sizeof(UTEST_USER_ID_STR) + 1 +
-                             sizeof(UTEST_UPLD_REQ_ID_STR) + 1 + strlen(status) + 1 + strlen(version) + 1;
-        char   fullpath[fullpath_sz];
-        size_t nwrite = snprintf(
-            &fullpath[0], fullpath_sz, "%s/" UTEST_USER_ID_STR "/" UTEST_UPLD_REQ_ID_STR "/%s/%s",
-            asa_remote->storage->base_path, status, version
+        return;
+    }
+    size_t localpath_sz = sizeof(UTEST_USER_ID_STR) + 1 + sizeof(UTEST_UPLD_REQ_ID_STR) + 1 + strlen(status) +
+                          1 + strlen(version) + 1;
+    char   localpath[localpath_sz];
+    size_t nwrite = snprintf(
+        &localpath[0], localpath_sz, UTEST_USER_ID_STR "/" UTEST_UPLD_REQ_ID_STR "/%s/%s", status, version
+    );
+    assert(localpath[nwrite] == 0x0); // NULL-terminated
+    assert(nwrite <= localpath_sz);
+    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
+    asa_remote->op.unlink.path = &localpath[0];
+    asa_remote->op.unlink.cb = _utest_remove_version_unlinkfile_done;
+    ASA_RES_CODE result = asa_remote->storage->ops.fn_unlink(asa_remote);
+    if (result != ASTORAGE_RESULT_ACCEPT) {
+        json_object_set_new(
+            err_info, "transcode",
+            json_string("[utest][storage] failed to issue unlink operation for removing files")
         );
-        fullpath[nwrite++] = 0x0; // NULL-terminated
-        assert(nwrite <= fullpath_sz);
-        asa_remote->op.unlink.path = &fullpath[0];
-        asa_remote->op.unlink.cb = _utest_remove_version_unlinkfile_done;
-        ASA_RES_CODE result = asa_remote->storage->ops.fn_unlink(asa_remote);
-        if (result != ASTORAGE_RESULT_ACCEPT) {
-            json_object_set_new(
-                err_info, "transcode",
-                json_string("[utest][storage] failed to issue unlink operation for removing files")
-            );
-        }
     }
 } // end of  utest_storage_remove_version
 
@@ -90,12 +105,17 @@ static void utest_atfp_done_usr_cb(atfp_t *processor) {
 } // end of utest_atfp_done_usr_cb
 
 #define ATFP_REMOVAL_TEST_SETUP \
-    uint8_t    done_flag = 0; \
-    void      *mock_asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(), *mock_err_info = json_object(); \
-    asa_cfg_t  mock_storage_cfg = \
-        {.base_path = UTEST_FILE_BASEPATH, \
+    uint8_t       done_flag = 0; \
+    void         *mock_asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    uv_loop_t    *loop = uv_default_loop(); \
+    json_t       *mock_spec = json_object(), *mock_err_info = json_object(); \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
+    size_t workfiles_basepath_sz = strlen(env.sys_base_path) + strlen(UTEST_FILE_BASEPATH) + 2; \
+    char  *workfiles_basepath = (char *)malloc(workfiles_basepath_sz); \
+    snprintf(workfiles_basepath, workfiles_basepath_sz, "%s/%s", env.sys_base_path, UTEST_FILE_BASEPATH); \
+    asa_cfg_t mock_storage_cfg = \
+        {.base_path = workfiles_basepath, \
          .ops = { \
              .fn_scandir = utest_storage_scandir, \
              .fn_scandir_next = utest_storage_scandir_next, \
@@ -118,23 +138,24 @@ static void utest_atfp_done_usr_cb(atfp_t *processor) {
     }; \
     mock_asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
     mock_asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_USERFILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_RESOURCE_BASEPATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_USERFILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESOURCE_BASEPATH, RUNNER_CREATE_FOLDER);
 
 #define ATFP_REMOVAL_TEST_TEARDOWN \
     assert_that(json_object_size(mock_spec), is_equal_to(0)); \
-    rmdir(UTEST_RESOURCE_BASEPATH); \
-    rmdir(UTEST_USERFILE_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESOURCE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_USERFILE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, rmdir); \
     json_decref(mock_spec); \
-    json_decref(mock_err_info);
+    json_decref(mock_err_info); \
+    free(mock_storage_cfg.base_path);
 
 Ensure(atfp_removal_test__ok_all_empty) {
     ATFP_REMOVAL_TEST_SETUP
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int err_cnt = json_object_size(mock_err_info);
@@ -142,11 +163,11 @@ Ensure(atfp_removal_test__ok_all_empty) {
     if (err_cnt == 0) {
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
         while (!done_flag)
@@ -157,24 +178,24 @@ Ensure(atfp_removal_test__ok_all_empty) {
 } // end of  atfp_removal_test__ok_all_empty
 
 Ensure(atfp_removal_test__ok_all_status_folders) {
-    ATFP_REMOVAL_TEST_SETUP { // assume several transcoded versions were saved in storage
-        mkdir(UTEST_RESC_TRANSCODING_PATH, S_IRWXU);
-        mkdir(UTEST_RESC_DISCARDING_PATH, S_IRWXU);
-        mkdir(UTEST_RESC_COMMITTED_PATH, S_IRWXU);
-        int fd = open(UTEST_RESC_DISCARDING_PATH "/R12", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-        fd = open(UTEST_RESC_DISCARDING_PATH "/rjk", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-        fd = open(UTEST_RESC_COMMITTED_PATH "/didi", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-        fd = open(UTEST_RESC_COMMITTED_PATH "/zen", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-        fd = open(UTEST_RESC_COMMITTED_PATH "/Ga1", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-    }
+    ATFP_REMOVAL_TEST_SETUP
+    // assume several transcoded versions were saved in storage
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_TRANSCODING_PATH, RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_DISCARDING_PATH, RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_CREATE_FOLDER);
+    int fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_DISCARDING_PATH "/R12", RUNNER_OPEN_CREATE);
+    close(fd);
+    fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_DISCARDING_PATH "/rjk", RUNNER_OPEN_CREATE);
+    close(fd);
+    fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/didi", RUNNER_OPEN_CREATE);
+    close(fd);
+    fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/zen", RUNNER_OPEN_CREATE);
+    close(fd);
+    fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/Ga1", RUNNER_OPEN_CREATE);
+    close(fd);
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int ret = json_object_size(mock_err_info);
@@ -182,12 +203,12 @@ Ensure(atfp_removal_test__ok_all_status_folders) {
     if (ret == 0) {
         expect(
             utest_storage_rmdir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+            when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
         );
         // -----------------
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
@@ -206,12 +227,12 @@ Ensure(atfp_removal_test__ok_all_status_folders) {
         expect(utest_storage_unlink, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(
             utest_storage_rmdir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         // -----------------
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
@@ -237,19 +258,19 @@ Ensure(atfp_removal_test__ok_all_status_folders) {
         expect(utest_storage_unlink, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(
             utest_storage_rmdir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
         while (!done_flag)
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
-        ret = access(UTEST_RESC_TRANSCODING_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_TRANSCODING_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
-        ret = access(UTEST_RESC_DISCARDING_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_DISCARDING_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
-        ret = access(UTEST_RESC_COMMITTED_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
     }
@@ -258,15 +279,16 @@ Ensure(atfp_removal_test__ok_all_status_folders) {
 
 Ensure(atfp_removal_test__ok_one_status_folder) {
     ATFP_REMOVAL_TEST_SETUP { // assume several transcoded versions were saved in storage
-        mkdir(UTEST_RESC_COMMITTED_PATH, S_IRWXU);
-        int fd = open(UTEST_RESC_COMMITTED_PATH "/acid", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_CREATE_FOLDER);
+        int fd =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/acid", RUNNER_OPEN_CREATE);
         close(fd);
-        fd = open(UTEST_RESC_COMMITTED_PATH "/asic", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/asic", RUNNER_OPEN_CREATE);
         close(fd);
     }
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int ret = json_object_size(mock_err_info);
@@ -274,11 +296,11 @@ Ensure(atfp_removal_test__ok_one_status_folder) {
     if (ret == 0) {
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
@@ -297,19 +319,19 @@ Ensure(atfp_removal_test__ok_one_status_folder) {
         expect(utest_storage_unlink, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(
             utest_storage_rmdir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
         while (!done_flag)
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
-        ret = access(UTEST_RESC_TRANSCODING_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_TRANSCODING_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
-        ret = access(UTEST_RESC_DISCARDING_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_DISCARDING_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
-        ret = access(UTEST_RESC_COMMITTED_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(-1));
         assert_that(errno, is_equal_to(ENOENT));
     }
@@ -320,7 +342,7 @@ Ensure(atfp_removal_test__err_scan_status_versions) {
     ATFP_REMOVAL_TEST_SETUP
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int ret = json_object_size(mock_err_info), expect_err = 1;
@@ -328,7 +350,7 @@ Ensure(atfp_removal_test__err_scan_status_versions) {
     if (ret == 0) {
         expect(
             utest_storage_scandir, will_return(expect_err), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
         while (!done_flag)
@@ -340,15 +362,16 @@ Ensure(atfp_removal_test__err_scan_status_versions) {
 
 Ensure(atfp_removal_test__err_rm_single_version) {
     ATFP_REMOVAL_TEST_SETUP { // assume several transcoded versions were saved in storage
-        mkdir(UTEST_RESC_COMMITTED_PATH, S_IRWXU);
-        int fd = open(UTEST_RESC_COMMITTED_PATH "/acid", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_CREATE_FOLDER);
+        int fd =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/acid", RUNNER_OPEN_CREATE);
         close(fd);
-        fd = open(UTEST_RESC_COMMITTED_PATH "/asic", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/asic", RUNNER_OPEN_CREATE);
         close(fd);
     }
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int ret = json_object_size(mock_err_info), expect_err = 1;
@@ -356,11 +379,11 @@ Ensure(atfp_removal_test__err_rm_single_version) {
     if (ret == 0) {
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
@@ -381,24 +404,25 @@ Ensure(atfp_removal_test__err_rm_single_version) {
         while (!done_flag)
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_greater_than(0));
-        ret = access(UTEST_RESC_COMMITTED_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(0));
     }
-    unlink(UTEST_RESC_COMMITTED_PATH "/acid");
-    unlink(UTEST_RESC_COMMITTED_PATH "/asic");
-    rmdir(UTEST_RESC_COMMITTED_PATH);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/acid", unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/asic", unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, rmdir);
     ATFP_REMOVAL_TEST_TEARDOWN
 } // end of  atfp_removal_test__err_rm_single_version
 
 Ensure(atfp_removal_test__err_rm_status_folder) {
     ATFP_REMOVAL_TEST_SETUP { // assume several transcoded versions were saved in storage
-        mkdir(UTEST_RESC_COMMITTED_PATH, S_IRWXU);
-        int fd = open(UTEST_RESC_COMMITTED_PATH "/acid", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_CREATE_FOLDER);
+        int fd =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH "/acid", RUNNER_OPEN_CREATE);
         close(fd);
     }
     expect(
         utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-        when(path, is_equal_to_string(UTEST_RESC_TRANSCODING_PATH))
+        when(path, is_equal_to_string(UT_RESC_TRANSCODING_LOCALPATH))
     );
     atfp_discard_transcoded(&mock_fp, utest_storage_remove_version, utest_atfp_done_usr_cb);
     int ret = json_object_size(mock_err_info), expect_err = 1;
@@ -406,11 +430,11 @@ Ensure(atfp_removal_test__err_rm_status_folder) {
     if (ret == 0) {
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_DISCARDING_PATH))
+            when(path, is_equal_to_string(UT_RESC_DISCARDING_LOCALPATH))
         );
         expect(
             utest_storage_scandir, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(utest_storage_scandir_next, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
@@ -422,16 +446,16 @@ Ensure(atfp_removal_test__err_rm_status_folder) {
         expect(utest_storage_unlink, will_return(0), when(asaobj, is_equal_to(&mock_asa_remote)));
         expect(
             utest_storage_rmdir, will_return(expect_err), when(asaobj, is_equal_to(&mock_asa_remote)),
-            when(path, is_equal_to_string(UTEST_RESC_COMMITTED_PATH))
+            when(path, is_equal_to_string(UT_RESC_COMMITTED_LOCALPATH))
         );
         expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
         while (!done_flag)
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_greater_than(0));
-        ret = access(UTEST_RESC_COMMITTED_PATH, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(0));
     }
-    rmdir(UTEST_RESC_COMMITTED_PATH);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_RESC_COMMITTED_PATH, rmdir);
     ATFP_REMOVAL_TEST_TEARDOWN
 } // end of  atfp_removal_test__err_rm_status_folder
 

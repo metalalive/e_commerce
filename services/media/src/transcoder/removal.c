@@ -1,20 +1,16 @@
 #include "datatypes.h"
 #include "transcoder/file_processor.h"
 
-#define STATUS_PATH_PATTERN "%s/%d/%08x/%s"
+#define STATUS_PATH_PATTERN "%d/%08x/%s"
 
 #define COMMON_CODE__GEN_STATUS_PATH(o_path, _status) \
-    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle; \
-    uint32_t           _usr_id = processor->data.usr_id; \
-    uint32_t           _upld_req_id = processor->data.upld_req_id; \
+    uint32_t _usr_id = processor->data.usr_id; \
+    uint32_t _upld_req_id = processor->data.upld_req_id; \
     assert(_usr_id != 0 && _upld_req_id != 0); \
-    size_t opath_sz = sizeof(STATUS_PATH_PATTERN) + strlen(asa_remote->storage->base_path) + \
-                      USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) + strlen(_status); \
+    size_t opath_sz = \
+        sizeof(STATUS_PATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) + strlen(_status); \
     char   o_path[opath_sz]; \
-    size_t nwrite = snprintf( \
-        &o_path[0], opath_sz, STATUS_PATH_PATTERN, asa_remote->storage->base_path, _usr_id, _upld_req_id, \
-        _status \
-    ); \
+    size_t nwrite = snprintf(&o_path[0], opath_sz, STATUS_PATH_PATTERN, _usr_id, _upld_req_id, _status); \
     o_path[nwrite++] = 0x0; \
     assert(nwrite <= opath_sz);
 
@@ -49,6 +45,7 @@ static void _atfp_discard__remove_status_folder(atfp_t *processor) {
            *status_list = json_object_get(spec, "_atfp_rm_status_list");
     const char *curr_status = json_string_value(json_array_get(status_list, 0));
     COMMON_CODE__GEN_STATUS_PATH(fullpath, curr_status);
+    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
     asa_remote->op.rmdir.path = &fullpath[0];
     asa_remote->op.rmdir.cb = _atfp_discard__status_rmdir_done;
     ASA_RES_CODE result = asa_remote->storage->ops.fn_rmdir(asa_remote);
@@ -173,8 +170,9 @@ static void _atfp_discard__status_scan_done(asa_op_base_cfg_t *asa_remote, ASA_R
 
 static void _atfp_discard__status_scan_start(atfp_t *processor, const char *status) {
     json_t *err_info = processor->data.error;
-    COMMON_CODE__GEN_STATUS_PATH(fullpath, status);
-    asa_remote->op.scandir.path = &fullpath[0];
+    COMMON_CODE__GEN_STATUS_PATH(localpath, status);
+    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
+    asa_remote->op.scandir.path = &localpath[0];
     asa_remote->op.scandir.cb = _atfp_discard__status_scan_done;
     ASA_RES_CODE result = asa_remote->storage->ops.fn_scandir(asa_remote);
     asa_remote->op.scandir.path = NULL;
@@ -184,10 +182,10 @@ static void _atfp_discard__status_scan_start(atfp_t *processor, const char *stat
             json_string("[storage] failed to"
                         " issue scandir operation for removing files")
         );
-        fprintf(stderr, "[atfp][removal] line:%d, result:%d, path:%s \n", __LINE__, result, &fullpath[0]);
+        fprintf(stderr, "[atfp][removal] line:%d, result:%d, path:%s \n", __LINE__, result, localpath);
         _atfp_discard__finalize(processor);
     }
-} // end of  _atfp_discard__status_scan_start
+}
 
 void atfp_discard_transcoded(
     atfp_t *processor, void (*rm_ver)(atfp_t *, const char *), void (*_usr_cb)(atfp_t *)

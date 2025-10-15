@@ -6,6 +6,7 @@
 #include <cgreen/mocks.h>
 #include <uv.h>
 
+#include "utils.h"
 #include "transcoder/file_processor.h"
 
 #define LOCAL_TMPBUF_BASEPATH "tmp/buffer/media/test"
@@ -14,16 +15,18 @@
 #define FILECHUNK_FOLDER_NAME "mock_fchunk"
 #define FULLPATH1             LOCAL_TMPBUF_BASEPATH "/" UNITTEST_FOLDER_NAME
 #define FULLPATH2             FULLPATH1 "/" FILECHUNK_FOLDER_NAME
-#define FILEPATH_TEMPLATE     FULLPATH2 "/%d"
+#define FILEPATH_TEMPLATE     "/%s/" FULLPATH2 "/%d"
 #define NUM_FILECHUNKS        5
 #define FILECHUNK_CONTENT(name) \
     const char *(name)[NUM_FILECHUNKS] = {"9824th3gw", "cp23724rT@#@RWG", "(u#aa&K%j:A", "93rjsie", "43hGfm"};
 
-#define RENDER_FILECHUNK_PATH(path_template, idx) \
-    size_t filepath_sz = strlen(path_template) + 1; \
+#define RENDER_FILECHUNK_PATH(sys_basepath, idx) \
+    size_t filepath_sz = strlen(sys_basepath) + sizeof(FILEPATH_TEMPLATE) + 1; \
     char   filepath[filepath_sz]; \
-    int    nwrite = snprintf(&filepath[0], filepath_sz, path_template, idx + 1); \
+    int    nwrite = snprintf(&filepath[0], filepath_sz, FILEPATH_TEMPLATE, sys_basepath, idx + 1); \
     filepath[nwrite] = 0x0;
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
 
 // note,
 // in GCC v13 explicitly declared optimization level will affect glibc pre-processing
@@ -33,12 +36,12 @@
 // Currently the rootcause is unknwon but I tried to avoid the error by removing the
 // syntax for GCC optimization `__attribute__((optimize("O0")))` at here
 static void utest_init_transcoder_srcfile_chunk(void) {
-    int idx = 0;
-    mkdir(FULLPATH1, S_IRWXU);
-    mkdir(FULLPATH2, S_IRWXU);
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    PATH_CONCAT_THEN_RUN(sys_basepath, FULLPATH1, RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(sys_basepath, FULLPATH2, RUNNER_CREATE_FOLDER);
     FILECHUNK_CONTENT(f_content);
-    for (idx = 0; idx < NUM_FILECHUNKS; idx++) {
-        RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
+    for (int idx = 0; idx < NUM_FILECHUNKS; idx++) {
+        RENDER_FILECHUNK_PATH(sys_basepath, idx);
         int fd = open(&filepath[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
         write(fd, f_content[idx], strlen(f_content[idx]));
         close(fd);
@@ -47,17 +50,17 @@ static void utest_init_transcoder_srcfile_chunk(void) {
 
 static __attribute__((optimize("O0"))) void utest_deinit_transcoder_srcfile_chunk(asa_op_base_cfg_t *asa_cfg
 ) {
-    int idx = 0;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
     if (asa_cfg->op.open.dst_path) {
         free(asa_cfg->op.open.dst_path);
         asa_cfg->op.open.dst_path = NULL;
     }
-    for (idx = 0; idx < NUM_FILECHUNKS; idx++) {
-        RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
+    for (int idx = 0; idx < NUM_FILECHUNKS; idx++) {
+        RENDER_FILECHUNK_PATH(sys_basepath, idx);
         unlink(&filepath[0]);
     }
-    rmdir(FULLPATH2);
-    rmdir(FULLPATH1);
+    PATH_CONCAT_THEN_RUN(sys_basepath, FULLPATH1, rmdir);
+    PATH_CONCAT_THEN_RUN(sys_basepath, FULLPATH2, rmdir);
 }
 
 static void transcoder_utest__closefile_callback(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
@@ -128,9 +131,11 @@ Ensure(transcoder_test__get_atfp_object) {
 Ensure(transcoder_test__open_srcfile_chunk_ok) {
 #define UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ                        (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
-    void                *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
-    uv_loop_t           *loop = uv_default_loop();
-    asa_cfg_t            mock_storage = {.ops = {.fn_open = app_storage_localfs_open}};
+    void      *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
+    uv_loop_t *loop = uv_default_loop();
+    asa_cfg_t  mock_storage = {
+         .base_path = getenv("SYS_BASE_PATH"), .ops = {.fn_open = app_storage_localfs_open}
+    };
     asa_op_localfs_cfg_t asaobj = {
         .loop = loop,
         .super =
@@ -161,8 +166,10 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
 } // end of transcoder_test__open_srcfile_chunk_ok
 
 Ensure(transcoder_test__open_srcfile_chunk_error) {
-    uv_loop_t           *loop = uv_default_loop();
-    asa_cfg_t            mock_storage = {.ops = {.fn_open = app_storage_localfs_open}};
+    uv_loop_t *loop = uv_default_loop();
+    asa_cfg_t  mock_storage = {
+         .base_path = getenv("SYS_BASE_PATH"), .ops = {.fn_open = app_storage_localfs_open}
+    };
     asa_op_localfs_cfg_t asa_cfg = {
         .loop = loop, .super = {.storage = &mock_storage, .cb_args = {.size = 0, .entries = NULL}}
     };
@@ -185,6 +192,7 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     void      *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
     uv_loop_t *loop = uv_default_loop();
     asa_cfg_t  mock_storage = {
+         .base_path = getenv("SYS_BASE_PATH"),
          .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close}
     };
     asa_op_localfs_cfg_t asaobj = {
@@ -395,7 +403,6 @@ Ensure(transcoder_test__asamap_destination_ok) {
 #undef NUM_CB_ARGS_ASAOBJ
 } // end of transcoder_test__asamap_destination_ok
 #undef NUM_FILECHUNKS
-#undef FILEPATH_TEMPLATE
 #undef FULLPATH1
 #undef FULLPATH2
 #undef UNITTEST_FOLDER_NAME
@@ -404,13 +411,13 @@ Ensure(transcoder_test__asamap_destination_ok) {
 #define UTEST_ASA_LOCAL_BASEPATH  "tmp/utest/media/asa_local"
 #define UTEST_ASA_REMOTE_BASEPATH "tmp/utest/media/asa_remote"
 
-#define UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP \
-    int               mock_rdy_seg_num[NUM_READY_SEGMENTS] = READY_SEGMENT_NUMBERS; \
-    char              mock_asa_wr_buf[MOCK_ASA_WR_BUF_SZ] = {0}; \
-    char              seg_fullpath_asalocal[NBYTES_SEGMENT_FULLPATH__ASA_LOCAL] = {0}; \
-    char              seg_fullpath_asadst[NBYTES_SEGMENT_FULLPATH__ASA_DST] = {0}; \
-    uv_loop_t        *loop = uv_default_loop(); \
-    asa_cfg_t         mock_storage = {.ops = {.fn_open = app_storage_localfs_open}}; \
+#define UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath) \
+    int        mock_rdy_seg_num[NUM_READY_SEGMENTS] = READY_SEGMENT_NUMBERS; \
+    char       mock_asa_wr_buf[MOCK_ASA_WR_BUF_SZ] = {0}; \
+    char       seg_fullpath_asalocal[NBYTES_SEGMENT_FULLPATH__ASA_LOCAL] = {0}; \
+    char       seg_fullpath_asadst[NBYTES_SEGMENT_FULLPATH__ASA_DST] = {0}; \
+    uv_loop_t *loop = uv_default_loop(); \
+    asa_cfg_t  mock_storage = {.base_path = sys_basepath, .ops = {.fn_open = app_storage_localfs_open}}; \
     asa_op_base_cfg_t mock_asa_remote = { \
         .op = \
             {.open = {.cb = utest_asa_remote_openfile_cb}, \
@@ -438,16 +445,16 @@ Ensure(transcoder_test__asamap_destination_ok) {
             {._asa_local = {.data = &seg_fullpath_asalocal[0], .sz = NBYTES_SEGMENT_FULLPATH__ASA_LOCAL}, \
              ._asa_dst = {.data = &seg_fullpath_asadst[0], .sz = NBYTES_SEGMENT_FULLPATH__ASA_DST}}, \
     }; \
-    mkdir("./tmp/utest", S_IRWXU); \
-    mkdir("./tmp/utest/media", S_IRWXU); \
-    mkdir(UTEST_ASA_LOCAL_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_REMOTE_BASEPATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(sys_basepath, "./tmp/utest", RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, "./tmp/utest/media", RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASA_LOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASA_REMOTE_BASEPATH, RUNNER_CREATE_FOLDER);
 
-#define UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN \
-    rmdir(UTEST_ASA_LOCAL_BASEPATH); \
-    rmdir(UTEST_ASA_REMOTE_BASEPATH); \
-    rmdir("./tmp/utest/media"); \
-    rmdir("./tmp/utest");
+#define UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath) \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASA_LOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASA_REMOTE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, "./tmp/utest/media", rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, "./tmp/utest", rmdir);
 
 static __attribute__((optimize("O0"))) void
 utest_asa_remote_openfile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result) {
@@ -472,9 +479,10 @@ utest_asa_local_openfile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result) {
     sizeof(UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX) + UTEST_SEGMENT_NUM_MAXDIGIT
 
 Ensure(transcoder_test__start_transfer_segment_ok) {
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
 #define EXPECT_NUM_TRANSFER_SEGMENTS 3
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
-    int         chosen_idx[EXPECT_NUM_TRANSFER_SEGMENTS] = {1, 2, 4};
+    int chosen_idx[EXPECT_NUM_TRANSFER_SEGMENTS] = {1, 2, 4};
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
     const char *expect_seg_local_path[EXPECT_NUM_TRANSFER_SEGMENTS] = {
         UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000004",
         UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000195",
@@ -486,33 +494,40 @@ Ensure(transcoder_test__start_transfer_segment_ok) {
         UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000087",
     };
     for (int idx = 0; idx < EXPECT_NUM_TRANSFER_SEGMENTS; idx++) {
-        int fd = open(expect_seg_local_path[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        close(fd);
-        assert_that(access(expect_seg_local_path[idx], F_OK), is_equal_to(0));
-        ASA_RES_CODE result;
-        result =
+#define RUNNER(fullpath) \
+    ({ \
+        int fd = open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+        close(fd); \
+        access(fullpath, F_OK); \
+    })
+        int fileexist = PATH_CONCAT_THEN_RUN(sys_basepath, expect_seg_local_path[idx], RUNNER);
+        assert_that(fileexist, is_equal_to(0));
+#undef RUNNER
+        ASA_RES_CODE result =
             atfp__segment_start_transfer(&mock_asa_remote, &mock_asa_local, &mock_seg_cfg, chosen_idx[idx]);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mock_asa_local.super.op.open.dst_path, is_equal_to_string(expect_seg_local_path[idx]));
         assert_that(mock_asa_remote.op.open.dst_path, is_equal_to_string(expect_seg_remote_path[idx]));
         expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
         uv_run(loop, UV_RUN_ONCE);
-        unlink(expect_seg_local_path[idx]);
+        PATH_CONCAT_THEN_RUN(sys_basepath, expect_seg_local_path[idx], unlink);
     } // end of loop
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
 #undef EXPECT_NUM_TRANSFER_SEGMENTS
 } // end of transcoder_test__start_transfer_segment_ok
 
 Ensure(transcoder_test__start_transfer_segment_exceeding_index) {
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
     ASA_RES_CODE result =
         atfp__segment_start_transfer(&mock_asa_remote, &mock_asa_local, &mock_seg_cfg, NUM_READY_SEGMENTS);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
-} // end of transcoder_test__start_transfer_segment_exceeding_index
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
+}
 
 Ensure(transcoder_test__transfer_segment__missing_file) {
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
     const char  *expect_seg_local_path = UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
     const char  *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
     int          chosen_idx = NUM_READY_SEGMENTS - 1;
@@ -523,13 +538,14 @@ Ensure(transcoder_test__transfer_segment__missing_file) {
     assert_that(mock_asa_remote.op.open.dst_path, is_equal_to_string(expect_seg_remote_path));
     expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
     uv_run(loop, UV_RUN_ONCE);
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
 } // end of transcoder_test__transfer_segment__missing_file
 
 Ensure(transcoder_test__transfer_segment__memory_corruption) {
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
-    int          chosen_idx = 1;
     ASA_RES_CODE result;
+    const char  *sys_basepath = getenv("SYS_BASE_PATH");
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
+    int chosen_idx = 1;
     { // subcase 1
         mock_asa_remote.op.mkdir.path.origin = UTEST_ASA_REMOTE_BASEPATH "/corrupt";
         result = atfp__segment_start_transfer(&mock_asa_remote, &mock_asa_local, &mock_seg_cfg, chosen_idx);
@@ -567,17 +583,23 @@ Ensure(transcoder_test__transfer_segment__memory_corruption) {
         expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
         uv_run(loop, UV_RUN_ONCE);
     }
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
 } // end of transcoder_test__transfer_segment__memory_corruption
 
 Ensure(transcoder_test__start_transfer_genericfile_ok) {
 #define EXPECT_LOCAL_FILENAME  "transceiver_channel"
 #define EXPECT_REMOTE_FILENAME "receiver_capacity"
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
     const char *expect_seg_local_path = UTEST_ASA_LOCAL_BASEPATH "/" EXPECT_LOCAL_FILENAME;
     const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/" EXPECT_REMOTE_FILENAME;
-    int         fd = open(expect_seg_local_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    close(fd);
+#define RUNNER(fullpath) \
+    ({ \
+        int fd = open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+        close(fd); \
+    })
+    PATH_CONCAT_THEN_RUN(sys_basepath, expect_seg_local_path, RUNNER);
+#undef RUNNER
     ASA_RES_CODE result = atfp__file_start_transfer(
         &mock_asa_remote, &mock_asa_local, &mock_seg_cfg, EXPECT_LOCAL_FILENAME, EXPECT_REMOTE_FILENAME
     );
@@ -586,14 +608,15 @@ Ensure(transcoder_test__start_transfer_genericfile_ok) {
     assert_that(mock_asa_remote.op.open.dst_path, is_equal_to_string(expect_seg_remote_path));
     expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
     uv_run(loop, UV_RUN_ONCE);
-    unlink(expect_seg_local_path);
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+    PATH_CONCAT_THEN_RUN(sys_basepath, expect_seg_local_path, unlink);
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
 #undef EXPECT_LOCAL_FILENAME
 #undef EXPECT_REMOTE_FILENAME
-} // end of transcoder_test__start_transfer_genericfile_ok
+}
 
 Ensure(transcoder_test__transfer_genericfile__memory_corruption) {
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP(sys_basepath);
     // filename exceeds max length of setup value
 #define EXPECT_FILENAME UTEST_DATA_SEGMENT_PREFIX UTEST_DATA_SEGMENT_PREFIX UTEST_DATA_SEGMENT_PREFIX
     ASA_RES_CODE result = atfp__file_start_transfer(
@@ -601,8 +624,8 @@ Ensure(transcoder_test__transfer_genericfile__memory_corruption) {
     );
     assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
 #undef EXPECT_FILENAME
-    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
-} // end of transcoder_test__transfer_genericfile__memory_corruption
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN(sys_basepath);
+}
 
 Ensure(transcoder_test__collect_segment_info_ok) {
 #define BASEPATH       "/path/to/dst/storage/"
@@ -674,8 +697,10 @@ static ASA_RES_CODE utest__mock_fn_scandir_next(asa_op_base_cfg_t *asaobj, asa_d
 }
 
 #define UTEST__SCANDIR_LOAD_FILEINFO__SETUP \
-    asa_dirent_t      mock_scandir_entries[EXPECT_SCANDIR_NUM_ENTRIES] = EXPECT_SCANDIR_ENTRIES; \
-    asa_cfg_t         mock_cfg_storage = {.ops = {.fn_scandir_next = utest__mock_fn_scandir_next}}; \
+    asa_dirent_t mock_scandir_entries[EXPECT_SCANDIR_NUM_ENTRIES] = EXPECT_SCANDIR_ENTRIES; \
+    asa_cfg_t    mock_cfg_storage = { \
+           .base_path = getenv("SYS_BASE_PATH"), .ops = {.fn_scandir_next = utest__mock_fn_scandir_next} \
+    }; \
     asa_op_base_cfg_t mock_asaobj = { \
         .storage = &mock_cfg_storage, .op = {.scandir = {.fileinfo = {.size = EXPECT_SCANDIR_NUM_ENTRIES}}} \
     }; \

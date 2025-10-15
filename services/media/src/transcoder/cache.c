@@ -98,9 +98,8 @@ static void atfp_cachecommon_deinit(asa_op_base_cfg_t *_asa_cch_local) {
     }
 } // end of  atfp_cachecommon_deinit
 
-int atfp_cache_save_metadata(
-    const char *basepath, const char *mimetype, atfp_data_t *fp_data
-) { // new file to save key ID applied to this video, TODO, async operation
+int atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data) {
+    // new local file to save key ID applied to this video, TODO, async operation
     if (!basepath || !mimetype || !fp_data || !fp_data->spec || fp_data->usr_id == 0 ||
         fp_data->upld_req_id == 0)
         return 1;
@@ -331,12 +330,7 @@ static void _atfp_streamcache_metadata_open_cb(asa_op_base_cfg_t *_asa_cch_local
 } // end of _atfp_streamcache_metadata_open_cb
 
 /* TODO, implement timeout attribute in cache so existing cache file can be evicted after specified
- * expiry time int  UPDATE_INTERVAL_SECS = 30 // from metadata file atfp_data_t  data =
- * {.usr_id=usr_id, .upld_req_id=upld_req_id}; int refresh_req =
- * atfp_check_fileupdate_required(&data, acfg->tmp_buf.path, detail_filepath, UPDATE_INTERVAL_SECS);
- *   if(refresh_req) {
- *       // start file processor
- *   }
+ * expiry time , by reusing `atfp_check_fileupdate_required`
  */
 static void _atfp_streamcache_existence_check(asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result) {
     json_t *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];

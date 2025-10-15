@@ -142,8 +142,7 @@ void atfp_storage__commit_new_version(atfp_t *processor) { // ensure discarding 
     assert(asa_dst->op.mkdir.path.prefix);
     assert(asa_dst->op.mkdir.path.origin);
     nwrite = sprintf(
-        asa_dst->op.mkdir.path.prefix, "%s/%d/%08x", asa_dst->storage->base_path, processor->data.usr_id,
-        processor->data.upld_req_id
+        asa_dst->op.mkdir.path.prefix, "%d/%08x", processor->data.usr_id, processor->data.upld_req_id
     );
     asa_dst->op.mkdir.path.prefix[nwrite++] = 0x0; // NULL-terminated
     nwrite = sprintf(asa_dst->op.mkdir.path.origin, "%s", ATFP__DISCARDING_FOLDER_NAME);

@@ -3,23 +3,29 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include <stdlib.h>
 
-#define UTEST_RUN_OPERATION_WITH_PATH(_basepath, _usr_id, _upld_req_id, _filename, _cmd) \
+#define UTEST_RUN_OPERATION_WITH_PATH(ap_basepath, _usr_id, _upld_req_id, _filename, _cmd) \
     { \
-        size_t nwrite = 0, _fname_sz = 0; \
-        char  *__filename = _filename; \
+        size_t      nwrite = 0, _fname_sz = 0; \
+        char       *__filename = _filename; \
+        const char *syspath = getenv("SYS_BASE_PATH"); \
         if (__filename != NULL) \
             _fname_sz = strlen(__filename); \
-        size_t path_sz = strlen(_basepath) + 1 + USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(_upld_req_id) + \
-                         1 + _fname_sz + 1; \
+        if (syspath == NULL) \
+            syspath = "/"; \
+        size_t path_sz = strlen(syspath) + strlen(ap_basepath) + 1 + USR_ID_STR_SIZE + 1 + \
+                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + _fname_sz + 1; \
         char path[path_sz]; \
         if (_usr_id != 0 && _upld_req_id != 0 && __filename) { \
-            nwrite = \
-                snprintf(&path[0], path_sz, "%s/%d/%x/%s", _basepath, _usr_id, _upld_req_id, __filename); \
+            nwrite = snprintf( \
+                &path[0], path_sz, "%s/%s/%d/%x/%s", syspath, ap_basepath, _usr_id, _upld_req_id, __filename \
+            ); \
         } else if (_usr_id != 0 && _upld_req_id != 0 && !__filename) { \
-            nwrite = snprintf(&path[0], path_sz, "%s/%d/%x", _basepath, _usr_id, _upld_req_id); \
+            nwrite = \
+                snprintf(&path[0], path_sz, "%s/%s/%d/%x", syspath, ap_basepath, _usr_id, _upld_req_id); \
         } else if (_usr_id != 0 && _upld_req_id == 0 && !__filename) { \
-            nwrite = snprintf(&path[0], path_sz, "%s/%d", _basepath, _usr_id); \
+            nwrite = snprintf(&path[0], path_sz, "%s/%s/%d", syspath, ap_basepath, _usr_id); \
         } \
         if (nwrite != 0) { \
             assert(path_sz >= nwrite); \

@@ -177,7 +177,7 @@ static int parse_cfg_transcoder_resolution_image(json_t *obj, aav_cfg_img_t *cfg
     }
     cfg->limit.width = lmt_width;
     cfg->limit.height = lmt_height;
-    cfg->mask.basepath = strdup(masks_filepath);
+    cfg->mask.basepath = strdup(masks_filepath); // FIXME, ensure full path
     return 0;
 error:
     return -1;

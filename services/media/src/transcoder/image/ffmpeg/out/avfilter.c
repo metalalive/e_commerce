@@ -1,6 +1,7 @@
 #include "app_cfg.h"
 #include "transcoder/image/ffmpeg.h"
 #include "transcoder/common/ffmpeg.h"
+#include "utils.h"
 
 #define AVFILTER_INPUT_PAD_LABEL  "nodestart"
 #define AVFILTER_OUTPUT_PAD_LABEL "nodesink"
@@ -19,20 +20,24 @@
         "[" AVFILTER_INPUT_PAD_LABEL "]" FILT_SPEC_CROP "," FILT_SPEC_SCALE "[" AVFILTER_OUTPUT_PAD_LABEL "]"
 #endif
 static int _atfp_img__gen_filter_spec(json_t *filt_spec, char *out, size_t out_sz) {
-    int            err = 0;
-    json_t        *_msk_item = json_object_get(filt_spec, "mask");
-    json_t        *_crop_item = json_object_get(filt_spec, "crop");
-    json_t        *_scale_item = json_object_get(filt_spec, "scale");
-    uint32_t       scale_h = json_integer_value(json_object_get(_scale_item, "height"));
-    uint32_t       scale_w = json_integer_value(json_object_get(_scale_item, "width"));
-    uint32_t       crop_h = json_integer_value(json_object_get(_crop_item, "height"));
-    uint32_t       crop_w = json_integer_value(json_object_get(_crop_item, "width"));
-    int            crop_pos_x = json_integer_value(json_object_get(_crop_item, "x"));
-    int            crop_pos_y = json_integer_value(json_object_get(_crop_item, "y"));
-    const char    *_msk_patt_label = json_string_value(json_object_get(_msk_item, "pattern"));
+    int         err = 0;
+    json_t     *_msk_item = json_object_get(filt_spec, "mask");
+    json_t     *_crop_item = json_object_get(filt_spec, "crop");
+    json_t     *_scale_item = json_object_get(filt_spec, "scale");
+    uint32_t    scale_h = json_integer_value(json_object_get(_scale_item, "height"));
+    uint32_t    scale_w = json_integer_value(json_object_get(_scale_item, "width"));
+    uint32_t    crop_h = json_integer_value(json_object_get(_crop_item, "height"));
+    uint32_t    crop_w = json_integer_value(json_object_get(_crop_item, "width"));
+    int         crop_pos_x = json_integer_value(json_object_get(_crop_item, "x"));
+    int         crop_pos_y = json_integer_value(json_object_get(_crop_item, "y"));
+    const char *_msk_patt_label = json_string_value(json_object_get(_msk_item, "pattern"));
+    // TODO, save path to mask file in filter spec, instead of calling global
+    // config object and retrieving the field.
     app_cfg_t     *acfg = app_get_global_cfg();
     aav_cfg_img_t *_imgcfg = &acfg->transcoder.output.image;
-    json_t        *msk_fmap = atfp_image_mask_pattern_index(_imgcfg->mask.basepath);
+#define RUNNER(fullpath) atfp_image_mask_pattern_index(fullpath)
+    json_t *msk_fmap = PATH_CONCAT_THEN_RUN(acfg->env_vars.sys_base_path, _imgcfg->mask.basepath, RUNNER);
+#undef RUNNER
     if (msk_fmap) { // avfilter_graph_parse_ptr() will examine existence of the mask pattern file
 #if 1
         const char *patt_filename = json_string_value(json_object_get(msk_fmap, _msk_patt_label));
