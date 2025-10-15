@@ -6,6 +6,8 @@
 #include <cgreen/mocks.h>
 #include <uv.h>
 
+#include "utils.h"
+#include "app_cfg.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 
@@ -27,18 +29,16 @@
 #define EXPECT_DONE_FLAG__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ              (EXPECT_DONE_FLAG__IN_ASA_USRARG + 1)
 
+#define RUNNER_CREATE_FOLDER(fullpath)          mkdir(fullpath, S_IRWXU)
+#define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+#define RUNNER_OPEN_RDONLY_USR(fullpath)        open(fullpath, O_RDONLY, S_IRUSR)
+#define RUNNER_ACCESS_F_OK(fullpath)            access(fullpath, F_OK)
+
 static uint8_t utest__atfp_has_done_processing(atfp_t *processor) { return (uint8_t)mock(processor); }
 
-static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
-    atfp_hls_t           *hlsproc = (atfp_hls_t *)processor;
-    asa_op_localfs_cfg_t *asa_local_dst = &hlsproc->asa_local;
-    size_t                num_err_msg = json_object_size(processor->data.error);
-    uint8_t              *done_flag = asa_local_dst->super.cb_args.entries[EXPECT_DONE_FLAG__IN_ASA_USRARG];
-    *done_flag = 1;
-    mock(processor, num_err_msg);
-} // end of utest_atfp_hls__flush_output_cb
-
 #define UTEST_HLS__FLUSH_OUTPUT_SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uint8_t    flush_done = 0; \
     void      *asalocal_usr_args[NUM_CB_ARGS_ASAOBJ] = {0, 0, &flush_done}; \
     void      *asaremote_usr_args[NUM_CB_ARGS_ASAOBJ] = {0, 0, &flush_done}; \
@@ -48,6 +48,7 @@ static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
     uv_loop_t *loop = uv_default_loop(); \
     int        idx = 0; \
     asa_cfg_t  mock_storage_common = { \
+         .base_path = env.sys_base_path, \
          .ops = \
             {.fn_open = app_storage_localfs_open, \
               .fn_close = app_storage_localfs_close, \
@@ -102,10 +103,10 @@ static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
     }; \
     asaremote_usr_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_hlsproc; \
     asalocal_usr_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_hlsproc; \
-    mkdir("./tmp/utest", S_IRWXU); \
-    mkdir(UTEST_BASSEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_LOCAL_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_REMOTE_BASEPATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASSEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_LOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, RUNNER_CREATE_FOLDER);
 
 #define UTEST_HLS__FLUSH_FILES_SETUP \
     const char *expect_seg_local_path[NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES] = { \
@@ -145,7 +146,9 @@ static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
         "benefit.", \
     }; \
     for (idx = 0; idx < (NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES); idx++) { \
-        int fd = open(expect_seg_local_path[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+        int fd = PATH_CONCAT_THEN_RUN( \
+            env.sys_base_path, expect_seg_local_path[idx], RUNNER_OPEN_WRONLY_CREATE_USR \
+        ); \
         write(fd, expect_seg_content[idx], strlen(expect_seg_content[idx])); \
         close(fd); \
     }
@@ -156,21 +159,31 @@ static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
         mock_hlsproc.internal.segment.rdy_list.entries = NULL; \
     } \
     json_decref(mock_hlsproc.super.data.error); \
-    rmdir(UTEST_ASA_LOCAL_BASEPATH); \
-    rmdir(UTEST_ASA_REMOTE_BASEPATH); \
-    rmdir(UTEST_BASSEPATH); \
-    rmdir("./tmp/utest");
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_LOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASSEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", rmdir);
 
 #define UTEST_HLS__FLUSH_FILES_TEARDOWN \
     for (idx = 0; idx < (NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES); idx++) { \
-        unlink(expect_seg_local_path[idx]); \
-        unlink(expect_seg_remote_path[idx]); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[idx], unlink); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[idx], unlink); \
     }
 
-static void utest_hls__output_verify_content(const char *filepath, const char *expect_content) {
+static void utest_atfp_hls__flush_output_cb(atfp_t *processor) {
+    atfp_hls_t           *hlsproc = (atfp_hls_t *)processor;
+    asa_op_localfs_cfg_t *asa_local_dst = &hlsproc->asa_local;
+    size_t                num_err_msg = json_object_size(processor->data.error);
+    uint8_t              *done_flag = asa_local_dst->super.cb_args.entries[EXPECT_DONE_FLAG__IN_ASA_USRARG];
+    *done_flag = 1;
+    mock(processor, num_err_msg);
+} // end of utest_atfp_hls__flush_output_cb
+
+static void
+utest_hls__output_verify_content(app_envvars_t *env, const char *filepath, const char *expect_content) {
     size_t expect_content_sz = strlen(expect_content);
     char   actual_content[expect_content_sz + 1];
-    int    fd = open(filepath, O_RDONLY, S_IRUSR);
+    int    fd = PATH_CONCAT_THEN_RUN(env->sys_base_path, filepath, RUNNER_OPEN_RDONLY_USR);
     int    nread = read(fd, &actual_content[0], expect_content_sz);
     actual_content[nread] = 0;
     assert_that(nread, is_equal_to(expect_content_sz));
@@ -198,26 +211,48 @@ Ensure(atfp_hls_test__flush_segments__when_processing) {
     while (!flush_done)
         uv_run(loop, UV_RUN_ONCE);
     { // examine after completing transfer
+        int access_result;
         assert_that(mock_hlsproc.internal.segment.rdy_list.size, is_equal_to(expect_numfiles_transferred));
         assert_that(mock_hlsproc.internal.segment.rdy_list.entries, is_not_equal_to(NULL));
-        assert_that(access(expect_seg_remote_path[0], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_remote_path[1], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_remote_path[2], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_remote_path[3], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_remote_path[4], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_remote_path[5], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_remote_path[6], F_OK), is_equal_to(-1));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[0], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[1], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[2], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[3], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[4], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[5], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[6], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
         // the segment with the latest number not transferred
-        assert_that(access(expect_seg_local_path[0], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_local_path[1], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_local_path[2], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_local_path[3], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_local_path[4], F_OK), is_equal_to(-1));
-        assert_that(access(expect_seg_local_path[5], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_local_path[6], F_OK), is_equal_to(0));
-        utest_hls__output_verify_content(expect_seg_remote_path[0], expect_seg_content[0]);
-        utest_hls__output_verify_content(expect_seg_remote_path[2], expect_seg_content[2]);
-        utest_hls__output_verify_content(expect_seg_remote_path[4], expect_seg_content[4]);
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[0], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[1], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[2], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[3], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[4], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[5], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[6], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        utest_hls__output_verify_content(&env, expect_seg_remote_path[0], expect_seg_content[0]);
+        utest_hls__output_verify_content(&env, expect_seg_remote_path[2], expect_seg_content[2]);
+        utest_hls__output_verify_content(&env, expect_seg_remote_path[4], expect_seg_content[4]);
     }
     if (!mock_hlsproc.internal.segment.rdy_list.entries)
         free(mock_hlsproc.internal.segment.rdy_list.entries);
@@ -230,7 +265,9 @@ Ensure(atfp_hls_test__flush_nothing__when_processing) {
     const char *expect_filepath = UTEST_ASA_LOCAL_BASEPATH "/"
                                                            "not_segment_file";
     {
-        int fd = open(expect_filepath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        int fd = PATH_CONCAT_THEN_RUN(
+            env.sys_base_path, expect_filepath, RUNNER_OPEN_WRONLY_CREATE_USR
+        ); // create an empty file
         close(fd);
     }
     ASA_RES_CODE result = atfp_hls__try_flush_to_storage(&mock_hlsproc);
@@ -239,8 +276,10 @@ Ensure(atfp_hls_test__flush_nothing__when_processing) {
     expect(utest_atfp_hls__flush_output_cb, when(num_err_msg, is_equal_to(0)));
     uv_run(loop, UV_RUN_ONCE);
     assert_that(mock_hlsproc.internal.segment.rdy_list.size, is_equal_to(0));
-    assert_that(mock_hlsproc.internal.segment.rdy_list.entries, is_equal_to(NULL));
-    unlink(expect_filepath);
+    assert_that(
+        mock_hlsproc.internal.segment.rdy_list.entries, is_equal_to(NULL)
+    ); // expected because nothing transferred
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_filepath, unlink);
     UTEST_HLS__FLUSH_OUTPUT_TEARDOWN
 } // end of atfp_hls_test__flush_nothing__when_processing
 
@@ -264,10 +303,17 @@ Ensure(atfp_hls_test__flush_segments__final) {
     while (!flush_done)
         uv_run(loop, UV_RUN_ONCE);
     assert_that(mock_hlsproc.internal.segment.rdy_list.size, is_equal_to(NUM_READY_SEGMENTS));
-    assert_that(mock_hlsproc.internal.segment.rdy_list.entries, is_not_equal_to(NULL));
+    assert_that(
+        mock_hlsproc.internal.segment.rdy_list.entries, is_not_equal_to(NULL)
+    ); // list has entries of files that were transferred
     for (idx = 0; idx < expect_numfiles_transferred; idx++) {
-        assert_that(access(expect_seg_remote_path[idx], F_OK), is_equal_to(0));
-        assert_that(access(expect_seg_local_path[idx], F_OK), is_equal_to(-1));
+        int access_result;
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[idx], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(0));
+        access_result =
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[idx], RUNNER_ACCESS_F_OK);
+        assert_that(access_result, is_equal_to(-1));
     }
     if (!mock_hlsproc.internal.segment.rdy_list.entries)
         free(mock_hlsproc.internal.segment.rdy_list.entries);
@@ -291,13 +337,15 @@ Ensure(atfp_hls_test__flush_error__transfer_segment) {
         expect(SHA1_Final, will_return(1));
         expect(OPENSSL_cleanse);
     }
-    while (access(expect_seg_remote_path[0], F_OK) == -1)
+    int access_result;
+    while ((access_result =
+                PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_remote_path[0], RUNNER_ACCESS_F_OK)) == -1)
         uv_run(loop, UV_RUN_ONCE);
     uv_run(loop, UV_RUN_ONCE);
     uv_run(loop, UV_RUN_ONCE);
     uv_run(loop, UV_RUN_ONCE);
     uv_run(loop, UV_RUN_ONCE); // there should be some bytes written in destination storage
-    unlink(expect_seg_local_path[0]);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[0], unlink);
     while (!flush_done)
         uv_run(loop, UV_RUN_ONCE);
     json_t *err_info = json_object_get(mock_hlsproc.super.data.error, "storage");
@@ -324,7 +372,9 @@ Ensure(atfp_hls_test__flush_error__open_next_segment) {
         expect(SHA1_Final, will_return(1));
         expect(OPENSSL_cleanse);
     }
-    while (access(expect_seg_local_path[0], F_OK) != -1)
+    int access_result;
+    while ((access_result =
+                PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_seg_local_path[0], RUNNER_ACCESS_F_OK)) != -1)
         uv_run(loop, UV_RUN_ONCE);
     UTEST_HLS__FLUSH_FILES_TEARDOWN;
     while (!flush_done)

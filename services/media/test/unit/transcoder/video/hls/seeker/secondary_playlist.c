@@ -7,13 +7,16 @@
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "datatypes.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 #include "../test/unit/transcoder/test.h"
 
-#define UTEST_FILE_BASEPATH     "tmp/utest"
-#define UTEST_ASASRC_BASEPATH   UTEST_FILE_BASEPATH "/asasrc"
-#define UTEST_ASALOCAL_BASEPATH UTEST_FILE_BASEPATH "/asalocal"
+#define UTEST_FILE_BASEPATH            "tmp/utest"
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define UTEST_ASASRC_BASEPATH          UTEST_FILE_BASEPATH "/asasrc"
+#define UTEST_ASALOCAL_BASEPATH        UTEST_FILE_BASEPATH "/asalocal"
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
@@ -27,6 +30,13 @@
 #define MOCK_REST_PATH                 "/utest/video/playback"
 #define MOCK__QUERYPARAM_LABEL__RES_ID "ut_doc_id"
 #define MOCK__QUERYPARAM_LABEL__DETAIL "ut_detail_keyword"
+
+#define MOCK_STORAGE_SRC_USRBUF_PATH      UTEST_ASASRC_BASEPATH "/360"
+#define MOCK_STORAGE_SRC_UPLD_REQ_PATH    MOCK_STORAGE_SRC_USRBUF_PATH "/150de9a6"
+#define MOCK_STORAGE_SRC_UPLD_COMMIT_PATH MOCK_STORAGE_SRC_UPLD_REQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME
+
+#define MOCK_STORAGE_LOCAL_USRBUF_PATH   UTEST_ASALOCAL_BASEPATH "/360"
+#define MOCK_STORAGE_LOCAL_UPLD_REQ_PATH MOCK_STORAGE_LOCAL_USRBUF_PATH "/150de9a6"
 
 static void _utest_hls_lvl2_plist__common_done_cb(atfp_t *processor) {
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
@@ -46,21 +56,29 @@ static void _utest_hls_lvl2_plist__common_done_cb(atfp_t *processor) {
 } // end of _utest_hls_lvl2_plist__common_done_cb
 
 #define HLS__LVL2_PLIST_VALIDATE__SETUP \
-    uint8_t    mock_done_flag = 0; \
-    void      *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(); \
-    json_t    *mock_doc_metadata = json_object(); \
-    json_t    *mock_err_info = json_object(); \
-    app_cfg_t *mock_appcfg = app_get_global_cfg(); \
-    asa_cfg_t  mock_src_storage_cfg = { \
-         .alias = MOCK_STORAGE_ALIAS, \
-         .base_path = UTEST_ASASRC_BASEPATH, \
-         .ops = \
+    uint8_t     mock_done_flag = 0; \
+    void       *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
+    uv_loop_t  *loop = uv_default_loop(); \
+    json_t     *mock_spec = json_object(), *mock_doc_metadata = json_object(), *mock_err_info = json_object(); \
+    app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
+    const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
+    asa_cfg_t   mock_src_storage_cfg = { \
+          .alias = MOCK_STORAGE_ALIAS, \
+          .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, strdup), \
+          .ops = \
             {.fn_read = app_storage_localfs_read, \
-              .fn_open = app_storage_localfs_open, \
-              .fn_close = app_storage_localfs_close, \
-              .fn_typesize = app_storage_localfs_typesize} \
+               .fn_open = app_storage_localfs_open, \
+               .fn_close = app_storage_localfs_close, \
+               .fn_typesize = app_storage_localfs_typesize} \
+    }; \
+    asa_cfg_t mock_local_storage_cfg = { \
+        .alias = NULL, \
+        .base_path = sys_basepath, \
+        .ops = \
+            {.fn_read = app_storage_localfs_read, \
+             .fn_open = app_storage_localfs_open, \
+             .fn_close = app_storage_localfs_close, \
+             .fn_typesize = app_storage_localfs_typesize} \
     }; \
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
@@ -78,7 +96,7 @@ static void _utest_hls_lvl2_plist__common_done_cb(atfp_t *processor) {
                   .storage = {.handle = NULL}}}, \
         .asa_local = \
             {.super = \
-                 {.storage = &mock_src_storage_cfg, \
+                 {.storage = &mock_local_storage_cfg, \
                   .cb_args = {.entries = mock_asalocal_cb_args, .size = NUM_CB_ARGS_ASAOBJ}}}, \
         .internal = \
             {.op = \
@@ -89,46 +107,28 @@ static void _utest_hls_lvl2_plist__common_done_cb(atfp_t *processor) {
     json_object_set_new(mock_spec, "buf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
     json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
     json_object_set_new(mock_spec, "metadata", mock_doc_metadata); \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASASRC_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, ATFP__COMMITTED_FOLDER_NAME, \
-        UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR, UTEST_OPS_MKDIR \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_USRBUF_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_REQ_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR, RUNNER_CREATE_FOLDER \
     );
 
 #define HLS__LVL2_PLIST_VALIDATE__TEARDOWN \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, ATFP__COMMITTED_FOLDER_NAME, \
-        UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    rmdir(UTEST_ASASRC_BASEPATH); \
-    rmdir(UTEST_ASALOCAL_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_REQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_USRBUF_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
     { \
         asa_op_base_cfg_t *asa_src = mock_fp.super.data.storage.handle; \
         if (asa_src) { \
@@ -136,6 +136,7 @@ static void _utest_hls_lvl2_plist__common_done_cb(atfp_t *processor) {
             uv_run(loop, UV_RUN_ONCE); \
         } \
     }; \
+    free(mock_src_storage_cfg.base_path); \
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
@@ -192,13 +193,10 @@ Ensure(atfp_hls_test__l2_pl__validate_ok) {
             is_equal_to(atfp_hls_stream__lvl2_plist__parse_header)
         );
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID,
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, UTEST_OPS_UNLINK
+    PATH_CONCAT_THEN_RUN(
+        sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, unlink
     );
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__LVL2_PLIST_VALIDATE__TEARDOWN
 } // end of  atfp_hls_test__l2_pl__validate_ok
 #undef RD_BUF_MAX_SZ
@@ -266,13 +264,10 @@ Ensure(atfp_hls_test__l2_pl__validate_missing_key) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_get(mock_err_info, "transcoder"), is_not_null);
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID,
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, UTEST_OPS_UNLINK
+    PATH_CONCAT_THEN_RUN(
+        sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, unlink
     );
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__LVL2_PLIST_VALIDATE__TEARDOWN
 } // end of  atfp_hls_test__l2_pl__validate_missing_key
 #undef RD_BUF_MAX_SZ
@@ -322,13 +317,10 @@ Ensure(atfp_hls_test__l2_pl__validate_tag_error) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_get(mock_err_info, "transcoder"), is_not_null);
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID,
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, UTEST_OPS_UNLINK
+    PATH_CONCAT_THEN_RUN(
+        sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR "/" HLS_PLAYLIST_FILENAME, unlink
     );
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__LVL2_PLIST_VALIDATE__TEARDOWN
 } // end of  atfp_hls_test__l2_pl__validate_tag_error
 #undef RD_BUF_MAX_SZ

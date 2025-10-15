@@ -1,15 +1,18 @@
 #include <cgreen/cgreen.h>
 #include <cgreen/unit.h>
+#include <sys/stat.h>
 #include <cgreen/mocks.h>
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 #include "../test/unit/transcoder/test.h"
 
-#define UTEST_FILE_BASEPATH     "tmp/utest"
-#define UTEST_ASALOCAL_BASEPATH UTEST_FILE_BASEPATH "/asalocal"
+#define UTEST_FILE_BASEPATH            "tmp/utest"
+#define UTEST_ASALOCAL_BASEPATH        UTEST_FILE_BASEPATH "/asalocal"
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
@@ -17,6 +20,10 @@
 
 #define MOCK_USER_ID       233
 #define MOCK_UPLD_REQ_1_ID 0x150de9a6
+
+#define MOCK_STORAGE_LOCAL_USRBUF_PATH   UTEST_ASALOCAL_BASEPATH "/233"
+#define MOCK_STORAGE_LOCAL_UPLD_REQ_PATH MOCK_STORAGE_LOCAL_USRBUF_PATH "/150de9a6"
+#define MOCK_CRYPTO_KEY_PATH             MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME
 
 static void _utest_hls_cryptokey_req__common_cb(atfp_t *processor) {
     json_t *err_info = processor->data.error;
@@ -34,18 +41,19 @@ static void _utest_hls_cryptokey_req__common_cb(atfp_t *processor) {
 } // end of _utest_hls_cryptokey_req__common_cb
 
 #define HLS__CRYPTO_KEY_ACQUIRE__SETUP \
-    uint8_t    mock_done_flag = 0; \
-    void      *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(); \
-    json_t    *mock_doc_metadata = json_object(); \
-    json_t    *mock_err_info = json_object(); \
-    asa_cfg_t  mock_storage_cfg = { \
-         .alias = MOCK_STORAGE_ALIAS, \
-         .base_path = UTEST_ASALOCAL_BASEPATH, \
-         .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close} \
+    uint8_t     mock_done_flag = 0; \
+    void       *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
+    uv_loop_t  *loop = uv_default_loop(); \
+    json_t     *mock_spec = json_object(); \
+    json_t     *mock_doc_metadata = json_object(); \
+    json_t     *mock_err_info = json_object(); \
+    app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
+    const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
+    asa_cfg_t   mock_storage_cfg = { \
+          .alias = MOCK_STORAGE_ALIAS, \
+          .base_path = sys_basepath, \
+          .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close} \
     }; \
-    app_cfg_t *mock_appcfg = app_get_global_cfg(); \
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
     mock_appcfg->storages.entries = &mock_storage_cfg; \
@@ -63,20 +71,16 @@ static void _utest_hls_cryptokey_req__common_cb(atfp_t *processor) {
     } \
     json_object_set_new(mock_spec, "loop", json_integer((uint64_t)loop)); \
     json_object_set_new(mock_spec, "metadata", mock_doc_metadata); \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, RUNNER_CREATE_FOLDER);
 
 #define HLS__CRYPTO_KEY_ACQUIRE__TEARDOWN \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    rmdir(UTEST_ASALOCAL_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
@@ -122,9 +126,7 @@ Ensure(atfp_hls_test__key_req__ok) {
         when(out_chunkbytes, is_equal_to_string(UTEST__EXPECT_kEY_OCTET))
     );
     mock_fp->internal.op.acquire_key(mock_fp);
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_CRYPTO_KEY_PATH, unlink);
     HLS__CRYPTO_KEY_ACQUIRE__TEARDOWN
 #undef UTEST__CRYPTOKEY_MIN_CONTENT
 #undef UTEST__CRYPTOKEY_CHOSEN_ID
@@ -176,9 +178,7 @@ Ensure(atfp_hls_test__key_req__missing_item) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_get(mock_err_info, "transcoder"), is_not_null);
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_CRYPTO_KEY_PATH, unlink);
     HLS__CRYPTO_KEY_ACQUIRE__TEARDOWN
 #undef UTEST__CRYPTOKEY_MIN_CONTENT
 #undef UTEST__CRYPTOKEY_CHOSEN_ID

@@ -125,6 +125,7 @@ static void _atfp__hls_init__dst_version_folder_cb(asa_op_base_cfg_t *asa_dst, A
         asa_local_dstdata->loop = asa_local_srcdata->loop;
         asa_local_dstdata->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
         asa_local_dstdata->super.op.mkdir.cb = atfp_hls__create_local_workfolder_cb;
+        asa_local_dstdata->super.storage = asa_local_srcdata->super.storage;
     }
     result = app_storage_localfs_mkdir(&asa_local_dstdata->super, 1);
     if (result != ASTORAGE_RESULT_ACCEPT) {

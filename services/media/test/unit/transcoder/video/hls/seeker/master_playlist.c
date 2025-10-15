@@ -7,6 +7,7 @@
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 #include "../test/unit/transcoder/test.h"
@@ -27,19 +28,21 @@
 #define MOCK__QUERYPARAM_LABEL__RES_ID "ut_doc_id"
 #define MOCK__QUERYPARAM_LABEL__DETAIL "ut_detail_keyword"
 
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+
 #define HLS__BUILD_MST_PLIST_START__SETUP \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(); \
-    json_t    *mock_err_info = json_object(); \
-    app_cfg_t *mock_appcfg = app_get_global_cfg(); \
-    asa_cfg_t  mock_src_storage_cfg = { \
-         .alias = MOCK_STORAGE_ALIAS, \
-         .base_path = UTEST_ASASRC_BASEPATH, \
-         .ops = \
+    uv_loop_t  *loop = uv_default_loop(); \
+    json_t     *mock_spec = json_object(), *mock_err_info = json_object(); \
+    app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
+    const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
+    asa_cfg_t   mock_src_storage_cfg = { \
+          .alias = MOCK_STORAGE_ALIAS, \
+          .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, strdup), \
+          .ops = \
             {.fn_scandir = app_storage_localfs_scandir, \
-              .fn_scandir_next = app_storage_localfs_scandir_next, \
-              .fn_close = app_storage_localfs_close, \
-              .fn_typesize = app_storage_localfs_typesize} \
+               .fn_scandir_next = app_storage_localfs_scandir_next, \
+               .fn_close = app_storage_localfs_close, \
+               .fn_typesize = app_storage_localfs_typesize} \
     }; \
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
@@ -55,8 +58,8 @@
                   .storage = {.handle = NULL}}}, \
         .internal = {.op = {.build_master_playlist = atfp_hls_stream__build_mst_plist}} \
     }; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASASRC_BASEPATH, S_IRWXU); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, RUNNER_CREATE_FOLDER); \
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
     UTEST_RUN_OPERATION_WITH_PATH( \
         UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
@@ -78,8 +81,8 @@
         UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
     ); \
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    rmdir(UTEST_ASASRC_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
     { \
         asa_op_base_cfg_t *asa_src = mock_fp.super.data.storage.handle; \
         if (asa_src) \
@@ -88,6 +91,7 @@
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
+    free(mock_src_storage_cfg.base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info);
 
@@ -125,8 +129,10 @@ static void _utest_hls_build_mst_plist_start__done_cb(atfp_t *processor) {
 #define UTEST_RESOURCE_PATH_VERSION_2 ATFP__COMMITTED_FOLDER_NAME "/" UTEST_RESOURCE_VERSION_2
 #define UTEST_RESOURCE_PATH_VERSION_3 ATFP__COMMITTED_FOLDER_NAME "/" UTEST_RESOURCE_VERSION_3
 Ensure(atfp_hls_test__build_mst_plist__start_ok_1) {
-    HLS__BUILD_MST_PLIST_START__SETUP { // master playlist in each version folder should provide
-                                        // `bandwidth` attribute in `ext-x-stream-inf` tag
+    // master playlist in each version folder should provide
+    // `bandwidth` attribute in `ext-x-stream-inf` tag
+    HLS__BUILD_MST_PLIST_START__SETUP;
+    {
         UTEST_RUN_OPERATION_WITH_PATH(
             UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, UTEST_RESOURCE_PATH_VERSION_1,
             UTEST_OPS_MKDIR
@@ -247,28 +253,25 @@ static __attribute__((optimize("O0"))) void _utest_hls_build_mst_plist_continue_
         *done_flg_p = 1;
 } // end of _utest_hls_build_mst_plist_continue__done_cb
 
-#define UTEST_OPS_DUP_SCANDIR_PATH(_path, _path_sz) \
-    { mock_scandir_path = strndup(_path, _path_sz); }
+// relative path concatenated by `MOCK_USER_ID`, `MOCK_UPLD_REQ_1_ID`
+// and `ATFP__COMMITTED_FOLDER_NAME`
+#define MOCK_SCANDIR_PATH "426/d150de7a/committed"
 
 #define HLS__BUILD_MST_PLIST_CONTINUE__SETUP(_versions, _num_versions) \
-    char       mock_rd_buf[RD_BUF_MAX_SZ] = {0}; \
-    uint8_t    mock_done_flag = 0; \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(); \
-    json_t    *mock_err_info = json_object(); \
-    asa_cfg_t  mock_src_storage_cfg = { \
-         .alias = MOCK_STORAGE_ALIAS, \
-         .base_path = UTEST_ASASRC_BASEPATH, \
-         .ops = \
+    const char *sys_basepath = getenv("SYS_BASE_PATH"); \
+    char        mock_rd_buf[RD_BUF_MAX_SZ] = {0}; \
+    uint8_t     mock_done_flag = 0; \
+    uv_loop_t  *loop = uv_default_loop(); \
+    json_t     *mock_spec = json_object(); \
+    json_t     *mock_err_info = json_object(); \
+    asa_cfg_t   mock_src_storage_cfg = { \
+          .alias = MOCK_STORAGE_ALIAS, \
+          .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, strdup), \
+          .ops = \
             {.fn_open = app_storage_localfs_open, \
-              .fn_close = app_storage_localfs_close, \
-              .fn_read = app_storage_localfs_read} \
+               .fn_close = app_storage_localfs_close, \
+               .fn_read = app_storage_localfs_read} \
     }; \
-    char *mock_scandir_path = NULL; \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, ATFP__COMMITTED_FOLDER_NAME, \
-        UTEST_OPS_DUP_SCANDIR_PATH \
-    ); \
     void                *mock_asa_src_cb_args[NUM_CB_ARGS_ASAOBJ]; \
     asa_op_localfs_cfg_t mock_asa_src = { \
         .loop = loop, \
@@ -277,7 +280,7 @@ static __attribute__((optimize("O0"))) void _utest_hls_build_mst_plist_continue_
              .op = \
                  {.scandir = \
                       {.fileinfo = {.size = _num_versions, .rd_idx = 0, .data = _versions}, \
-                       .path = mock_scandir_path}, \
+                       .path = MOCK_SCANDIR_PATH}, \
                   .read = {.dst_max_nbytes = RD_BUF_MAX_SZ, .dst = &mock_rd_buf[0]}}, \
              .cb_args = {.entries = mock_asa_src_cb_args, .size = NUM_CB_ARGS_ASAOBJ}} \
     }; \
@@ -294,8 +297,8 @@ static __attribute__((optimize("O0"))) void _utest_hls_build_mst_plist_continue_
     }; \
     mock_asa_src_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp.super; \
     mock_asa_src_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &mock_done_flag; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASASRC_BASEPATH, S_IRWXU); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, RUNNER_CREATE_FOLDER); \
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
     UTEST_RUN_OPERATION_WITH_PATH( \
         UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
@@ -321,9 +324,9 @@ static __attribute__((optimize("O0"))) void _utest_hls_build_mst_plist_continue_
         UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
     ); \
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    rmdir(UTEST_ASASRC_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
-    free(mock_scandir_path); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
+    free(mock_src_storage_cfg.base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info);
 
