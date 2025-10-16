@@ -2,6 +2,9 @@
 #include <unistd.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
+
+#include "app_cfg.h"
+#include "utils.h"
 #include "timer_poll.h"
 
 static void mock_timerpoll_deinit_cb(app_timer_poll_t *target) { mock(target); }
@@ -9,8 +12,9 @@ static void mock_timerpoll_deinit_cb(app_timer_poll_t *target) { mock(target); }
 Ensure(app_timerpoll_init_failure_test) {
     uv_loop_t       *loop = uv_default_loop();
     app_timer_poll_t handle = {0};
-    int              fd = -1;
-    int              err = app_timer_poll_init(loop, &handle, fd);
+    app_envvars_t    env = {0};
+    app_load_envvars(&env);
+    int fd = -1, err = app_timer_poll_init(loop, &handle, fd);
     assert_that(err, is_equal_to(UV_EINVAL));
     { // assume another thread hasn't completed closing the timer-poll handle
         fd = 234;
@@ -27,11 +31,11 @@ Ensure(app_timerpoll_init_failure_test) {
     }
     { // pass regular file descriptor is NOT allowed by epoll
         char tmpfile_path[30] = "./tmp/timerpoll_init_XXXXXX";
-        int  fd = mkstemp(&tmpfile_path[0]);
+        int  fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, tmpfile_path, mkstemp);
         err = app_timer_poll_init(loop, &handle, fd);
         assert_that(err, is_equal_to(UV_EPERM));
         close(fd);
-        unlink(&tmpfile_path[0]);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, tmpfile_path, unlink);
     }
 } // end of app_timerpoll_init_failure_test
 
