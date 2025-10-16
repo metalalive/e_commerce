@@ -178,13 +178,11 @@ void atfp_storage_image_remove_version(atfp_t *processor, const char *status) {
     assert(_upld_req_id);
     assert(version);
     assert(asa_dst->op.unlink.path == NULL);
-    size_t fullpath_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + strlen(status) + 1 + strlen(version) + 1;
+    size_t fullpath_sz = USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + strlen(status) + 1 +
+                         strlen(version) + 1;
     char   fullpath[fullpath_sz];
-    size_t nwrite = snprintf(
-        &fullpath[0], fullpath_sz, "%s/%d/%08x/%s/%s", asa_dst->storage->base_path, _usr_id, _upld_req_id,
-        status, version
-    );
+    size_t nwrite =
+        snprintf(&fullpath[0], fullpath_sz, "%d/%08x/%s/%s", _usr_id, _upld_req_id, status, version);
     fullpath[nwrite++] = 0x0; // NULL-terminated
     assert(nwrite <= fullpath_sz);
     asa_dst->op.unlink.path = &fullpath[0];
