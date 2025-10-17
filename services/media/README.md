@@ -67,9 +67,9 @@ flowchart LR
 ## Prerequisite 
 | type | name | version required |
 |------|------|------------------|
-| Database | MariaDB | `11.2.3` |
-| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.21.0` |
-| | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
+| Database | MariaDB | `11.8.2` |
+| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.28.3` |
+| | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 14.2.0` |
 | Dependency | [H2O](https://github.com/h2o/h2o) | after 2024 Dec |
 | | [OpenSSL](https://github.com/openssl/openssl) | `>= 3.1.4` |
 | | [brotli](https://github.com/google/brotli) | `>= 1.0.2` |
@@ -81,13 +81,13 @@ flowchart LR
 | | [p11-kit](https://github.com/p11-glue/p11-kit) | `>= 0.24.0` |
 | | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.4.1` |
 | | [Rabbitmq/C](https://github.com/alanxz/rabbitmq-c) | `>= 0.11.0` |
-| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.8` |
+| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.4.5` |
 | | [libcurl](https://github.com/curl/curl) | `>= 7.69.1` |
 | Test | [nghttp2](https://github.com/nghttp2/nghttp2) | `>= 1.46.0` |
 | | [cgreen](https://github.com/cgreen-devs/cgreen) | `>= 2.14` |
-| Automation | python interpreter | `>= 3.9.6` |
+| Automation | python interpreter | `>= 3.13.7` |
 | | python packages | [detail](./py_venv_requirement.txt) |
-| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
+| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.33.0` |
 | | | |
 | | | |
 
@@ -140,10 +140,11 @@ cd /PATH/TO/PROJECT_HOME/services/media
 mkdir -p build
 cd build
 
-CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
-    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DPYVENV_PATH="/PATH/TO/python/venv" \
-    -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
-    -DCDN_USERNAME=<OS_USER_NAME>   -DCDN_USERGRP=<OS_USER_GROUP>   ..
+CC=$(which gcc)  PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
+    cmake  -DCMAKE_BUILD_TYPE=Release  -DCMAKE_EXPORT_COMPILE_COMMANDS=1  ..
+
+# alternatively , run other make commands that don't require package check
+cmake  -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DONLY_REFORMAT=ON ..
 ```
 Note
 - `<YOUR_PATH_TO_PKG_CFG>` should include:
@@ -162,7 +163,6 @@ Note
   - `/PATH/TO/libcurl/pkgconfig`
   - `/PATH/TO/nghttp2/pkgconfig`
   - `/PATH/TO/openssl/pkgconfig`
-- omit parameters `NGINX_INSTALL_PATH`, `CDN_USERNAME`, `CDN_USERGRP` if you don't need reverse proxy
 
 
 ### Compile and Run
@@ -178,7 +178,9 @@ Note
 
 ### Test
 ```bash
-docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-test.yml \
+docker compose --file ./infra/docker-compose-utest.yml --env-file ./infra/interpolation-test.env up --detach
+
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-itest.yml \
     --env-file ./infra/interpolation-test.env up --detach
 ```
 ### Reference

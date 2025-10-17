@@ -11,7 +11,9 @@ services:
     env_file:
       - ./container-test.env
     working_dir: /app/media/build
-    command: ./unit_test.out
+    # gdb -args # for debugging
+    # valgrind --leak-check=full # for extra memory check
+    command: valgrind --leak-check=full ./unit_test.out
     volumes:
       - ../data/test:/app/media/data/test:ro
       - ../../tmp/proc:/app/tmp/proc

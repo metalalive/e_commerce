@@ -516,16 +516,6 @@ endif() # end of ONLY_REFORMAT
 #     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
 #     DEPENDS ${RPC_CONSUMER_EXE_NAME})
 # 
-# ADD_CUSTOM_TARGET(unit_test
-#     # uncomment the following line, make cgreen test suite run in single (main) process
-#     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
-#     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-#     ##gdb -args # uncomment this line for debugging
-#     valgrind --leak-check=full # uncomment this line for extra memory check
-#     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
-#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-#     DEPENDS ${UNIT_TEST_EXE_NAME})
-# 
 # ADD_CUSTOM_TARGET(itest_app_server
 #     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
 #     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
