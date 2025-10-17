@@ -7,7 +7,12 @@
 #include <cgreen/unit.h>
 #include <uv.h>
 
+#include "app_cfg.h"
+#include "utils.h"
 #include "transcoder/video/mp4.h"
+
+#define RUNNER_CREATE_FOLDER(fullpath)          mkdir(fullpath, S_IRWXU)
+#define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
 
 #define LOCAL_TMPBUF_BASEPATH       "tmp/buffer/media/test"
 #define UNITTEST_FOLDER_NAME        "utest"
@@ -49,6 +54,8 @@ static void mock_mp4_asa_src_open_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result
 
 static __attribute__((optimize("O0"))) void
 utest_init_mp4_preload(atfp_mp4_t *mp4proc, void (*prepare_fchunk_fn)(atfp_mp4_t *)) {
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
     atfp_t *processor = &mp4proc->super;
     processor->data.error = json_object();
     processor->data.spec = json_object();
@@ -65,6 +72,7 @@ utest_init_mp4_preload(atfp_mp4_t *mp4proc, void (*prepare_fchunk_fn)(atfp_mp4_t
       .fn_close = app_storage_localfs_close,
       .fn_read = app_storage_localfs_read,
       .fn_write = app_storage_localfs_write};
+    src_storage->base_path = env.sys_base_path;
     asa_src_cfg->loop = asa_local_cfg->loop = loop;
     asa_src_cfg->super.storage = src_storage;
     asa_src_cfg->super.cb_args.size = NUM_CB_ARGS_ASAOBJ;
@@ -78,9 +86,9 @@ utest_init_mp4_preload(atfp_mp4_t *mp4proc, void (*prepare_fchunk_fn)(atfp_mp4_t
     atfp_asa_map_set_source(map, &asa_src_cfg->super);
     atfp_asa_map_set_localtmp(map, asa_local_cfg);
     { //  create source file chunks for tests
-        mkdir(UNITTEST_FULLPATH, S_IRWXU);
-        mkdir(PRELOAD_BASEPATH, S_IRWXU);
-        mkdir(PRELOAD_SRC_BASEPATH, S_IRWXU);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UNITTEST_FULLPATH, RUNNER_CREATE_FOLDER);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, PRELOAD_BASEPATH, RUNNER_CREATE_FOLDER);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, PRELOAD_SRC_BASEPATH, RUNNER_CREATE_FOLDER);
         prepare_fchunk_fn(mp4proc);
     }
     { // open first chunk of the source
@@ -107,7 +115,9 @@ static __attribute__((optimize("O0"))) void utest_deinit_mp4_preload(atfp_mp4_t 
     asa_op_localfs_cfg_t *asa_src_cfg = (asa_op_localfs_cfg_t *)processor->data.storage.handle;
     atfp_asa_map_t       *map = asa_src_cfg->super.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t *asa_local_cfg = atfp_asa_map_get_localtmp(map);
-    asa_cfg_t            *src_storage = asa_src_cfg->super.storage;
+
+    asa_cfg_t  *src_storage = asa_src_cfg->super.storage;
+    const char *sys_basepath = src_storage->base_path;
     if (asa_src_cfg) {
         if (asa_src_cfg->super.cb_args.entries) {
             free(asa_src_cfg->super.cb_args.entries);
@@ -151,16 +161,12 @@ static __attribute__((optimize("O0"))) void utest_deinit_mp4_preload(atfp_mp4_t 
         json_decref(processor->data.spec);
         processor->data.spec = NULL;
     }
-    if (1) {
-    }
-    if (1) {
-    }
-    if (1) {
-    }
     {
+#define RUNNER_SCANDIR(fullpath) scandir(fullpath, &namelist, NULL, alphasort)
+
 #define PRELOAD_SRCFILE_TEMPLATE PRELOAD_SRC_BASEPATH "/%s"
         struct dirent **namelist = NULL;
-        int             n = scandir(PRELOAD_SRC_BASEPATH, &namelist, NULL, alphasort);
+        int             n = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH, RUNNER_SCANDIR);
         for (int idx = 0; idx < n; idx++) {
             // printf("%s\n", namelist[idx]->d_name);
             if (namelist[idx]->d_name[0] != '.') {
@@ -169,18 +175,18 @@ static __attribute__((optimize("O0"))) void utest_deinit_mp4_preload(atfp_mp4_t 
                 int    nwrite = snprintf(&path[0], sz, PRELOAD_SRCFILE_TEMPLATE, namelist[idx]->d_name);
                 path[nwrite++] = 0x0;
                 // printf("%s\n", &path[0]);
-                assert(sz >= nwrite);
-                unlink(&path[0]);
+                assert(sz >= nwrite); // Ensure that the snprintf operation didn't truncate the path
+                PATH_CONCAT_THEN_RUN(sys_basepath, &path[0], unlink);
             }
             free(namelist[idx]);
         }
         free(namelist);
-#undef PRELOAD_SRCFILE_TEMPLATE
     }
-    unlink(LOCAL_TMPBUF_PATH);
-    rmdir(PRELOAD_SRC_BASEPATH);
-    rmdir(PRELOAD_BASEPATH);
-    rmdir(UNITTEST_FULLPATH);
+    PATH_CONCAT_THEN_RUN(sys_basepath, LOCAL_TMPBUF_PATH, unlink);
+#undef PRELOAD_SRCFILE_TEMPLATE
+    PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH, rmdir);
+    PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_BASEPATH, rmdir);
+    PATH_CONCAT_THEN_RUN(sys_basepath, UNITTEST_FULLPATH, rmdir);
 } // end of utest_deinit_mp4_preload
 
 static void utest_atfp_mp4__preload_stream_info__done_ok(atfp_mp4_t *mp4proc) {
@@ -257,11 +263,16 @@ static void utest_atfp_mp4__preload_packet__done_ok(atfp_mp4_t *mp4proc) {
 
 #define NUM_FILE_CHUNKS 4
 static void preload_stream_info_ok_1__prepare_fchunks(atfp_mp4_t *mp4proc) {
-    int fds[NUM_FILE_CHUNKS] = {0};
-    fds[0] = open(PRELOAD_SRC_BASEPATH "/1", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[1] = open(PRELOAD_SRC_BASEPATH "/2", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[2] = open(PRELOAD_SRC_BASEPATH "/3", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[3] = open(PRELOAD_SRC_BASEPATH "/4", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    int     fds[NUM_FILE_CHUNKS] = {0};
+    atfp_t *processor = &mp4proc->super;
+
+    asa_op_localfs_cfg_t *asa_src_cfg = (asa_op_localfs_cfg_t *)processor->data.storage.handle;
+    asa_cfg_t            *src_storage = asa_src_cfg->super.storage;
+    const char           *sys_basepath = src_storage->base_path;
+    fds[0] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/1", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[1] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/2", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[2] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/3", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[3] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/4", RUNNER_OPEN_WRONLY_CREATE_USR);
     uint32_t ftyp_sz = strlen(MP4_ATOM_FTYP) + sizeof(uint32_t);
     uint32_t free_sz = strlen(MP4_ATOM_FREE) + sizeof(uint32_t);
     uint32_t moov_sz = strlen(MP4_ATOM_MOOV) + sizeof(uint32_t);
@@ -329,13 +340,18 @@ Ensure(atfp_mp4_test__preload_stream_info_ok_1) { // `mdat` comes after `moov`
 
 #define NUM_FILE_CHUNKS 6
 static void preload_stream_info_ok_2__prepare_fchunks(atfp_mp4_t *mp4proc) {
-    int fds[NUM_FILE_CHUNKS] = {0};
-    fds[0] = open(PRELOAD_SRC_BASEPATH "/1", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[1] = open(PRELOAD_SRC_BASEPATH "/2", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[2] = open(PRELOAD_SRC_BASEPATH "/3", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[3] = open(PRELOAD_SRC_BASEPATH "/4", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[4] = open(PRELOAD_SRC_BASEPATH "/5", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[5] = open(PRELOAD_SRC_BASEPATH "/6", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    int     fds[NUM_FILE_CHUNKS] = {0};
+    atfp_t *processor = &mp4proc->super;
+
+    asa_op_localfs_cfg_t *asa_src_cfg = (asa_op_localfs_cfg_t *)processor->data.storage.handle;
+    asa_cfg_t            *src_storage = asa_src_cfg->super.storage;
+    const char           *sys_basepath = src_storage->base_path;
+    fds[0] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/1", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[1] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/2", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[2] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/3", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[3] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/4", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[4] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/5", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[5] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/6", RUNNER_OPEN_WRONLY_CREATE_USR);
     uint32_t ftyp_sz = strlen(MP4_ATOM_FTYP) + sizeof(uint32_t);
     uint32_t moov_sz = strlen(MP4_ATOM_MOOV) + sizeof(uint32_t);
     uint32_t mdat_sz = strlen(MP4_ATOM_MDAT) + sizeof(uint32_t);
@@ -422,10 +438,15 @@ static void utest_atfp_mp4__preload_stream_info__done_error(atfp_mp4_t *mp4proc)
 
 #define NUM_FILE_CHUNKS 3
 static void preload_stream_info_corrupt_moov__prepare_fchunks(atfp_mp4_t *mp4proc) {
-    int fds[NUM_FILE_CHUNKS] = {0};
-    fds[0] = open(PRELOAD_SRC_BASEPATH "/1", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[1] = open(PRELOAD_SRC_BASEPATH "/2", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    fds[2] = open(PRELOAD_SRC_BASEPATH "/3", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    int     fds[NUM_FILE_CHUNKS] = {0};
+    atfp_t *processor = &mp4proc->super;
+
+    asa_op_localfs_cfg_t *asa_src_cfg = (asa_op_localfs_cfg_t *)processor->data.storage.handle;
+    asa_cfg_t            *src_storage = asa_src_cfg->super.storage;
+    const char           *sys_basepath = src_storage->base_path;
+    fds[0] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/1", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[1] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/2", RUNNER_OPEN_WRONLY_CREATE_USR);
+    fds[2] = PATH_CONCAT_THEN_RUN(sys_basepath, PRELOAD_SRC_BASEPATH "/3", RUNNER_OPEN_WRONLY_CREATE_USR);
     uint32_t ftyp_sz = strlen(MP4_ATOM_FTYP) + sizeof(uint32_t);
     uint32_t moov_sz = strlen(MP4_ATOM_MOOV) + sizeof(uint32_t);
     uint32_t mdat_sz = strlen(MP4_ATOM_MDAT) + sizeof(uint32_t);

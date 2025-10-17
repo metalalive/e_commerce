@@ -3,10 +3,17 @@
 #include <cgreen/mocks.h>
 #include <uv.h>
 
+#include "app_cfg.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/video/common.h"
 
 #define UTEST_STRINGIFY(x) #x
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define RUNNER_ACCESS_F_OK(fullpath)   access(fullpath, F_OK)
+
+#define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
 
 #define UTEST_FILE_BASEPATH     "tmp/utest"
 #define UTEST_ASALOCAL_BASEPATH UTEST_FILE_BASEPATH "/asalocal"
@@ -29,11 +36,14 @@ static void utest_atfp_done_usr_cb(atfp_t *processor) {
 } // end of utest_atfp_done_usr_cb
 
 #define ATFP_HLS_TEST__RMFILE__SETUP \
-    void      *asa_dst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    uint8_t    done_flag = 0; \
-    uv_loop_t *loop = uv_default_loop(); \
-    asa_cfg_t  mock_storage_cfg = \
-        {.base_path = UTEST_FILE_BASEPATH, \
+    void         *asa_dst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    uint8_t       done_flag = 0; \
+    uv_loop_t    *loop = uv_default_loop(); \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
+    const char *sys_basepath = env.sys_base_path; \
+    asa_cfg_t   mock_storage_cfg = \
+        {.base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, strdup), \
          .ops = { \
              .fn_scandir = app_storage_localfs_scandir, \
              .fn_scandir_next = app_storage_localfs_scandir_next, \
@@ -58,25 +68,39 @@ static void utest_atfp_done_usr_cb(atfp_t *processor) {
          }}; \
     asa_dst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
     asa_dst_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR, S_IRWXU); \
-    mkdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR, S_IRWXU); \
-    mkdir( \
-        UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS, \
-        S_IRWXU \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR, \
+        RUNNER_CREATE_FOLDER \
     ); \
-    mkdir(UTEST_TARGET_PATH, S_IRWXU); \
-    int fd = open(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, \
+        UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS, \
+        RUNNER_CREATE_FOLDER \
+    ); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH, RUNNER_CREATE_FOLDER); \
+    int fd = PATH_CONCAT_THEN_RUN( \
+        sys_basepath, UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1, RUNNER_OPEN_WRONLY_CREATE_USR \
+    ); \
     close(fd); \
-    fd = open(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+    fd = PATH_CONCAT_THEN_RUN( \
+        sys_basepath, UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2, RUNNER_OPEN_WRONLY_CREATE_USR \
+    ); \
     close(fd);
 
 #define ATFP_HLS_TEST__RMFILE__TEARDOWN \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, \
+        UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS, \
+        rmdir \
     ); \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR); \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR, rmdir \
+    ); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
+    free(mock_storage_cfg.base_path); \
     json_decref(mock_err_info);
 
 #define UTEST_USER_ID            426
@@ -93,35 +117,31 @@ static void utest_atfp_done_usr_cb(atfp_t *processor) {
 #define UTEST_FILE_NAME_2 "segment_xyz"
 Ensure(atfp_video_test__remove_version_ok) {
     ATFP_HLS_TEST__RMFILE__SETUP;
-    {
-        atfp_storage_video_remove_version(&mock_fp, UTEST_TRANSCODE_STATUS);
-        expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
+    atfp_storage_video_remove_version(&mock_fp, UTEST_TRANSCODE_STATUS);
+    expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
+    uv_run(loop, UV_RUN_ONCE);
+    assert_that(mock_asa_dst.super.op.scandir.fileinfo.size, is_equal_to(UTEST_NUM_FILES));
+    while (!done_flag)
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.size, is_equal_to(UTEST_NUM_FILES));
-        while (!done_flag)
-            uv_run(loop, UV_RUN_ONCE);
-        assert_that(access(UTEST_TARGET_PATH, F_OK), is_equal_to(-1));
-        assert_that(json_object_size(mock_err_info), is_equal_to(0));
-    }
+    assert_that(PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH, RUNNER_ACCESS_F_OK), is_equal_to(-1));
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
     ATFP_HLS_TEST__RMFILE__TEARDOWN;
 } // end of atfp_video_test__remove_version_ok
 
 Ensure(atfp_video_test__remove_version_missing_in_middle) {
     ATFP_HLS_TEST__RMFILE__SETUP;
-    {
-        atfp_storage_video_remove_version(&mock_fp, UTEST_TRANSCODE_STATUS);
-        expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
+    atfp_storage_video_remove_version(&mock_fp, UTEST_TRANSCODE_STATUS);
+    expect(utest_atfp_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
+    uv_run(loop, UV_RUN_ONCE);
+    assert_that(mock_asa_dst.super.op.scandir.fileinfo.size, is_equal_to(UTEST_NUM_FILES));
+    assert_that(mock_asa_dst.super.op.scandir.fileinfo.rd_idx, is_less_than(UTEST_NUM_FILES));
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1, unlink);
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2, unlink);
+    while (!done_flag)
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.size, is_equal_to(UTEST_NUM_FILES));
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.rd_idx, is_less_than(UTEST_NUM_FILES));
-        unlink(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1);
-        unlink(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2);
-        while (!done_flag)
-            uv_run(loop, UV_RUN_ONCE);
-        assert_that(access(UTEST_TARGET_PATH, F_OK), is_equal_to(0));
-        assert_that(json_object_size(mock_err_info), is_greater_than(0));
-        rmdir(UTEST_TARGET_PATH);
-    }
+    assert_that(PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH, RUNNER_ACCESS_F_OK), is_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_TARGET_PATH, rmdir);
     ATFP_HLS_TEST__RMFILE__TEARDOWN;
 } // end of atfp_video_test__remove_version_missing_in_middle
 #undef UTEST_NUM_FILES
