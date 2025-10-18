@@ -91,7 +91,7 @@ RUN ./configure --prefix=${FFM_INSTALLED_PATH} --enable-libx264 --enable-libx265
 
 
 WORKDIR  ${DST_APP_PATH}
-COPY media/CMakeLists.txt  media/py_venv_requirement.txt  .
+COPY media/CMakeLists.txt  .
 COPY media/include   ./include
 COPY media/src       ./src
 
@@ -117,7 +117,7 @@ RUN make unit_test.out && make itest_app_server.out && make itest_rpc_consumer.o
 # docker build --target build -t myapp:build .
 
 # ---- Stage 2: runtime ----
-FROM python:3.13-slim as final0
+FROM debian:trixie-slim as final0
 ARG DST_APP_PATH
 ARG H2O_INSTALLED_PATH
 ARG FFM_INSTALLED_PATH
@@ -156,10 +156,6 @@ COPY --from=builder0 ${H2O_INSTALLED_PATH}  .
 
 WORKDIR ${FFM_INSTALLED_PATH}
 COPY --from=builder0 ${FFM_INSTALLED_PATH}  .
-
-WORKDIR  ${DST_APP_PATH}
-COPY --from=builder0  ${DST_APP_PATH}/py_venv_requirement.txt  .
-RUN pip3 install -r ./py_venv_requirement.txt
 
 WORKDIR  ${DST_APP_PATH}/build
 COPY --from=builder0 ${DST_APP_PATH}/build/app_server.out \

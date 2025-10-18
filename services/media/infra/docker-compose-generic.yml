@@ -49,3 +49,51 @@ services:
       - ../liquibase.properties:/liquibase/liquibase.properties:ro
     command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3313/ecommerce_media --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
 
+  renew-cert-media:
+    container_name: media-unknown-cert-renew
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    volumes:
+      - ./task_loader.py:/app/media/infra/task_loader.py:ro
+      - ./renew_certs.py:/app/media/infra/renew_certs.py:ro
+      - ./render_template.py:/app/media/infra/render_template.py:ro
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python -m infra.task_loader AppSrvCertRenewal $${CONFIG_FILE_PATH}"]
+
+  api-server-media:
+    container_name: media-unknown-apisrv
+    image: media-backend-base:latest
+    pull_policy: never
+    environment:
+      - DB_PORT=3313
+      - SYS_BASE_PATH=/app
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    # gdb -args # for debugging
+    # valgrind --leak-check=full # for extra memory check
+    command: ["/bin/sh", "-c", "./app_server.out media/build/app_server.out $${CONFIG_FILE_PATH}"]
+    depends_on:
+      db-schema-migration-up-media:
+        condition: service_completed_successfully
+      renew-cert-media:
+        condition: service_completed_successfully
+
+  #rpc-consumer-media:
+  #  container_name: media-unknown-rpcconsumer
+  #  image: media-backend-base:latest
+  #  pull_policy: never
+  #  restart: no
+  #  environment:
+  #    - DB_PORT=3313
+  #    - SYS_BASE_PATH=/app
+  #    - SERVICE_BASE_PATH=/app/media
+  #  stop_signal: SIGTERM
+  #  working_dir: /app/media/build
+  #  command: ["/bin/sh", "-c", "./rpc_consumer.out  $${CONFIG_FILE_PATH}"]
+  #  depends_on:
+  #    db-schema-migration-up-media:
+  #      condition: service_completed_successfully
+

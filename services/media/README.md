@@ -99,7 +99,8 @@ Note:
 For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/media-ci.yaml)
 
 ```bash
-docker build --file ./media/infra/Dockerfile --tag media-backend-base:latest .
+docker build --file ./media/infra/apps.dockerfile --tag media-backend-base:latest .
+docker build --file ./media/infra/helpertool.dockerfile --tag media-helper-tool:latest .
 ```
 
 

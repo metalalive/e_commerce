@@ -1,14 +1,14 @@
 {
     "pid_file" : {
-        "app_server"  :"tmp/proc/media_itest_app_server.pid",
-        "rpc_consumer":"tmp/proc/media_itest_rpc_consumer.pid"
+        "app_server"  :"proc/media_itest_app_server.pid",
+        "rpc_consumer":"proc/media_itest_rpc_consumer.pid"
     },
     "error_log": {
-        "app_server"  :"tmp/log/test/media_app_server.err",
-        "rpc_consumer":"tmp/log/test/media_rpc_consumer.err"
+        "app_server"  :"log/media_app_server.err",
+        "rpc_consumer":"log/media_rpc_consumer.err"
     },
     "access_log": {
-        "path":"tmp/log/test/media_app_server.access.log",
+        "path":"log/media_app_server.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
@@ -16,8 +16,8 @@
             "port": 8010,
             "host":"localhost",
             "ssl":{
-                "cert_file"   : "media/data/certs/test/localhost_8010.crt",
-                "privkey_file": "media/data/certs/test/localhost_8010.private.key",
+                "cert_file"   : "media/data/certs/localhost_8010.crt",
+                "privkey_file": "media/data/certs/localhost_8010.private.key",
                 "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
                 "min_version": 772
             },
@@ -41,22 +41,22 @@
         }
     ],
     "ca":{
-        "cert_file"   : "media/data/certs/test/ca.crt",
-        "privkey_file": "media/data/certs/test/ca.private.key"
+        "cert_file"   : "media/data/certs/ca.crt",
+        "privkey_file": "media/data/certs/ca.private.key"
     },
     "max_connections": 64,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "tcp_fastopen_queue_size": 104,
     "auth_keystore": {
-        "url":"https://localhost:8008/jwks",
-        "ca_path": "media/data/certs/test/ca.crt",
+        "url":"https://usrmgt-dev-apisrv:8008/jwks",
+        "ca_path": "media/data/certs/ca.crt",
         "ca_form": "PEM"
     },
     "databases": [
         {
             "alias": "db_server_1",
-            "db_name": "test_ecommerce_media",
+            "db_name": "ecommerce_media",
             "max_connections": 3,
             "idle_timeout": 14,
             "skip_tls": true,
@@ -69,7 +69,7 @@
         },
         {
             "alias": "app_db_migration",
-            "db_name": "test_ecommerce_media",
+            "db_name": "ecommerce_media",
             "max_connections": 1,
             "idle_timeout": 21,
             "skip_tls": true,
@@ -184,7 +184,7 @@
         }
     },
     "tmp_buf": {
-        "path": "tmp/buffer/media/test",
+        "path": "tmp/buffer",
         "threshold_in_bytes": 102400
     },
     "test": {

@@ -211,9 +211,8 @@ class DevCertRenewal:
     def _process_renewal_flow(self, argv: list, server_certs_cfg_getter):
         assert len(argv) == 1, "arguments must include (1) app config file"
         sys_basepath = os.getenv("SYS_BASE_PATH")
-        app_basepath = os.getenv("SERVICE_BASE_PATH")
         setting_path = argv[0]
-        cfg_fullpath = f"{app_basepath}/{setting_path}"
+        cfg_fullpath = f"{sys_basepath}/{setting_path}"
         with open(cfg_fullpath, "r") as f:
             cfg_root = json.load(f)
             ca_cfg = cfg_root["ca"]
