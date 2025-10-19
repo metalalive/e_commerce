@@ -17,10 +17,13 @@ static int parse_cfg_acs_log(json_t *obj, app_cfg_t *_app_cfg) {
     if (json_is_object(obj)) {
         json_t     *path_obj = json_object_get((const json_t *)obj, "path");
         json_t     *format_obj = json_object_get((const json_t *)obj, "format");
+        const char *sys_basepath = _app_cfg->env_vars.sys_base_path;
         const char *path = json_string_value(path_obj);
         const char *format = json_string_value(format_obj);
-        if (path) {
-            _app_cfg->access_logger = h2o_access_log_open_handle(path, format, H2O_LOGCONF_ESCAPE_JSON);
+        if (sys_basepath && path) {
+#define RUNNER(fullpath) h2o_access_log_open_handle(fullpath, format, H2O_LOGCONF_ESCAPE_JSON)
+            _app_cfg->access_logger = PATH_CONCAT_THEN_RUN(sys_basepath, path, RUNNER);
+#undef RUNNER
             err = 0;
         }
     } // end of optional parameter for access logger
@@ -84,21 +87,22 @@ static int parse_cfg_auth_keystore(json_t *obj, app_cfg_t *app_cfg) {
     if (!json_is_object(obj)) {
         goto error;
     }
+    const char *sys_basepath = app_cfg->env_vars.sys_base_path;
     const char *url = json_string_value(json_object_get(obj, "url"));
     const char *ca_path = json_string_value(json_object_get(obj, "ca_path"));
     const char *ca_form = json_string_value(json_object_get(obj, "ca_form"));
     if (!url) {
-        h2o_error_printf("[parsing] missing URL to JWKS source in configuration file\n");
+        h2o_error_printf("[parsing][auth] missing URL to JWKS source in config file\n");
         goto error;
     }
     app_cfg->jwks.src_url = strdup(url);
     if (ca_path) {
-        app_cfg->jwks.ca_path = strdup(ca_path);
+        app_cfg->jwks.ca_path = PATH_CONCAT_THEN_RUN(sys_basepath, ca_path, strdup);
     }
     if (ca_form) {
         app_cfg->jwks.ca_format = strdup(ca_form);
     }
-    return 0;
+    return EX_OK;
 error:
     return EX_CONFIG;
 } // end of parse_cfg_auth_keystore
@@ -107,19 +111,22 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
     SSL_CTX *ssl_ctx = NULL;
     if (!obj || !json_is_object(obj))
         goto error;
-    json_t     *cert_file_obj = json_object_get(obj, "cert_file");
-    json_t     *privkey_file_obj = json_object_get(obj, "privkey_file");
-    json_t     *min_ver_obj = json_object_get(obj, "min_version");
-    json_t     *cipher_suites_obj = json_object_get(obj, "cipher_suites");
+    json_t *cert_file_obj = json_object_get(obj, "cert_file");
+    json_t *privkey_file_obj = json_object_get(obj, "privkey_file");
+    json_t *min_ver_obj = json_object_get(obj, "min_version");
+    json_t *cipher_suites_obj = json_object_get(obj, "cipher_suites");
+    json_t *sys_basepath_obj = json_object_get(obj, "sys_base_path");
+
+    const char *sys_basepath = json_string_value(sys_basepath_obj);
     const char *cert_file_path = json_string_value(cert_file_obj);
     const char *privkey_file_path = json_string_value(privkey_file_obj);
     json_int_t  min_version = json_integer_value(min_ver_obj);
     const char *ciphersuite_labels = json_string_value(cipher_suites_obj);
-    if (!cert_file_path || !privkey_file_path || !ciphersuite_labels) {
+    if (!sys_basepath || !cert_file_path || !privkey_file_path || !ciphersuite_labels) {
         h2o_error_printf(
-            "[parsing][listener-ssl] missing argument, \
+            "[parsing][listener-ssl] missing argument, sys_basepath:%s, \
                 cert_file_path:%s, privkey_file_path:%s, ciphersuite_labels:%s \n",
-            cert_file_path, (privkey_file_path ? "specified" : "missing"), ciphersuite_labels
+            sys_basepath, cert_file_path, (privkey_file_path ? "specified" : "missing"), ciphersuite_labels
         );
         goto error;
     }
@@ -144,7 +151,9 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
         goto error;
     }
     SSL_CTX_set_session_id_context(ssl_ctx, (const unsigned char *)APP_LABEL, (unsigned int)APP_LABEL_LEN);
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, privkey_file_path, SSL_FILETYPE_PEM) != 1) {
+#define RUNNER(fullpath) SSL_CTX_use_PrivateKey_file(ssl_ctx, fullpath, SSL_FILETYPE_PEM);
+    int result = PATH_CONCAT_THEN_RUN(sys_basepath, privkey_file_path, RUNNER);
+    if (result != 1) {
         h2o_error_printf(
             "[parsing][listener-ssl] failed to load private key for \
                 server certificate : %s\n",
@@ -152,12 +161,15 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
         );
         goto error;
     }
-    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, cert_file_path) != 1) {
+#define RUNNER(fullpath) SSL_CTX_use_certificate_chain_file(ssl_ctx, fullpath)
+    result = PATH_CONCAT_THEN_RUN(sys_basepath, cert_file_path, RUNNER);
+    if (result != 1) {
         h2o_error_printf(
             "[parsing][listener-ssl] failed to load server certificate file : %s\n", cert_file_path
         );
         goto error;
     }
+#undef RUNNER
     X509 *x509 = SSL_CTX_get0_certificate(ssl_ctx);
     if (X509_cmp_current_time(X509_get0_notAfter(x509)) == -1) {
         h2o_error_printf("[parsing][listener-ssl] server certificate expired : %s\n", cert_file_path);
@@ -191,7 +203,8 @@ static void _dummy_cb_on_nt_accept(uv_stream_t *server, int status) {
 
 static int maybe_create_new_listener(
     const char *host, uint16_t port, json_t *ssl_obj, json_t *routes_cfg, app_cfg_t *appcfg
-) { // TODO, currently only support TCP handle, would support UDP in future
+) {
+    // TODO, currently only support TCP handle, would support UDP in future
     struct addrinfo *curr_ainfo = NULL, *res_ainfo = NULL;
     if (!host || port == 0) {
         goto error;
@@ -210,6 +223,9 @@ static int maybe_create_new_listener(
 #undef RUNNER
     if (result != 0) {
         goto error;
+    }
+    if (!json_object_get(ssl_obj, "sys_base_path")) {
+        json_object_set_new(ssl_obj, "sys_base_path", json_string(appcfg->env_vars.sys_base_path));
     }
     for (curr_ainfo = res_ainfo; curr_ainfo; curr_ainfo = curr_ainfo->ai_next) {
         app_cfg_listener_t *found = find_existing_listener(appcfg->listeners, curr_ainfo);
@@ -286,8 +302,9 @@ static int parse_cfg_listeners(const json_t *objs, app_cfg_t *_app_cfg) {
 int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg) {
     int          result_error = 0;
     json_error_t jerror;
-    json_t      *root = NULL;
-    root = json_load_file(cfg_file_path, (size_t)0, &jerror);
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, &jerror);
+    json_t *root = PATH_CONCAT_THEN_RUN(_app_cfg->env_vars.sys_base_path, cfg_file_path, RUNNER);
+#undef RUNNER
     if (!json_is_object(root)) {
         h2o_error_printf(
             "[parsing] decode error on JSON file %s at line %d, column %d\n", &jerror.source[0], jerror.line,
@@ -362,7 +379,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg) {
         goto error;
     }
     json_decref(root);
-    return 0;
+    return EX_OK;
 error:
     if (!root)
         json_decref(root);

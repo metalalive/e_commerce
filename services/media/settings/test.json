@@ -49,7 +49,7 @@
     "num_workers": 1,
     "tcp_fastopen_queue_size": 104,
     "auth_keystore": {
-        "url":"https://usrmgt-dev-apisrv:8008/jwks",
+        "url":"http://usrmgt-dev-apisrv:8008/jwks",
         "ca_path": "media/data/certs/ca.crt",
         "ca_form": "PEM"
     },

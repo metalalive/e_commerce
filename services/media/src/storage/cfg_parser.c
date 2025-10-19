@@ -99,6 +99,9 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg) {
             free(_asa_cfg->base_path);
         }
         _asa_cfg->alias = strdup(alias);
+        // TODO, FIXME, `sys_basepath` should work only with local file system
+        // for other storage selections in remote servers (e.g. AWS S3), there should
+        // be full path to remote site specified in configuration file
         _asa_cfg->base_path = PATH_CONCAT_THEN_RUN(sys_basepath, filestore_path, strdup);
         _asa_cfg->ops = (asa_cfg_ops_t){0};
         asa_internal_cb_arg_t cb_args = {.app_cfg = _asa_cfg, .json_ops = ops};

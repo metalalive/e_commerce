@@ -1,8 +1,10 @@
 #include <assert.h>
+#include <sysexits.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "timer_poll.h"
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
@@ -41,8 +43,9 @@ static int _appworker_start_timerpoll(app_ctx_msgq_t *mq);
 static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg) {
     int          err = 0;
     json_error_t jerror;
-    json_t      *root = NULL;
-    root = json_load_file(cfg_file_path, (size_t)0, &jerror);
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, &jerror);
+    json_t *root = PATH_CONCAT_THEN_RUN(app_cfg->env_vars.sys_base_path, cfg_file_path, RUNNER);
+#undef RUNNER
     if (!json_is_object(root)) {
         h2o_error_printf(
             "[parsing] decode error on JSON file %s at line %d, column %d\n", &jerror.source[0], jerror.line,
@@ -92,12 +95,12 @@ static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg) {
         goto error;
     }
     json_decref(root);
-    return 0;
+    return EX_OK;
 error:
     if (!root) {
         json_decref(root);
     }
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_params
 
 static void on_sigterm(int sig_num) {

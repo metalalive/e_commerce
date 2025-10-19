@@ -103,8 +103,8 @@ static int parse_cfg_rpc__broker_credential(json_t *in, arpc_cfg_t *out, app_env
     } // end of loop
     const char *username = json_string_value(json_object_get(dst, "username"));
     const char *password = json_string_value(json_object_get(dst, "password"));
-    const char *host = env_vars->db_host;
-    uint16_t    port = env_vars->db_port;
+    const char *host = json_string_value(json_object_get(dst, "host"));
+    uint16_t    port = (uint16_t)json_integer_value(json_object_get(dst, "port"));
     if (!username || !password || !host || port == 0) {
         h2o_error_printf(
             "[parsing] invalid AMQP-broker credential: username(%s), password(%s), host(%s), "
