@@ -1,0 +1,38 @@
+{
+    "file_chunk": {
+        "base_folder": "tmp/test_file_chunks",
+        "files": [
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video1/file{0}", "src":"media/test/integration/examples/video1.mp4",
+                "broken":false, "num_chunks":4 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video2/file{0}", "src":"media/test/integration/examples/video2.mp4",
+                "broken":false, "num_chunks":9 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video3/file{0}", "src":"media/test/integration/examples/video3.mp4",
+                "broken":false, "num_chunks":8 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video4/file{0}", "src":"media/test/integration/examples/video4.mp4",
+                "broken":false, "num_chunks":5 },
+            {"type":"video", "subtype":"avi", "dst_pattern":"video5/file{0}", "src":"media/test/integration/examples/video5.avi",
+                "broken":false, "num_chunks":5 },
+            {"type":"image", "subtype":"jpg", "dst_pattern":"img1/file{0}", "src":"media/test/integration/examples/image1.jpg",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"jpg", "dst_pattern":"img2/file{0}", "src":"media/test/integration/examples/image2.jpg",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"png", "dst_pattern":"img3/file{0}", "src":"media/test/integration/examples/image3.png",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"png", "dst_pattern":"img4/file{0}", "src":"media/test/integration/examples/image4.png",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"gif", "dst_pattern":"img5/file{0}", "src":"media/test/integration/examples/image5.gif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"gif", "dst_pattern":"img6/file{0}", "src":"media/test/integration/examples/image6.gif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"tiff", "dst_pattern":"img7/file{0}", "src":"media/test/integration/examples/image7.tif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"tiff", "dst_pattern":"img8/file{0}", "src":"media/test/integration/examples/image8.tif",
+                "broken":false, "num_chunks":1 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video6/file{0}", "src":"media/test/integration/examples/incomplete.mp4",
+                "broken":true, "num_chunks":4 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video7/file{0}", "src":"media/test/integration/examples/corrupted.mp4",
+                "broken":true, "num_chunks":3 }
+        ],
+        "output_metadata": "filechunk_metadata.json"
+    }
+}

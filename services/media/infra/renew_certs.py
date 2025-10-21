@@ -3,10 +3,7 @@ This script currently renews SSL certificates for testing and development purpos
 """
 
 from datetime import datetime, timedelta, timezone
-from functools import partial
-import sys
 import json
-import argparse
 import os
 
 from cryptography import x509
@@ -34,7 +31,7 @@ def check_cert_expiry(listen):
         if can_handle:
             item = {"cert": cert_filepath}
         raise
-    except (FileNotFoundError,) as e:
+    except (FileNotFoundError,):
         item = {"cert": cert_filepath}
     finally:
         if cert_file and not cert_file.closed:
@@ -138,7 +135,7 @@ class DevCertRenewal:
 
     def run_renewal_item(self, req, ca_privkey, ca_cert):
         srv_privkey = self.create_test_privkey(wr_pem_path=req["privkey"])
-        srv_cert = self.create_test_server_cert(
+        self.create_test_server_cert(
             wr_pem_path=req["cert"],
             privkey=srv_privkey,
             ca_cert=ca_cert,

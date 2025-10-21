@@ -91,6 +91,21 @@ services:
       - net1
       - net2
 
+  itest-filechunk-setup-media:
+    container_name: media-test-filechunk-setup
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python3 -m filechunk FilechunkSetup ./media/settings.json"]
+    volumes:
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../test/integration/filechunk.py:/app/media/filechunk.py:ro
+      - ../test/integration/examples:/app/media/test/integration/examples:ro
+      - ../../tmp/log/test:/app/tmp
+
   #run-itest-media:
   #  container_name: media-itest-0
   #  image: media-backend-base:latest
@@ -99,7 +114,7 @@ services:
   #  depends_on:
   #    db-schema-migration-up-media:
   #      condition: service_completed_successfully
-
+  
   # db-schema-migration-down-media:
   #   container_name: media-test-db-schema-downgrade
   #   env_file:
