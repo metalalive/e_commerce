@@ -2,7 +2,7 @@
 This script currently renews SSL certificates for testing and development purpose
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 import sys
 import json
@@ -27,7 +27,7 @@ def check_cert_expiry(listen):
     try:
         cert_file = open(cert_filepath, "rb")
         cert = x509.load_pem_x509_certificate(cert_file.read())
-        if cert.not_valid_after < datetime.utcnow():
+        if cert.not_valid_after_utc < datetime.now(timezone.utc):
             item = {"cert": cert_filepath}
     except ValueError as e:
         can_handle = e.args[0].startswith("Unable to load PEM file")

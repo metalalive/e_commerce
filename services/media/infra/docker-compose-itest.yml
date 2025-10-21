@@ -29,6 +29,23 @@ services:
     networks:
       - net1
 
+  mock-auth-pubkey-server-media:
+    container_name: media-test-authkey-mockserver
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./renew_certs.py:/app/media/infra/renew_certs.py:ro
+      - ../test/integration/auth.py:/app/media/mockauth.py:ro
+      - ../data/certs/test:/app/certs
+      - ../../tmp/cache/test/jwks:/app/jwks
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python3 -m mockauth --host=media-test-authkey-mockserver --port=8008  --path2privkey=/app/jwks/media-rsa-privkey.json  --sslcertpath=/app/certs"]
+    networks:
+      - net1
+
   api-server-media:
     container_name: media-test-apisrv
     restart: no
@@ -46,11 +63,13 @@ services:
       - ../../tmp/log/test:/app/log
       - ../../tmp/buffer/media/test:/app/tmp/buffer
       - ../../filespace/test:/app/filespace/test
+    depends_on:
+      mock-auth-pubkey-server-media:
+        condition: service_started
     #command: sleep 360000
     networks:
       - net1
       - net2
-      - net3
 
   #run-itest-media:
   #  container_name: media-itest-0
@@ -86,10 +105,6 @@ networks:
           gateway: 172.19.13.254
   
   net2:
-    name: ec-usrmgt-dev-net
-    external: true
-
-  net3:
     name: ec-intersrvs-dev-net
     external: true
 
