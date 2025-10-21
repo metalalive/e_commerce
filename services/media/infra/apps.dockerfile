@@ -110,7 +110,7 @@ ENV LD_LIBRARY_PATH="/usr/lib:/usr/libexec:/usr/local/lib"
 
 RUN cmake -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_EXPORT_COMPILE_COMMANDS=1  ${DST_APP_PATH}
 
-RUN make app_server.out && make rpc_consumer.out
+RUN make app_server.out && make rpc_consumer.out && make appserver_health_check.out
 RUN make unit_test.out && make itest_app_server.out && make itest_rpc_consumer.out
 
 # Keep this as a named image for running unit tests
@@ -159,6 +159,7 @@ COPY --from=builder0 ${FFM_INSTALLED_PATH}  .
 
 WORKDIR  ${DST_APP_PATH}/build
 COPY --from=builder0 ${DST_APP_PATH}/build/app_server.out \
+    ${DST_APP_PATH}/build/appserver_health_check.out \
     ${DST_APP_PATH}/build/rpc_consumer.out \
     ${DST_APP_PATH}/build/unit_test.out          \
     ${DST_APP_PATH}/build/itest_app_server.out   \

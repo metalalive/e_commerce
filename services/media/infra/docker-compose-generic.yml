@@ -67,14 +67,23 @@ services:
     container_name: media-unknown-apisrv
     image: media-backend-base:latest
     pull_policy: never
+    ports:
+      - "8010:8010"
     environment:
       - DB_PORT=3313
       - SYS_BASE_PATH=/app
+      - HEALTH_CHECK_CERT_PATH=/app/media/data/certs/ca.crt
     stop_signal: SIGTERM
     working_dir: /app/media/build
     # gdb -args # for debugging
     # valgrind --leak-check=full # for extra memory check
     command: ["/bin/sh", "-c", "./app_server.out media/build/app_server.out $${CONFIG_FILE_PATH}"]
+    healthcheck:
+      test: ["CMD-SHELL", "./appserver_health_check.out --timeout-secs 6 --port 8010 --host localhost --uri-path /file  --cert-path $${HEALTH_CHECK_CERT_PATH} "]
+      interval: 38s
+      timeout: 10s
+      retries: 2
+      start_period: 25s
     depends_on:
       db-schema-migration-up-media:
         condition: service_completed_successfully
@@ -85,14 +94,12 @@ services:
   #  container_name: media-unknown-rpcconsumer
   #  image: media-backend-base:latest
   #  pull_policy: never
-  #  restart: no
   #  environment:
   #    - DB_PORT=3313
   #    - SYS_BASE_PATH=/app
-  #    - SERVICE_BASE_PATH=/app/media
   #  stop_signal: SIGTERM
   #  working_dir: /app/media/build
-  #  command: ["/bin/sh", "-c", "./rpc_consumer.out  $${CONFIG_FILE_PATH}"]
+  #  command: ["/bin/sh", "-c", "./rpc_consumer.out media/build/rpc_consumer.out $${CONFIG_FILE_PATH}"]
   #  depends_on:
   #    db-schema-migration-up-media:
   #      condition: service_completed_successfully
