@@ -43,6 +43,7 @@ services:
       - ../../tmp/cache/test/jwks:/app/jwks
     working_dir: /app/media
     command: ["/bin/sh", "-c", "python3 -m mockauth --host=media-test-authkey-mockserver --port=8008  --path2privkey=/app/jwks/media-rsa-privkey.json  --sslcertpath=/app/certs"]
+    # TODO, support HTTPS for python health-check program `httpsrv_accessible.py`
     networks:
       - net1
 
@@ -65,8 +66,27 @@ services:
       - ../../filespace/test:/app/filespace/test
     depends_on:
       mock-auth-pubkey-server-media:
-        condition: service_started
+        condition: service_started # service_healthy
     #command: sleep 360000
+    networks:
+      - net1
+      - net2
+
+  rpc-consumer-media:
+    container_name: media-test-rpcconsumer
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - CONFIG_FILE_PATH=media/settings/test.json
+    volumes:
+      - ../settings/test.json:/app/media/settings/test.json:ro
+      - ../data/test:/app/media/data/test:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/proc:/app/proc
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/buffer/media/test:/app/tmp/buffer
+      - ../../filespace/test:/app/filespace/test
     networks:
       - net1
       - net2

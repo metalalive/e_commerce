@@ -144,11 +144,13 @@ RUN apt update && apt install -y --no-install-recommends gdb valgrind
 # libgnutls-dane0t64  libgnutls-openssl27t64  libidn2-dev, libp11-kit-dev, libtasn1-6-dev, 
 # yasm  zlib1g-dev, libzstd-dev
 
+# `libxcb1` and `libxcb-shm0` required by ffmpeg runtime (X11 video)
+
 RUN apt install -y --no-install-recommends \
   libmariadb3  librabbitmq4  libjansson4  libbrotli1  libuv1t64 \
   librhonabwy1.1t64  libnettle8t64  libgnutls30t64  libcurl4t64 \
   libfdk-aac2  libx264-164  libx265-215  libcgreen1 libelf1t64 \
-  libmagic1t64  libuuid1  libnghttp2-14 && \
+  libmagic1t64  libuuid1  libnghttp2-14 libxcb1 libxcb-shm0  && \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR ${H2O_INSTALLED_PATH}

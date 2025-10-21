@@ -90,17 +90,17 @@ services:
       renew-cert-media:
         condition: service_completed_successfully
 
-  #rpc-consumer-media:
-  #  container_name: media-unknown-rpcconsumer
-  #  image: media-backend-base:latest
-  #  pull_policy: never
-  #  environment:
-  #    - DB_PORT=3313
-  #    - SYS_BASE_PATH=/app
-  #  stop_signal: SIGTERM
-  #  working_dir: /app/media/build
-  #  command: ["/bin/sh", "-c", "./rpc_consumer.out media/build/rpc_consumer.out $${CONFIG_FILE_PATH}"]
-  #  depends_on:
-  #    db-schema-migration-up-media:
-  #      condition: service_completed_successfully
+  rpc-consumer-media:
+    container_name: media-unknown-rpcconsumer
+    image: media-backend-base:latest
+    pull_policy: never
+    environment:
+      - DB_PORT=3313
+      - SYS_BASE_PATH=/app
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./rpc_consumer.out media/build/rpc_consumer.out $${CONFIG_FILE_PATH}"]
+    depends_on:
+      db-schema-migration-up-media:
+        condition: service_completed_successfully
 
