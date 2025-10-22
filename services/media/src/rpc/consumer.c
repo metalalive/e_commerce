@@ -326,7 +326,7 @@ done:
     return err;
 } // end of appworker_waiting_messages
 
-static void run_app_worker(void *data) {
+void run_app_worker(void *data) {
     struct worker_init_data_t *init_data = (struct worker_init_data_t *)data;
     app_ctx_worker_t           ctx_worker = {0};
     int                        err = appworker_init_context(&ctx_worker, init_data);
@@ -334,7 +334,7 @@ static void run_app_worker(void *data) {
         err = appworker_waiting_messages(&ctx_worker, init_data->app_cfg, init_data->loop);
     }
     appworker_deinit_context(&ctx_worker, init_data->loop);
-} // end of run_app_worker
+}
 
 static int start_workers(app_cfg_t *app_cfg) {
     size_t                    num_threads = app_cfg->workers.size + 1; // plus main thread
@@ -342,7 +342,7 @@ static int start_workers(app_cfg_t *app_cfg) {
     int                       err = appcfg_start_workers(app_cfg, &worker_data[0], run_app_worker);
     appcfg_terminate_workers(app_cfg, &worker_data[0]);
     return err;
-} // end of start_workers
+}
 
 int start_application(const char *cfg_file_path, const char *exe_path) {
     int err = 0;

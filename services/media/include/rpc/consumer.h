@@ -10,6 +10,8 @@ extern "C" {
 
 #include "rpc/datatypes.h"
 
+void run_app_worker(void *usr_data);
+
 int start_application(const char *cfg_file_path, const char *exe_path);
 
 #ifdef __cplusplus

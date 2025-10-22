@@ -1,4 +1,5 @@
 #include <jansson.h>
+#include "utils.h"
 #include "../test/integration/test.h"
 
 #define ITEST_REQ_ITEM_GEN(_usr_id, _tr, _ed) \
@@ -28,6 +29,26 @@ typedef struct {
 } itest_usrarg_t;
 
 extern json_t *_app_itest_active_upload_requests;
+
+static void itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp) {
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+#define RUNNER(fullpath) open(fullpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR)
+    int idx = 0, target_fd = PATH_CONCAT_THEN_RUN(sys_basepath, ITEST_USERMGT_MOCK_DATABASE, RUNNER);
+#undef RUNNER
+    json_t *info = json_object(), *usr_id_list = json_array();
+    for (idx = 0; idx < in_sz; idx++)
+        json_array_append_new(usr_id_list, json_integer(in[idx]));
+    json_object_set_new(info, "usr_ids", usr_id_list);
+    json_object_set_new(info, "no_resp", json_boolean(_no_resp));
+    ftruncate(target_fd, (off_t)0);
+    lseek(target_fd, 0, SEEK_SET);
+    json_dumpfd(
+        (const json_t *)info, target_fd, JSON_COMPACT
+    ); // will call low-level write() without buffering this
+    if (target_fd >= 0)
+        close(target_fd);
+    json_decref(info);
+}
 
 static void _available_resource_lookup(json_t **upld_req, const char *lvl, const char *fsubtype_in) {
     json_t     *req = NULL, *existing_acl = NULL;

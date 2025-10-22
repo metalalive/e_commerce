@@ -378,7 +378,6 @@ SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
-    test/integration/rpc_consumer.c
     test/integration/api/access_control_list.c
     test/integration/api/monitor_job_progress.c
     test/integration/api/start_transcoding_file.c
@@ -481,7 +480,7 @@ else()
     SET(ITEST_API_SERVER_EXE_NAME    itest_app_server.out)
     SET(ITEST_RPC_CONSUMER_EXE_NAME  itest_rpc_consumer.out)
     ADD_EXECUTABLE(${ITEST_API_SERVER_EXE_NAME}   ${ITEST_APPSRV_SOURCE_FILES})
-    ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
+    ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES})
     TARGET_INCLUDE_DIRECTORIES(${ITEST_API_SERVER_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
     TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
@@ -515,12 +514,4 @@ endif() # end of ONLY_REFORMAT
 #     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
 #     DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME}
 #     VERBATIM)
-# 
-# ADD_CUSTOM_TARGET(itest_rpc_worker
-#     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-#         "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
-#         ##gdb -args
-#         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
-#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-#     DEPENDS ${ITEST_RPC_CONSUMER_EXE_NAME})
 

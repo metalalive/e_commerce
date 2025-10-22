@@ -120,7 +120,6 @@
                             "pattern":"rpc.media.get_usr_profile.corr_id.%s",
                             "render_fn":"api__default__render_rpc_corr_id"
                         },
-                        "task_handler": "itest_rpc_handler__verify_usr_ids",
                         "durable": true,
                         "ttl_sec": 180
                     }

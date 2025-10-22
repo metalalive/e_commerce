@@ -105,6 +105,26 @@ services:
       - ../test/integration/filechunk.py:/app/media/filechunk.py:ro
       - ../test/integration/examples:/app/media/test/integration/examples:ro
       - ../../tmp/log/test:/app/tmp
+  
+  rpc-consumer-mock_usrmgt-media:
+    container_name: media-test-rpcconsumer-mock-usrmgt
+    image: media-backend-base:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./itest_rpc_consumer.out media/build/itest_rpc_consumer.out media/settings.json"]
+    volumes:
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/test:/app/log
+    depends_on:
+      rpc-consumer-media:
+        condition: service_started
+    networks:
+      - net2
 
   #run-itest-media:
   #  container_name: media-itest-0

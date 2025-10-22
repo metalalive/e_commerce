@@ -71,8 +71,8 @@ TestSuite *api_file_stream_seek_elm_tests(void);
 TestSuite *api_discard_committed_file_tests(void);
 void       api_deinitiate_multipart_upload_tests(void);
 
-// declare & implementation in test/integration/rpc_consumer.c
-void itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp);
+// shared file across access-control test cases
+#define ITEST_USERMGT_MOCK_DATABASE "log/media_rpc_usermgt_mock_db.json"
 
 #ifdef __cplusplus
 } // end of extern C clause
