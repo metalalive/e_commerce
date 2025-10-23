@@ -14,10 +14,10 @@
     "listen": [
         {
             "port": 8010,
-            "host":"localhost",
+            "host":"media-test-apisrv",
             "ssl":{
-                "cert_file"   : "media/data/certs/localhost_8010.crt",
-                "privkey_file": "media/data/certs/localhost_8010.private.key",
+                "cert_file"   : "media/data/certs/media-test-apisrv_8010.crt",
+                "privkey_file": "media/data/certs/media-test-apisrv_8010.private.key",
                 "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
                 "min_version": 772
             },
@@ -110,6 +110,7 @@
                     "queue": "rpc_usermgt_get_profile",
                     "exchange": "rpc-default-allapps",
                     "routing_key": "rpc.user_management.get_profile",
+                    "skip_declare": true,
                     "durable": true,
                     "reply": {
                         "queue": {

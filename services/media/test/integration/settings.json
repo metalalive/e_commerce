@@ -71,5 +71,6 @@
                 "broken":true, "num_chunks":3 }
         ],
         "output_metadata": "filechunk_metadata.json"
-    }
+    },
+    "tmp_buf": {"path": "tmp/buffer"}
 }

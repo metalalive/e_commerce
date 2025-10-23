@@ -79,8 +79,8 @@ services:
     # valgrind --leak-check=full # for extra memory check
     command: ["/bin/sh", "-c", "./app_server.out media/build/app_server.out $${CONFIG_FILE_PATH}"]
     healthcheck:
-      test: ["CMD-SHELL", "./appserver_health_check.out --timeout-secs 6 --port 8010 --host localhost --uri-path /file  --cert-path $${HEALTH_CHECK_CERT_PATH} "]
-      interval: 38s
+      test: ["CMD-SHELL", "./appserver_health_check.out --timeout-secs 6 --port 8010 --host $${API_HOST} --uri-path /file  --cert-path $${HEALTH_CHECK_CERT_PATH} "]
+      interval: 98s
       timeout: 10s
       retries: 2
       start_period: 25s

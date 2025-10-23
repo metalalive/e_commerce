@@ -120,20 +120,44 @@ services:
       - ../test/integration/settings.json:/app/media/settings.json:ro
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../tmp/log/test:/app/log
-    depends_on:
-      rpc-consumer-media:
-        condition: service_started
     networks:
       - net2
 
-  #run-itest-media:
-  #  container_name: media-itest-0
-  #  image: media-backend-base:latest
-  #  pull_policy: never
-  #  restart: no
-  #  depends_on:
-  #    db-schema-migration-up-media:
-  #      condition: service_completed_successfully
+  run-itest-media:
+    container_name: media-itest-0
+    image: media-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - SYS_BASE_PATH=/app
+      - API_HOST=media-test-apisrv
+      - API_PORT=8010
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./itest_start.out media/build/itest_start.out media/settings.json"]
+    volumes:
+      - ../data/certs/test:/app/media/data/certs/test:ro
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../test/integration/examples:/app/media/test/integration/examples:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/buffer/media/test:/app/tmp/buffer:ro
+      - ../../tmp/cache/test/jwks/media-rsa-privkey.json:/app/jwks/media-rsa-privkey.json:ro
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/log/test:/app/tmp
+    depends_on:
+      api-server-media:
+        condition: service_healthy
+      rpc-consumer-media:
+        condition: service_started
+      rpc-consumer-mock_usrmgt-media:
+        condition: service_started
+      itest-filechunk-setup-media:
+        condition: service_completed_successfully
+    networks:
+      - net1
+      - net2
   
   # db-schema-migration-down-media:
   #   container_name: media-test-db-schema-downgrade

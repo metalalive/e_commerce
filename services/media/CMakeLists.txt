@@ -374,7 +374,8 @@ SET(UNIT_TEST_SOURCE_FILES
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
-SET(ITEST_APPSRV_SOURCE_FILES
+SET(ITEST_START_SOURCE_FILES
+    src/utils.c
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
@@ -388,8 +389,7 @@ SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/api/initiate_file_nonstream.c
     test/integration/api/initiate_file_stream.c
     test/integration/api/stream_file_lookup.c
-    test/integration/api/discard_committed_file.c
-    ${APP_SERVER_SOURCE_FILES} )
+    test/integration/api/discard_committed_file.c )
 
 SET(ITEST_RPCCONSUMER_SOURCE_FILES
     test/integration/rpc_consumer.c
@@ -448,13 +448,13 @@ SET(HEALTH_CHECK_SOURCE_FILES     src/app_server/health_check.c)
 SET(REFMT_SRC_FILES
     ${APP_SERVER_SOURCE_FILES}    src/app_server/main.c
     ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c
-    ${UNIT_TEST_SOURCE_FILES} ${ITEST_APPSRV_SOURCE_FILES}
+    ${UNIT_TEST_SOURCE_FILES} ${ITEST_START_SOURCE_FILES}
     ${ITEST_RPCCONSUMER_SOURCE_FILES} ${HEALTH_CHECK_SOURCE_FILES}
 )
 
-SET(APP_SERVER_EXE_NAME           app_server.out)
-SET(RPC_CONSUMER_EXE_NAME         rpc_consumer.out)
-SET(HEALTH_CHECK_EXE_NAME         appserver_health_check.out)
+SET(APP_SERVER_EXE_NAME    app_server.out)
+SET(RPC_CONSUMER_EXE_NAME  rpc_consumer.out)
+SET(HEALTH_CHECK_EXE_NAME  appserver_health_check.out)
 
 ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server/main.c)
 ADD_EXECUTABLE(${RPC_CONSUMER_EXE_NAME} ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
@@ -477,17 +477,17 @@ else()
     TARGET_INCLUDE_DIRECTORIES(${UNIT_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(${UNIT_TEST_EXE_NAME} ${APP_UNIT_TEST_LIBRARIES} ${CGREEN_LIBRARIES})
 
-    SET(ITEST_API_SERVER_EXE_NAME    itest_app_server.out)
+    SET(ITEST_START_EXE_NAME    itest_start.out)
     SET(ITEST_RPC_CONSUMER_EXE_NAME  itest_rpc_consumer.out)
-    ADD_EXECUTABLE(${ITEST_API_SERVER_EXE_NAME}   ${ITEST_APPSRV_SOURCE_FILES})
+    ADD_EXECUTABLE(${ITEST_START_EXE_NAME}   ${ITEST_START_SOURCE_FILES})
     ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES})
-    TARGET_INCLUDE_DIRECTORIES(${ITEST_API_SERVER_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(${ITEST_START_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
     TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${ITEST_START_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
     TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         # Add the linker option -rdynamic for the target
-        TARGET_LINK_OPTIONS(${ITEST_API_SERVER_EXE_NAME} PRIVATE -rdynamic)
+        TARGET_LINK_OPTIONS(${ITEST_START_EXE_NAME} PRIVATE -rdynamic)
         MESSAGE(STATUS "symbols added to app-server executable")
     endif()
 endif() # end of ONLY_REFORMAT
@@ -504,14 +504,4 @@ endif() # end of ONLY_REFORMAT
 #     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
 #     DEPENDS ${APP_SERVER_EXE_NAME}  VERBATIM)
 # 
-# ADD_CUSTOM_TARGET(itest_app_server
-#     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
-#     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-#         "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
-#         ##gdb -args # uncomment this line for debugging
-#         valgrind --leak-check=full
-#         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
-#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-#     DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME}
-#     VERBATIM)
 
