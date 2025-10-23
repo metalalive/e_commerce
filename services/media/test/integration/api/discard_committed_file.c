@@ -1,7 +1,6 @@
 #include "../test/integration/test.h"
 
-#define ITEST_HOST        "localhost:8010"
-#define ITEST_URL_PATTERN "https://" ITEST_HOST "/file?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
+#define ITEST_URL_PATTERN "/file?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
 
 extern json_t *_app_itest_active_upload_requests;
 
@@ -63,8 +62,8 @@ static void _api_test__discard_committed_file__common(itest_usrarg_t *usrarg) {
     add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t setup_data = {
         .method = "DELETE",
-        .verbose = 0,
-        .url = &url[0],
+        .verbose = 0, // no need to inspect curl verbose here
+        .url_rel_ref = &url[0],
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials

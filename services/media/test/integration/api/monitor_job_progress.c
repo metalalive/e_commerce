@@ -1,7 +1,7 @@
 #include <jansson.h>
 #include "../test/integration/test.h"
 
-#define URL_PATTERN "https://localhost:8010/job?id=%s"
+#define URL_PATTERN "/job?id=%s"
 
 extern json_t *_app_itest_active_upload_requests;
 
@@ -51,7 +51,7 @@ static int api_test_monitor_job_progress__update(uint32_t usr_id, json_t *job_it
         test_setup_pub_t setup_data = {
             .method = "GET",
             .verbose = 0,
-            .url = &url[0],
+            .url_rel_ref = &url[0],
             .http_timeout_sec = 7,
             .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
             .headers = header_kv_serials

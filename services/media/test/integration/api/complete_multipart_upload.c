@@ -42,8 +42,6 @@ static void _api_commit_upload_req__success_common(
     json_t *upld_req, const char *resource_id, const char *resource_typ, uint32_t expect_resp_code,
     const char *err_field, const char *err_msg
 ) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/complete");
     json_t *header_kv_serials = json_array();
     json_t *quota = json_array();
     {
@@ -68,7 +66,7 @@ static void _api_commit_upload_req__success_common(
     test_setup_pub_t setup_data = {
         .method = "PATCH",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = "/upload/multipart/complete",
         .headers = header_kv_serials,
         .req_body = {.serial_txt = &req_body_raw[0], .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
@@ -86,15 +84,13 @@ static void _api_commit_upload_req__success_common(
 #undef MAX_BYTES_REQ_BODY
 
 Ensure(api_commit_upload_req__missing_auth_token) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/complete");
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     test_setup_pub_t setup_data = {
         .method = "PATCH",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = "/upload/multipart/complete",
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials

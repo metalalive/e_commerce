@@ -19,12 +19,10 @@
             MAX(ITEST_DETAIL_SZ__HLS_L2_PLIST, ITEST_DETAIL_SZ__HLS_INIT_MAP)), \
         ITEST_DETAIL_SZ__HLS_DATA_SEG)
 
-#define ITEST_STREAM_HOST     "localhost:8010"
 #define ITEST_STREAM_SEEK_URI "/file/stream/seek"
 
 #define ITEST_URL_PATTERN \
-    "https://" ITEST_STREAM_HOST ITEST_STREAM_SEEK_URI "?" API_QPARAM_LABEL__STREAM_DOC_ID \
-    "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
+    ITEST_STREAM_SEEK_URI "?" API_QPARAM_LABEL__STREAM_DOC_ID "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
 
 typedef void (*client_req_cb_t)(CURL *, test_setup_priv_t *, void *usr_arg);
 
@@ -39,12 +37,10 @@ extern json_t *_app_itest_active_upload_requests;
 
 static json_t *_app_itest_started_streams[MAX_NUM_STARTED_STREAMS] = {0};
 
+static char itest_tmpbuf_path[64] = {0};
+
 static int _api_test__validate_url(char *in) {
     char *ptr = NULL;
-    ptr = strstr(in, ITEST_STREAM_HOST);
-    assert_that(ptr, is_not_null);
-    if (!ptr)
-        return -1;
     ptr = strstr(ptr, ITEST_STREAM_SEEK_URI);
     assert_that(ptr, is_not_null);
     if (!ptr)
@@ -54,7 +50,7 @@ static int _api_test__validate_url(char *in) {
     if (!ptr)
         return -1;
     return 0;
-} // end of  _api_test__validate_url
+}
 
 static void _api_test_filestream_seek_elm__send_request(itest_usrarg_t *usr_arg) {
     json_t *header_kv_serials = json_array();
@@ -67,7 +63,7 @@ static void _api_test_filestream_seek_elm__send_request(itest_usrarg_t *usr_arg)
     test_setup_pub_t setup_data = {
         .method = "GET",
         .verbose = 0,
-        .url = usr_arg->url,
+        .url_rel_ref = usr_arg->url,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
@@ -261,15 +257,14 @@ static void test_verify_stream__hls_key_req(CURL *handle, test_setup_priv_t *pri
     size_t nread = read(privdata->fds.resp_body, &buf[0], RD_BUF_SZ);
     assert_that(nread, is_equal_to(HLS__NBYTES_KEY));
     // verify received key octet
-    app_cfg_t *acfg = app_get_global_cfg();
     uint32_t   _usr_id = json_integer_value(json_object_get(usr_arg->_upld_req, "usr_id"));
     uint32_t   _upld_req_id = json_integer_value(json_object_get(usr_arg->_upld_req, "req_seq"));
 #define PATH_PATTERN "%s/%d/%08x/%s"
-    size_t path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + USR_ID_STR_SIZE +
+    size_t path_sz = sizeof(PATH_PATTERN) + strlen(itest_tmpbuf_path) + USR_ID_STR_SIZE +
                      UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(HLS_CRYPTO_KEY_FILENAME);
     char   path[path_sz];
     size_t nwrite = snprintf(
-        &path[0], path_sz, PATH_PATTERN, acfg->tmp_buf.path, _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME
+        &path[0], path_sz, PATH_PATTERN, itest_tmpbuf_path, _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME
     );
     assert(path_sz > nwrite);
     json_t     *keyinfo = json_load_file(&path[0], 0, NULL), *item = NULL, *keyitem = NULL;
@@ -355,13 +350,12 @@ static void test_verify_stream__hls_segment(CURL *handle, test_setup_priv_t *pri
     }
     json_t     *stream_item = json_object_get(usr_arg->_upld_req, "streaming");
     const char *doc_id = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__STREAM_DOC_ID));
-    app_cfg_t  *acfg = app_get_global_cfg();
 #define PATH_PATTERN "%s/%s/%s/%s"
-    size_t path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + strlen(doc_id) +
+    size_t path_sz = sizeof(PATH_PATTERN) + strlen(itest_tmpbuf_path) + strlen(doc_id) +
                      sizeof(ATFP_CACHED_FILE_FOLDERNAME) + detail_sz;
     char   path[path_sz];
     size_t nwrite = snprintf(
-        &path[0], path_sz, PATH_PATTERN, acfg->tmp_buf.path, ATFP_CACHED_FILE_FOLDERNAME, doc_id, detail
+        &path[0], path_sz, PATH_PATTERN, itest_tmpbuf_path, ATFP_CACHED_FILE_FOLDERNAME, doc_id, detail
     );
     assert(path_sz > nwrite);
 #undef PATH_PATTERN
@@ -450,7 +444,13 @@ Ensure(api_test__filestream_seek__hls_nonexist_detail) {
     } // end of loop
 } // end of  api_test__filestream_seek__hls_nonexist_detail
 
-TestSuite *api_file_stream_seek_elm_tests(void) {
+TestSuite *api_file_stream_seek_elm_tests(json_t *root_cfg) {
+    json_t     *tmpbuf_cfg = json_object_get(root_cfg, "tmp_buf");
+    const char *tmpbuf_path = json_string_value(json_object_get(tmpbuf_cfg, "path"));
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+#define RUNNER(fullpath) strcpy(itest_tmpbuf_path, fullpath)
+    PATH_CONCAT_THEN_RUN(sys_basepath, tmpbuf_path, RUNNER);
+#undef RUNNER
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test__filestream_seek__hls_mst_plist_ok);
     add_test(suite, api_test__filestream_seek__hls_lvl2_plist_ok);

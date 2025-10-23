@@ -1,10 +1,13 @@
 #include <jansson.h>
+#include "utils.h"
 #include "../test/integration/test.h"
 
 #define REQBODY_BASEPATH       "media/test/integration/examples/transcode_req_body_template"
 #define REQBODY_VIDEO_BASEPATH REQBODY_BASEPATH "/video"
 #define REQBODY_IMAGE_BASEPATH REQBODY_BASEPATH "/image"
-#define ITEST_URL_PATH         "https://localhost:8010/file/transcode"
+#define ITEST_URL_PATH         "/file/transcode"
+
+#define RUNNER_LOAD_JSN_FILE(fullpath) json_load_file(fullpath, (size_t)0, NULL)
 
 extern json_t *_app_itest_active_upload_requests;
 
@@ -166,8 +169,10 @@ static void _api__start_transcoding_test__accepted_common(
     const char *req_body_template_filepath, json_t *upld_req, json_t *resource_id_item,
     test_verify_cb_t _fn_verify
 ) {
+    const char  *sys_basepath = getenv("SYS_BASE_PATH");
     json_error_t jerror = {0};
-    json_t      *req_body_template = json_load_file(req_body_template_filepath, (size_t)0, &jerror);
+    json_t      *req_body_template =
+        PATH_CONCAT_THEN_RUN(sys_basepath, req_body_template_filepath, RUNNER_LOAD_JSN_FILE);
     assert_that(req_body_template, is_not_null);
     assert_that((jerror.line >= 0), is_equal_to(0));
     assert_that((jerror.column >= 0), is_equal_to(0));
@@ -197,7 +202,7 @@ static void _api__start_transcoding_test__accepted_common(
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = req_body_raw, .src_filepath = NULL},
     };
@@ -355,7 +360,7 @@ Ensure(api__transcode_test_video__invalid_body) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
     };
@@ -410,6 +415,7 @@ Ensure(api__transcode_test_video__invalid_elm_stream) {
         {REQBODY_VIDEO_BASEPATH "/invalid_stream_audio_attr_1.json", "bitrate_kbps"},
     };
     char        url[] = ITEST_URL_PATH;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
@@ -420,13 +426,14 @@ Ensure(api__transcode_test_video__invalid_elm_stream) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
     };
     itest_usrarg_t mock_usr_srg = {.upld_req = upld_req, .expect_resp_code = 400, .expect_err_field = NULL};
     for (int idx = 0; idx < 5; idx++) {
-        json_t *template = json_load_file(test_data[idx].template_filepath, 0, NULL);
+        json_t *template =
+            PATH_CONCAT_THEN_RUN(sys_basepath, test_data[idx].template_filepath, RUNNER_LOAD_JSN_FILE);
         assert_that(template, is_not_null);
         if (!template)
             continue;
@@ -452,8 +459,8 @@ Ensure(api__transcode_test_video__invalid_resource_id) {
     itest_usrarg_t mock_usr_srg = {
         .upld_req = upld_req, .expect_resp_code = 404, .expect_err_field = API_QPARAM_LABEL__RESOURCE_ID
     };
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
     const char *template_filepath = REQBODY_VIDEO_BASEPATH "/nonexist_resource_id.json";
-    char        url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
@@ -464,7 +471,7 @@ Ensure(api__transcode_test_video__invalid_resource_id) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = ITEST_URL_PATH,
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = template_filepath},
     };
@@ -472,7 +479,7 @@ Ensure(api__transcode_test_video__invalid_resource_id) {
     char *req_body_raw = NULL;
     { // subcase #2, given user id doesn't match the owner of resource
         _available_resource_lookup(&upld_req2, &resource_id_item, "mp4", 0);
-        json_t *req_body_item = json_load_file(template_filepath, (size_t)0, NULL);
+        json_t *req_body_item = PATH_CONCAT_THEN_RUN(sys_basepath, template_filepath, RUNNER_LOAD_JSN_FILE);
         json_object_set(req_body_item, "resource_id", resource_id_item);
         size_t MAX_BYTES_REQ_BODY = json_dumpb(req_body_item, NULL, 0, 0);
         req_body_raw = calloc(MAX_BYTES_REQ_BODY, sizeof(char));
@@ -510,6 +517,7 @@ Ensure(api__transcode_test_video__invalid_output) {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     char        url[] = ITEST_URL_PATH;
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
@@ -520,13 +528,13 @@ Ensure(api__transcode_test_video__invalid_output) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
     };
 #define RUN_CODE(temp_filepath, ...) \
     { \
-        json_t *template = json_load_file(temp_filepath, 0, NULL); \
+        json_t *template = PATH_CONCAT_THEN_RUN(sys_basepath, temp_filepath, RUNNER_LOAD_JSN_FILE); \
         json_object_set(template, "resource_id", resource_id_item); \
         size_t nb_required = json_dumpb(template, NULL, 0, 0); \
         char   renderred_req_body[nb_required]; \
@@ -590,7 +598,7 @@ Ensure(api__transcode_test_video__permission_denied) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = &req_body[0], .src_filepath = NULL}
     };

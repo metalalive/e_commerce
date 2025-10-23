@@ -51,10 +51,7 @@ Ensure(api_test_upload_part__singlechunk_ok) {
     }
     uint32_t usr_id = json_integer_value(json_object_get(upld_req, "usr_id"));
     uint32_t req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
-    sprintf(
-        &url[0], "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010, "/upload/multipart/part", req_seq,
-        EXPECT_PART
-    );
+    sprintf(&url[0], "/upload/multipart/part?req_seq=%d&part=%d", req_seq, EXPECT_PART);
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_t     *quota = json_array();
@@ -70,7 +67,7 @@ Ensure(api_test_upload_part__singlechunk_ok) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .headers = header_kv_serials
     };
@@ -94,17 +91,14 @@ Ensure(api_test_upload_part__singlechunk_ok) {
 #define EXPECT_PART 3
 Ensure(api_test_upload_part__missing_auth_token) {
     char url[128] = {0};
-    sprintf(
-        &url[0], "https://%s:%d%s?req_seq=%s&part=%d", "localhost", 8010, "/upload/multipart/part",
-        "1c037a57581e", EXPECT_PART
-    );
+    sprintf(&url[0], "/upload/multipart/part?req_seq=%s&part=%d", "1c037a57581e", EXPECT_PART);
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
@@ -131,10 +125,7 @@ Ensure(api_test_upload_part__uri_error) {
     char     url[128] = {0};
     uint32_t usr_id = 123;
     uint32_t req_seq = 0xffffff; // invalid upload request
-    sprintf(
-        &url[0], "https://%s:%d%s?req_id=%d&part=%d", "localhost", 8010, "/upload/multipart/part", req_seq,
-        EXPECT_PART
-    );
+    sprintf(&url[0], "/upload/multipart/part?req_id=%d&part=%d", req_seq, EXPECT_PART);
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_t     *quota = json_array();
@@ -143,7 +134,7 @@ Ensure(api_test_upload_part__uri_error) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
     };
@@ -170,10 +161,7 @@ Ensure(api_test_upload_part__invalid_req) {
     char     url[128] = {0};
     uint32_t usr_id = 123;
     uint32_t req_seq = 0xffffff; // invalid upload request
-    sprintf(
-        &url[0], "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010, "/upload/multipart/part", req_seq,
-        EXPECT_PART
-    );
+    sprintf(&url[0], "/upload/multipart/part?req_seq=%d&part=%d", req_seq, EXPECT_PART);
     const char *codename_list[2] = {"upload_files", NULL};
     json_t     *header_kv_serials = json_array();
     json_t     *quota = json_array();
@@ -189,7 +177,7 @@ Ensure(api_test_upload_part__invalid_req) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
     };
@@ -253,11 +241,8 @@ Ensure(api_test_upload_part__quota_exceed) {
     };
     for (size_t idx = 0; idx < NUM_PARTS; idx++) {
         char url[128] = {0};
-        sprintf(
-            &url[0], "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010, "/upload/multipart/part",
-            req_seq, cb_args[idx].part
-        );
-        setup_data.url = &url[0];
+        sprintf(&url[0], "/upload/multipart/part?req_seq=%d&part=%d", req_seq, cb_args[idx].part);
+        setup_data.url_rel_ref = &url[0];
 #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
         setup_data.upload_filepaths.entries[0] = cb_args[idx].filepath;
 #pragma GCC diagnostic pop
@@ -279,17 +264,14 @@ Ensure(api_test_upload_part__quota_exceed) {
 static char *_itest_filechunk_metadata = NULL;
 
 Ensure(api_test_upload_part__multichunk_outoforder) {
-    json_t      *header_kv_serials = json_array();
-    json_t      *usr_upload_quota = json_object();
-    json_error_t jerror;
-    uint8_t      is_array = 0;
-    json_t      *files_info = json_load_file(_itest_filechunk_metadata, (size_t)0, &jerror);
-    {
-        is_array = json_is_array(files_info);
-        assert_that(is_array, is_equal_to(1));
-        if (!is_array) {
-            goto done;
-        }
+    json_error_t jerror = {0};
+
+    json_t *header_kv_serials = json_array(), *usr_upload_quota = json_object();
+    json_t *files_info = json_load_file(_itest_filechunk_metadata, (size_t)0, &jerror);
+    uint8_t is_array = json_is_array(files_info);
+    assert_that(is_array, is_equal_to(1));
+    if (!is_array) {
+        goto done;
     }
     test_setup_pub_t setup_data = {
         .method = "POST",
@@ -307,12 +289,10 @@ Ensure(api_test_upload_part__multichunk_outoforder) {
         const char *file_type = json_string_value(json_object_get(file_info, "type"));
         const char *file_subtype = json_string_value(json_object_get(file_info, "subtype"));
         uint8_t     is_broken = json_boolean_value(json_object_get(file_info, "broken"));
-        {
-            is_array = json_is_array(chunkinfo);
-            assert_that(is_array, is_equal_to(1));
-            if (!is_array) {
-                break;
-            }
+        is_array = json_is_array(chunkinfo);
+        assert_that(is_array, is_equal_to(1));
+        if (!is_array) {
+            break;
         }
         size_t  req_seq_idx = 2 + idx; // the first 2 upload requests are reserved for the 2 test cases above
         json_t *upld_req = json_array_get(_app_itest_active_upload_requests, req_seq_idx);
@@ -375,14 +355,12 @@ Ensure(api_test_upload_part__multichunk_outoforder) {
                    .upld_req_ref = upld_req
             };
             char url[128] = {0};
-            nwrite = snprintf(
-                &url[0], 128, "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010,
-                "/upload/multipart/part", req_seq, cb_arg.part
-            );
+            nwrite =
+                snprintf(&url[0], 128, "/upload/multipart/part?req_seq=%d&part=%d", req_seq, cb_arg.part);
             assert_that(nwrite, is_less_than(128));
             if (nwrite >= 128)
                 break;
-            setup_data.url = &url[0];
+            setup_data.url_rel_ref = &url[0];
             setup_data.upload_filepaths.entries[0] = (char *)cb_arg.filepath;
             run_client_request(&setup_data, test_verify__app_server_response, (void *)&cb_arg);
         } // end of inner loop
@@ -398,15 +376,18 @@ done:
 } // end of api_test_upload_part__multichunk_outoforder
 
 TestSuite *api_upload_part_tests(json_t *root_cfg) {
-    json_t     *fchunk_cfg = json_object_get(json_object_get(root_cfg, "test"), "file_chunk");
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    json_t     *fchunk_cfg = json_object_get(root_cfg, "file_chunk");
     const char *metadata_fname = json_string_value(json_object_get(fchunk_cfg, "output_metadata"));
     const char *base_folder = json_string_value(json_object_get(fchunk_cfg, "base_folder"));
+    size_t      sys_basepath_sz = strlen(sys_basepath);
     size_t      metadata_fname_sz = strlen(metadata_fname);
     size_t      base_folder_sz = strlen(base_folder);
-    size_t      _meta_filepath_sz = metadata_fname_sz + base_folder_sz + 2;
+    size_t      _meta_filepath_sz = sys_basepath_sz + metadata_fname_sz + base_folder_sz + 3;
     _itest_filechunk_metadata = calloc(_meta_filepath_sz, sizeof(char));
-    size_t nwrite =
-        snprintf(_itest_filechunk_metadata, _meta_filepath_sz, "%s/%s", base_folder, metadata_fname);
+    size_t nwrite = snprintf(
+        _itest_filechunk_metadata, _meta_filepath_sz, "%s/%s/%s", sys_basepath, base_folder, metadata_fname
+    );
     assert(nwrite < _meta_filepath_sz);
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test_upload_part__missing_auth_token);

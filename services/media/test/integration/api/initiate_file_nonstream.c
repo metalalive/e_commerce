@@ -1,10 +1,7 @@
 #include <jansson.h>
 #include "../test/integration/test.h"
 
-#define ITEST_STREAM_HOST "localhost:8010"
-#define ITEST_URL_PATTERN \
-    "https://" ITEST_STREAM_HOST "/file?" API_QPARAM_LABEL__RESOURCE_ID "=%s&" API_QPARAM_LABEL__DOC_DETAIL \
-    "=%s"
+#define ITEST_URL_PATTERN "/file?" API_QPARAM_LABEL__RESOURCE_ID "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
 
 extern json_t  *itest_filefetch_avail_resource_lookup(uint8_t public_access, const char *fsubtype_in);
 extern uint32_t itest_fileftech__get_approved_usr_id(json_t *upld_req);
@@ -41,7 +38,7 @@ static void _itest_nonstream_init__filefetch(itest_usrarg_t *usr_arg) {
         add_auth_token_to_http_header(header_kv_serials, usr_arg->usr_id, codename_list, quota);
     }
     test_setup_pub_t setup_data = {
-        .method = "GET", .verbose = 0, .url = &url[0], .headers = header_kv_serials
+        .method = "GET", .verbose = 0, .url_rel_ref = &url[0], .headers = header_kv_serials
     };
     run_client_request(&setup_data, itest_verify__nonstream_init, usr_arg);
     free(resource_id_escaped);

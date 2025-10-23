@@ -52,11 +52,9 @@ test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_priv_t *privd
 } // end of test_verify__initiate_multipart_upload_ok
 
 Ensure(api_test_initiate_multipart_upload_ok) {
-    char   url[128] = {0};
     size_t idx = 0, NUM_USERS = ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + _itest_num_original_files;
     // the resource id client wants to claim, server may return auth failure if the user doesn't
     //  have access to modify the resource pointed by this ID
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
     uint32_t   *usr_prof_ids = malloc(NUM_USERS * sizeof(uint32_t));
     for (idx = 0; idx < NUM_USERS; idx++)
@@ -69,7 +67,7 @@ Ensure(api_test_initiate_multipart_upload_ok) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = "/upload/multipart/initiate",
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials,
@@ -99,15 +97,13 @@ Ensure(api_test_initiate_multipart_upload_ok) {
 } // end of api_test_initiate_multipart_upload_ok
 
 Ensure(api_test_initiate_multipart_upload_auth_token_fail) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = "/upload/multipart/initiate",
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
@@ -117,8 +113,6 @@ Ensure(api_test_initiate_multipart_upload_auth_token_fail) {
 } // end of api_test_initiate_multipart_upload_auth_token_fail
 
 Ensure(api_test_initiate_multipart_upload_insufficient_permission) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     const char *codename_list[3] = {"can_do_sth_else", "can_do_that", NULL};
     json_t     *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
@@ -128,7 +122,7 @@ Ensure(api_test_initiate_multipart_upload_insufficient_permission) {
     test_setup_pub_t setup_data = {
         .method = "POST",
         .verbose = 0,
-        .url = &url[0],
+        .url_rel_ref = "/upload/multipart/initiate",
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
@@ -139,7 +133,7 @@ Ensure(api_test_initiate_multipart_upload_insufficient_permission) {
 } // end of api_test_initiate_multipart_upload_insufficient_permission
 
 TestSuite *api_initiate_multipart_upload_tests(json_t *root_cfg) {
-    json_t *fchunk_cfg = json_object_get(json_object_get(root_cfg, "test"), "file_chunk");
+    json_t *fchunk_cfg = json_object_get(root_cfg, "file_chunk");
     json_t *file_list = json_object_get(fchunk_cfg, "files");
     if (file_list && json_is_array(file_list)) {
         _itest_num_original_files = json_array_size(file_list);
