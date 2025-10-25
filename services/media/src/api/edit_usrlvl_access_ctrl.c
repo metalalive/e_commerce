@@ -31,7 +31,7 @@ static void _api_edit_usrlvl_acl__deinit_primitives(
 #if 1
     int will_alloc_mem = (req->res.headers.size >= req->res.headers.capacity) && (req->res.headers.size != 0);
     if (will_alloc_mem) {
-        fprintf(
+        RPC_DEBUG_FPRINTF(
             stderr, "[api][edit_usrlvl_acl] line:%d, req:%p, header size:%ld, capacity:%ld \n", __LINE__, req,
             req->res.headers.size, req->res.headers.capacity
         );
@@ -44,7 +44,7 @@ static void _api_edit_usrlvl_acl__deinit_primitives(
     size_t  nb_required = json_dumpb(resp_body, NULL, 0, 0);
     if (req->res.status == 0) {
         req->res.status = 500;
-        fprintf(stderr, "[api][edit_usrlvl_acl] line:%d \n", __LINE__);
+        h2o_error_printf("[ERROR][api][edit_usrlvl_acl] line:%d \n", __LINE__);
     }
     if (nb_required > 0) {
         char   body[nb_required + 1];
@@ -167,12 +167,19 @@ static __attribute__((optimize("O0"))) int _api_edit_acl_verify_otherusers_exist
             } \
             __continue = 0; \
         } else if (_usrdata->num_timer_evt++ > MAX_NUM_TIMER_EVENTS) { \
-            h2o_error_printf("[api][edit_acl] line:%d, timeout, not receive RPC reply \n", __LINE__); \
+            h2o_error_printf( \
+                "[api][edit_acl] line:%d, RPC reply TIMEOUT after %u timer events\n", __LINE__, \
+                _usrdata->num_timer_evt \
+            ); \
             _usrdata->req->res.status = 503; \
             __continue = 0; \
             _err = 1; \
         } else { \
             void *_out_ctx = apprpc_recv_reply_restart(_usrdata->rpcreply_ctx); \
+            RPC_DEBUG_FPRINTF( \
+                stderr, "[DEBUG][edit_acl] line:%d, timer restart attempt, _out_ctx:%p, num_evt:%u\n", \
+                __LINE__, _out_ctx, _usrdata->num_timer_evt \
+            ); \
             if (!_out_ctx) { \
                 __continue = 0; \
                 _err = 1; \
@@ -188,10 +195,21 @@ _api_verify_otherusers_exist__update_cb(arpc_reply_cfg_t *cfg, json_t *info, ARP
     uint8_t _continue = 1;
     api_usr_data_t *usrdata = cfg->usr_data;
     json_t         *valid_usrprofs = NULL;
+    RPC_DEBUG_FPRINTF(
+        stderr, "[DEBUG][edit_acl] line:%d, update_cb called, reply_usrprofs:%p, num_timer_evt:%u\n",
+        __LINE__, reply_usrprofs, usrdata->num_timer_evt
+    );
     int err = app_rpc__pycelery_extract_replies(reply_usrprofs, &valid_usrprofs) != APPRPC_RESP_OK;
+    RPC_DEBUG_FPRINTF(
+        stderr, "[DEBUG][edit_acl] line:%d, extract_replies result - err:%d, valid_usrprofs:%p\n", __LINE__,
+        err, valid_usrprofs
+    );
     if (err) {
         _continue = 0;
     } else if (valid_usrprofs) {
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][edit_acl] line:%d, got valid user profiles, storing to usrdata\n", __LINE__
+        );
         if (usrdata->rpc_returned_usrprofs)
             json_decref(usrdata->rpc_returned_usrprofs);
         usrdata->rpc_returned_usrprofs = valid_usrprofs;
@@ -252,6 +270,10 @@ static ARPC_STATUS_CODE _api_rpc__start_verify_usr_ids(
         snprintf(&celery_id_str[0], celery_id_str_sz, PY_CELERY_ID_PATTERN, curr_usr_id, &cel_uuid_str[0]);
     assert(nwrite < celery_id_str_sz);
     celery_id_str_sz = nwrite;
+    RPC_DEBUG_FPRINTF(
+        stderr, "[DEBUG][edit_acl] line:%d, sending RPC with corr_id(celery):%s, usr_id:%u\n", __LINE__,
+        &celery_id_str[0], curr_usr_id
+    );
     arpc_kv_t _extra_headers[2] = {
         {.value = {.len = celery_id_str_sz, .bytes = &celery_id_str[0]}, .key = {.len = 2, .bytes = "id"}},
         {.value = {.len = sizeof(PY_CELERY_TSK_HDLR_HIER) - 1, .bytes = PY_CELERY_TSK_HDLR_HIER},
@@ -283,15 +305,15 @@ static void api_edit_acl__verify_otherusers_exist(
         _api_rpc__start_verify_usr_ids(req->conn->ctx->storage.entries[1].data, spec, curr_usr_id);
     if (result != APPRPC_RESP_ACCEPTED) {
         h2o_error_printf(
-            "[api][edit_usrlv_acl] line:%d, failed to publish RPC message:%d \n", __LINE__, result
+            "[api][edit_usrlv_acl] line:%d, RPC publish FAILED, result:%d, usr_id:%u \n", __LINE__, result,
+            curr_usr_id
         );
         json_object_set_new(err_info, "unknown", json_string("internal error"));
         req->res.status = 503;
     } else { // check RPC reply queue
         api_usr_data_t *usrdata = calloc(1, sizeof(api_usr_data_t));
         // fprintf(stderr, "[api][edit_usrlvl_acl] line:%d, req:%p, header size:%ld, capacity:%ld
-        // \n",
-        //         __LINE__ , req, req->res.headers.size, req->res.headers.capacity );
+        // \n", __LINE__ , req, req->res.headers.size, req->res.headers.capacity );
         *usrdata =
             (api_usr_data_t){.req = req, .hdlr = hdlr, .node = node, .spec = spec, .err_info = err_info};
         arpc_reply_cfg_t rpc_cfg = {
@@ -306,6 +328,10 @@ static void api_edit_acl__verify_otherusers_exist(
             .on_update = _api_verify_otherusers_exist__update_cb,
         };
         void *rpc_reply_ctx = apprpc_recv_reply_start(&rpc_cfg);
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][edit_acl] line:%d, started RPC reply listener, ctx:%p, usr_id:%u\n", __LINE__,
+            rpc_reply_ctx, curr_usr_id
+        );
         if (rpc_reply_ctx) {
             usrdata->rpcreply_ctx = rpc_reply_ctx;
         } else {

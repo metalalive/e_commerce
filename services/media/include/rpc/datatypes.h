@@ -6,6 +6,12 @@ extern "C" {
 
 #include <h2o/memory.h>
 
+#ifdef DEBUG_RPC
+    #define RPC_DEBUG_FPRINTF(...) fprintf(__VA_ARGS__)
+#else
+    #define RPC_DEBUG_FPRINTF(...) (void)0
+#endif
+
 typedef enum {
     APPRPC_RESP_OK = 1,
     APPRPC_RESP_ACCEPTED,

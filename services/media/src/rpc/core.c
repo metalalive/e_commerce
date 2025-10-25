@@ -21,9 +21,9 @@ static ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply_
         {
             amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
 #if 0
-                        fprintf(stderr, "[RPC][core] line:%d, reason: server channel error %u, class id:0x%x, method id:0x%x, message: %.*s \n",
-                                __LINE__, m->reply_code, m->class_id, m->method_id, (int)m->reply_text.len,
-                                (char *)m->reply_text.bytes);
+            RPC_DEBUG_FPRINTF(stderr, "[RPC][core] line:%d, reason: server channel error %u, class id:0x%x, method id:0x%x, message: %.*s \n",
+                __LINE__, m->reply_code, m->class_id, m->method_id, (int)m->reply_text.len,
+                (char *)m->reply_text.bytes);
 #endif
             if (m->reply_code < AMQP_CONTENT_TOO_LARGE) {
                 // pass
@@ -206,6 +206,10 @@ apprpc_ensure_reply_queue(struct arpc_ctx_t *_ctx, arpc_cfg_bind_reply_t *reply_
         amqp_empty_table
     );
     amqp_rpc_reply_t _reply = amqp_get_rpc_reply(_ctx->conn);
+    RPC_DEBUG_FPRINTF(
+        stderr, "[DEBUG][rpc_core] line:%d, declaring reply queue:%s, result:%d\n", __LINE__, q_name,
+        _reply.reply_type
+    );
     if (_reply.reply_type != AMQP_RESPONSE_NORMAL)
         apprpc_declare_q_report_error(&_reply, q_name);
     return apprpc__translate_status_from_lowlvl_lib(&_reply);
@@ -549,6 +553,10 @@ app_rpc_consume_message(void *ctx, void *loop) { // consume one message at a tim
         arpc_receipt_t *r = malloc(sizeof(arpc_receipt_t));
         amqp_bytes_t   *corr_id = &envelope.message.properties.correlation_id;
         amqp_bytes_t   *body = &envelope.message.body;
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][rpc][core] line:%d, route key (%s), ready to trigger task handler \n", __LINE__,
+            (char *)envelope.routing_key.bytes
+        );
         *r = (arpc_receipt_t){
             .ctx = ctx,
             .loop = loop,
@@ -622,15 +630,22 @@ app_rpc_fetch_replies(arpc_exe_arg_t *args, size_t max_nread, arpc_reply_corr_id
         ); \
         reply = amqp_get_rpc_reply(mq_ctx->conn); \
         _res = apprpc__translate_status_from_lowlvl_lib(&reply); \
+        RPC_DEBUG_FPRINTF( \
+            stderr, "[DEBUG][rpc_core] line:%d, consuming from queue:%s, result:%d\n", __LINE__, \
+            &reply_q_name[0], _res \
+        ); \
     }
         MSGQ__RECONNECT_THEN_RUN_OPERATION(mq_ctx, res, CMD);
 #undef CMD
         if (res == APPRPC_RESP_OK) {
             // pass
         } else if (res == APPRPC_RESP_MSGQ_OPERATION_ERROR || res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT) {
-            fprintf(stderr, "[RPC] failed to consume reply queue (%s) \n", &reply_q_name[0]);
             uint8_t channel_closed = reply.reply_type == AMQP_RESPONSE_SERVER_EXCEPTION &&
                                      reply.reply.id == AMQP_CHANNEL_CLOSE_METHOD;
+            RPC_DEBUG_FPRINTF(
+                stderr, "[DEBUG][rpc_core] line:%d, consume FAILED - queue:%s, error:%d, channel_closed:%d\n",
+                __LINE__, &reply_q_name[0], res, channel_closed
+            );
             if (channel_closed) { // RPC reply queue for current user does not exist
                 // TODO, (1) force to reconnect if channal number reaches its max limit,
                 //  (2) security log, prevent DDoS attack
@@ -668,6 +683,10 @@ app_rpc_fetch_replies(arpc_exe_arg_t *args, size_t max_nread, arpc_reply_corr_id
                 args->msg_body.len = msgbody->len;
                 args->msg_body.bytes = msgbody->bytes;
                 args->_timestamp = (uint64_t)envelope.message.properties.timestamp;
+                RPC_DEBUG_FPRINTF(
+                    stderr, "[DEBUG][rpc_core] line:%d, consumed message - corr_id:%.*s, body_len:%ld\n",
+                    __LINE__, (int)corr_id->len, corr_id->bytes, msgbody->len
+                );
                 cb(mq_ctx->ref_cfg, args);
                 max_nread--;
                 amqp_destroy_envelope(&envelope);

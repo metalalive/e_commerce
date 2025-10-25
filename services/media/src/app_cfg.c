@@ -161,14 +161,14 @@ int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
     int     threshold = (int)json_integer_value(threshold_obj);
 
     const char *sys_basepath = _app_cfg->env_vars.sys_base_path;
-    const char *rel_path = json_string_value(path_obj);
+    const char *rel_path = json_string_value(path_obj); // relative path
     if (!rel_path || threshold <= 0) {
         h2o_error_printf(
             "[parsing][tmp-buf] invalid settings, rel-path: %s , threshold: %d bytes\n", rel_path, threshold
         );
         goto error;
     }
-    // access check to the path
+    // access check to full path,
 #define RUNNER(fullpath) access(fullpath, F_OK | R_OK | W_OK)
     int result = PATH_CONCAT_THEN_RUN(sys_basepath, rel_path, RUNNER);
 #undef RUNNER
@@ -177,7 +177,9 @@ int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
         goto error;
     }
     _app_cfg->tmp_buf.threshold_bytes = (unsigned int)threshold;
-    _app_cfg->tmp_buf.path = PATH_CONCAT_THEN_RUN(sys_basepath, rel_path, strdup);
+    // full-path construction will be handled by each storage implementation,
+    // global app config instance still keeps the relative path to temporary buffer
+    _app_cfg->tmp_buf.path = strdup(rel_path);
     return EX_OK;
 error:
     return EX_CONFIG;

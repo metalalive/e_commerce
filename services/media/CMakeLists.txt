@@ -101,6 +101,13 @@ IF (LIBC_HAS_BACKTRACE)
     ENDIF()
 ENDIF ()
 
+option(DEBUG_RPC "Set to ON to enable RPC debug logging." OFF)
+MESSAGE(STATUS "DEBUG_RPC: ${DEBUG_RPC}")
+if(DEBUG_RPC)
+    add_compile_definitions(DEBUG_RPC)
+ENDIF ()
+
+
 INCLUDE_DIRECTORIES(
     include 
     ${LIBELF_INCLUDE_DIRS}

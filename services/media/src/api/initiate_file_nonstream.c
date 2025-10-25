@@ -23,16 +23,13 @@ _init_f_nonstream__cached_doc_basepath(json_t *spec, const char *_res_id_encoded
 #undef PATTERN
 }
 
-static void
-_init_f_nonstream__asa_src_basepath(json_t *spec, const char *_storage_alias, uint8_t req_transcoded) {
-    asa_cfg_t *storage = app_storage_cfg_lookup(_storage_alias); // for remote source
-    uint32_t   last_upld_seq = (uint32_t)json_integer_value(json_object_get(spec, "last_upld_req"));
-    uint32_t   res_owner_id = (uint32_t)json_integer_value(json_object_get(spec, "resource_owner_id"));
+static void _init_f_nonstream__asa_src_basepath(json_t *spec, uint8_t req_transcoded) {
+    uint32_t last_upld_seq = (uint32_t)json_integer_value(json_object_get(spec, "last_upld_req"));
+    uint32_t res_owner_id = (uint32_t)json_integer_value(json_object_get(spec, "resource_owner_id"));
     assert(last_upld_seq != 0);
     assert(res_owner_id != 0);
-    size_t fullpath_sz =
-        strlen(storage->base_path) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(last_upld_seq) + 1;
-#define PATTERN_ORIG_FILE  "%s/%d/%08x"
+    size_t fullpath_sz = USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(last_upld_seq) + 1;
+#define PATTERN_ORIG_FILE  "%d/%08x"
 #define PATTERN_TRANSCODED PATTERN_ORIG_FILE "/%s"
     if (req_transcoded) {
         fullpath_sz += sizeof(PATTERN_TRANSCODED) + sizeof(ATFP__COMMITTED_FOLDER_NAME);
@@ -43,13 +40,11 @@ _init_f_nonstream__asa_src_basepath(json_t *spec, const char *_storage_alias, ui
     size_t nwrite = 0;
     if (req_transcoded) {
         nwrite = snprintf(
-            &fullpath[0], fullpath_sz, PATTERN_TRANSCODED, storage->base_path, res_owner_id, last_upld_seq,
+            &fullpath[0], fullpath_sz, PATTERN_TRANSCODED, res_owner_id, last_upld_seq,
             ATFP__COMMITTED_FOLDER_NAME
         );
     } else {
-        nwrite = snprintf(
-            &fullpath[0], fullpath_sz, PATTERN_ORIG_FILE, storage->base_path, res_owner_id, last_upld_seq
-        );
+        nwrite = snprintf(&fullpath[0], fullpath_sz, PATTERN_ORIG_FILE, res_owner_id, last_upld_seq);
     }
     assert(nwrite < fullpath_sz);
     json_object_set_new(spec, "asa_src_basepath", json_string(&fullpath[0]));
@@ -57,9 +52,8 @@ _init_f_nonstream__asa_src_basepath(json_t *spec, const char *_storage_alias, ui
 #undef PATTERN_TRANSCODED
 } // end of  _init_f_nonstream__asa_src_basepath
 
-RESTAPI_ENDPOINT_HANDLER(
-    initiate_file_nonstream, GET, hdlr, req
-) { // for fetching non-stream single file e.g. pictures
+RESTAPI_ENDPOINT_HANDLER(initiate_file_nonstream, GET, hdlr, req) {
+    // for fetching non-stream single file e.g. pictures
     int         err = 0;
     json_t     *err_info = app_fetch_from_hashmap(node->data, "err_info");
     json_t     *spec = app_fetch_from_hashmap(node->data, "qparams");
@@ -83,7 +77,7 @@ RESTAPI_ENDPOINT_HANDLER(
         const char *_asa_src_remote_alias = "localfs";
         json_object_set_new(spec, "storage_alias", json_string(_asa_src_remote_alias));
         _init_f_nonstream__cached_doc_basepath(spec, _res_id_encoded, _res_id_encoded_sz);
-        _init_f_nonstream__asa_src_basepath(spec, _asa_src_remote_alias, _detail != NULL);
+        _init_f_nonstream__asa_src_basepath(spec, _detail != NULL);
         err = api_filefetch_start_caching(
             req, hdlr, node, spec, err_info, atfp_cache_nonstream_init, atfp_nonstreamcache_proceed_datablock
         );

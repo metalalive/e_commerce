@@ -6,7 +6,7 @@
 #define AVFILTER_INPUT_PAD_LABEL  "nodestart"
 #define AVFILTER_OUTPUT_PAD_LABEL "nodesink"
 
-#define FILT_SPEC_MASK  "movie=%s/%s"
+#define FILT_SPEC_MASK  "movie=%s/%s/%s"
 #define FILT_SPEC_SCALE "scale=%u:%u"
 #define FILT_SPEC_CROP  "crop=%u:%u:%d:%d"
 
@@ -34,16 +34,17 @@ static int _atfp_img__gen_filter_spec(json_t *filt_spec, char *out, size_t out_s
     // TODO, save path to mask file in filter spec, instead of calling global
     // config object and retrieving the field.
     app_cfg_t     *acfg = app_get_global_cfg();
+    const char    *sys_basepath = acfg->env_vars.sys_base_path;
     aav_cfg_img_t *_imgcfg = &acfg->transcoder.output.image;
 #define RUNNER(fullpath) atfp_image_mask_pattern_index(fullpath)
-    json_t *msk_fmap = PATH_CONCAT_THEN_RUN(acfg->env_vars.sys_base_path, _imgcfg->mask.basepath, RUNNER);
+    json_t *msk_fmap = PATH_CONCAT_THEN_RUN(sys_basepath, _imgcfg->mask.basepath, RUNNER);
 #undef RUNNER
     if (msk_fmap) { // avfilter_graph_parse_ptr() will examine existence of the mask pattern file
 #if 1
         const char *patt_filename = json_string_value(json_object_get(msk_fmap, _msk_patt_label));
         size_t      nwrite = snprintf(
-            out, out_sz, FILT_SPEC_PATTERN, _imgcfg->mask.basepath, patt_filename, scale_w, scale_h, crop_w,
-            crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h
+            out, out_sz, FILT_SPEC_PATTERN, sys_basepath, _imgcfg->mask.basepath, patt_filename, scale_w,
+            scale_h, crop_w, crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h
         );
 #else
         size_t nwrite = snprintf(
@@ -209,14 +210,17 @@ void atfp__image_dst__avfilt_init(
         }
         filt_out->name = av_strdup(AVFILTER_INPUT_PAD_LABEL);
         filt_in->name = av_strdup(AVFILTER_OUTPUT_PAD_LABEL);
-        err = avfilter_graph_parse_ptr(
-            _img_enc_ctx->filter_graph, &filter_spec_raw[0], &filt_in, &filt_out, NULL
-        );
+        err =
+            avfilter_graph_parse_ptr(_img_enc_ctx->filter_graph, filter_spec_raw, &filt_in, &filt_out, NULL);
         if (err < 0) {
             json_object_set_new(
                 err_info, "transcoder",
                 json_string("[img][ff_out][filter]"
                             " failed to build filter graph")
+            );
+            av_log(
+                NULL, AV_LOG_ERROR, "[atfp][img][ff_out][filter] line:%d, error:%d, raw-spec: %s \n",
+                __LINE__, err, filter_spec_raw
             );
             goto done;
         } // TODO, valgrind will crash if the function returns with error, figure out why

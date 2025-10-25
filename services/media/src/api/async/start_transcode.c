@@ -443,12 +443,10 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
             goto error;
         }
     }
-    { // open source file then read first portion
-        size_t path_sz = strlen(asa_src->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1; // assume NULL-terminated string
+    { // open source file then read first portion, assume NULL-terminated string
+        size_t path_sz = USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1;
         char   basepath[path_sz];
-        size_t nwrite =
-            snprintf(&basepath[0], path_sz, "%s/%d/%08x", asa_src->storage->base_path, _usr_id, _upld_req_id);
+        size_t nwrite = snprintf(&basepath[0], path_sz, "%d/%08x", _usr_id, _upld_req_id);
         basepath[nwrite++] = 0x0; // NULL-terminated
         asa_src->op.mkdir.path.origin = (void *)strndup(&basepath[0], nwrite);
         asa_result = atfp_open_srcfile_chunk(
@@ -465,8 +463,8 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
     size_t transcoding_fullpath_sz = 0, version_fullpath_sz = 0;
     while ((asa_dst = atfp_asa_map_iterate_destination(asaobj_map))) {
         const char *version = asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL];
-        transcoding_fullpath_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-                                  UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + ATFP__MAXSZ_STATUS_FOLDER_NAME + 1;
+        transcoding_fullpath_sz =
+            USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + ATFP__MAXSZ_STATUS_FOLDER_NAME + 1;
         version_fullpath_sz = transcoding_fullpath_sz + strlen(version) + 1;
         asa_dst->op.mkdir.path.prefix = (void *)calloc(transcoding_fullpath_sz, sizeof(char));
         asa_dst->op.mkdir.path.origin = (void *)calloc(version_fullpath_sz, sizeof(char));
@@ -475,8 +473,8 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
         // stored in transcoding server) to destination storage (may be remotely stored, e.g. in
         // cloud platform)
         size_t nwrite = snprintf(
-            asa_dst->op.mkdir.path.origin, transcoding_fullpath_sz, "%s/%d/%08x/%s",
-            asa_dst->storage->base_path, _usr_id, _upld_req_id, ATFP__TEMP_TRANSCODING_FOLDER_NAME
+            asa_dst->op.mkdir.path.origin, transcoding_fullpath_sz, "%d/%08x/%s", _usr_id, _upld_req_id,
+            ATFP__TEMP_TRANSCODING_FOLDER_NAME
         );
         asa_dst->op.mkdir.path.origin[nwrite++] = 0x0; // NULL-terminated
         assert(nwrite <= transcoding_fullpath_sz);

@@ -164,6 +164,7 @@ Ensure(atfp_img_ffo_test__init_filt_grf_parse_spec_error) {
         avfilter_graph_parse_ptr, will_return(AVERROR(EBUSY)), when(graph, is_equal_to(&mock_filt_grf)),
         when(inputs, is_equal_to(&mock_filt_in)), when(outputs, is_equal_to(&mock_filt_out)),
     );
+    expect(av_log);
     expect(avfilter_inout_free, when(inout, is_equal_to(&mock_filt_in)));
     expect(avfilter_inout_free, when(inout, is_equal_to(&mock_filt_out)));
     atfp__image_dst__avfilt_init(&mock_avctx_src, &mock_avctx_dst, mock_filtspec, mock_err_info);

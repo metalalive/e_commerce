@@ -33,6 +33,10 @@ static __attribute__((optimize("O0"))) void itest_rpc_handler__verify_usr_ids(ar
     int     idx = 0;
     // send the first reply to indicate this consumer received the message
     json_object_set_new(resp_body, "status", json_string("STARTED"));
+    fprintf(
+        stderr, "[DEBUG][mock_rpc] line:%d, sent STARTED reply, corr_id:%.*s\n", __LINE__,
+        (int)receipt->job_id.len, receipt->job_id.bytes
+    );
     app_rpc_task_send_reply(receipt, resp_body, 0);
     if (!api_req || !mock_db) {
         fprintf(
@@ -80,8 +84,14 @@ error:
 done:
     // send the second reply to indicate this consumer has done the task and returned the final
     // output
-    if (!_no_resp)
+    if (!_no_resp) {
+        fprintf(
+            stderr, "[DEBUG][mock_rpc] line:%d, sent final reply, status:%s, corr_id:%.*s\n", __LINE__,
+            json_string_value(json_object_get(resp_body, "status")), (int)receipt->job_id.len,
+            receipt->job_id.bytes
+        );
         app_rpc_task_send_reply(receipt, resp_body, 1);
+    }
     if (mock_db)
         json_decref(mock_db);
     if (api_req)

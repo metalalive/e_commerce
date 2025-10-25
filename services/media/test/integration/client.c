@@ -3,8 +3,6 @@
 #include "utils.h"
 #include "../test/integration/test.h"
 
-#define ITEST_HTTP_TIMEOUT_SECOND_DEFAULT 5
-
 static size_t test_read_req_body_cb(char *buf, size_t sz, size_t nitems, void *usrdata) {
     int    fd = *(int *)usrdata;
     size_t max_buf_sz = sz * nitems;
@@ -41,12 +39,13 @@ static void setup_tls_client_request(CURL *handle, const char *sys_basepath) {
 static void setup_client_request(
     CURL *handle, const char *sys_basepath, test_setup_priv_t *privdata, test_setup_pub_t *pubdata
 ) {
-    const char *api_host_domain = getenv("API_HOST"), *api_port = getenv("API_PORT");
+    const char *api_host_domain = getenv("API_HOST"), *api_port = getenv("API_PORT"),
+               *timeout_secs_str = getenv("API_TIMEOUT_SECONDS");
 
     CURLcode res;
     json_t  *hdr_kv = NULL;
     size_t   req_body_len = 0;
-    int      idx = 0;
+    int      idx = 0, default_timeout_secs = (int)strtol(timeout_secs_str, NULL, 10);
     json_array_foreach(pubdata->headers, idx, hdr_kv) {
         assert(json_is_string(hdr_kv));
         privdata->headers = curl_slist_append(privdata->headers, json_string_value(hdr_kv));
@@ -57,7 +56,7 @@ static void setup_client_request(
     assert_that(res, is_equal_to(CURLE_OK));
     int timeout_sec = pubdata->http_timeout_sec;
     if (timeout_sec == 0)
-        timeout_sec = ITEST_HTTP_TIMEOUT_SECOND_DEFAULT;
+        timeout_sec = default_timeout_secs;
     res = curl_easy_setopt(handle, CURLOPT_TIMEOUT, (long)timeout_sec);
     assert_that(res, is_equal_to(CURLE_OK));
     {
@@ -67,7 +66,7 @@ static void setup_client_request(
         char   merged[m_sz];
         size_t wr_sz =
             snprintf(merged, m_sz, URL_FMT_PATTERN, api_host_domain, api_port, pubdata->url_rel_ref);
-        assert(wr_sz == (m_sz - 1));
+        assert(wr_sz <= (m_sz - 1));
         res = curl_easy_setopt(handle, CURLOPT_URL, merged);
 #undef URL_FMT_PATTERN
     }

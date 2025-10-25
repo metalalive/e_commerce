@@ -169,14 +169,11 @@ static void _api__start_transcoding_test__accepted_common(
     const char *req_body_template_filepath, json_t *upld_req, json_t *resource_id_item,
     test_verify_cb_t _fn_verify
 ) {
-    const char  *sys_basepath = getenv("SYS_BASE_PATH");
-    json_error_t jerror = {0};
-    json_t      *req_body_template =
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+    json_t     *req_body_template =
         PATH_CONCAT_THEN_RUN(sys_basepath, req_body_template_filepath, RUNNER_LOAD_JSN_FILE);
     assert_that(req_body_template, is_not_null);
-    assert_that((jerror.line >= 0), is_equal_to(0));
-    assert_that((jerror.column >= 0), is_equal_to(0));
-    if (jerror.line >= 0 || jerror.column >= 0)
+    if (!req_body_template)
         return;
     char *req_body_raw = NULL;
     json_object_set(req_body_template, "resource_id", resource_id_item);

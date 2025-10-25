@@ -257,8 +257,8 @@ static void test_verify_stream__hls_key_req(CURL *handle, test_setup_priv_t *pri
     size_t nread = read(privdata->fds.resp_body, &buf[0], RD_BUF_SZ);
     assert_that(nread, is_equal_to(HLS__NBYTES_KEY));
     // verify received key octet
-    uint32_t   _usr_id = json_integer_value(json_object_get(usr_arg->_upld_req, "usr_id"));
-    uint32_t   _upld_req_id = json_integer_value(json_object_get(usr_arg->_upld_req, "req_seq"));
+    uint32_t _usr_id = json_integer_value(json_object_get(usr_arg->_upld_req, "usr_id"));
+    uint32_t _upld_req_id = json_integer_value(json_object_get(usr_arg->_upld_req, "req_seq"));
 #define PATH_PATTERN "%s/%d/%08x/%s"
     size_t path_sz = sizeof(PATH_PATTERN) + strlen(itest_tmpbuf_path) + USR_ID_STR_SIZE +
                      UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(HLS_CRYPTO_KEY_FILENAME);

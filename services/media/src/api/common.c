@@ -189,6 +189,10 @@ api__render_rpc_reply_qname(const char *name_pattern, arpc_exe_arg_t *args, char
     uint32_t usr_prof_id = (uint32_t)json_integer_value(json_object_get(_usr_data, "usr_id"));
     if (usr_prof_id > 0) {
         snprintf(wr_buf, wr_sz, name_pattern, usr_prof_id);
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][api_common] line:%d, rendered reply queue name:%s for usr_id:%u\n", __LINE__,
+            wr_buf, usr_prof_id
+        );
     } else {
         status = APPRPC_RESP_ARG_ERROR;
     }
@@ -317,10 +321,11 @@ asa_op_base_cfg_t *api_job_progress_update__init_asaobj(void *loop, uint32_t usr
     app_cfg_t *app_cfg = app_get_global_cfg();
     size_t     mkdir_path_sz =
         strlen(app_cfg->tmp_buf.path) + 1 + USR_ID_STR_SIZE + 1; // include NULL-terminated byte
-    size_t                openf_path_sz = mkdir_path_sz + sizeof(JOB_PROGRESS_INFO_FILENAME) + 1;
-    size_t                cb_args_sz = num_usr_args * sizeof(void *);
-    size_t                asaobj_base_sz = storage->ops.fn_typesize();
-    size_t                asaobj_tot_sz = asaobj_base_sz + cb_args_sz + (mkdir_path_sz << 1) + openf_path_sz;
+    size_t openf_path_sz = mkdir_path_sz + sizeof(JOB_PROGRESS_INFO_FILENAME) + 1;
+    size_t cb_args_sz = num_usr_args * sizeof(void *);
+    size_t asaobj_base_sz = storage->ops.fn_typesize();
+    size_t asaobj_tot_sz = asaobj_base_sz + cb_args_sz + (mkdir_path_sz << 1) + openf_path_sz;
+
     asa_op_localfs_cfg_t *asa_local = calloc(1, asaobj_tot_sz);
     asa_op_base_cfg_t    *asaobj = &asa_local->super;
     char                 *ptr = (char *)asaobj + asaobj_base_sz;

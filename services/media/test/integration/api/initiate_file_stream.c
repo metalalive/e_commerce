@@ -77,10 +77,10 @@ static void _itest_fstream_init__send_request(itest_usrarg_t *usr_arg, uint32_t 
 
 Ensure(api_test__filestream_init__hls_auth_usr) {
 #define RESOURCE_OWNER(__upld_req) json_integer_value(json_object_get(__upld_req, "usr_id"))
-    json_t *upld_reqs[3] = {0};
+    json_t     *upld_reqs[3] = {0};
     const char *api_host_domain = getenv("API_HOST"), *api_port = getenv("API_PORT");
-    char ITEST_STREAM_HOST[80];
-    sprintf(ITEST_STREAM_HOST, "%s:%s", api_host_domain, api_port); 
+    char        ITEST_STREAM_HOST[80];
+    sprintf(ITEST_STREAM_HOST, "%s:%s", api_host_domain, api_port);
 #define RUN_CODE(__upld_req, _usr_id, __expect_resp_code) \
     { \
         if (__upld_req) { \
@@ -128,8 +128,8 @@ Ensure(api_test__filestream_init__hls_auth_usr) {
 
 Ensure(api_test__filestream_init__hls_public) {
     const char *api_host_domain = getenv("API_HOST"), *api_port = getenv("API_PORT");
-    char ITEST_STREAM_HOST[80];
-    sprintf(ITEST_STREAM_HOST, "%s:%s", api_host_domain, api_port); 
+    char        ITEST_STREAM_HOST[80];
+    sprintf(ITEST_STREAM_HOST, "%s:%s", api_host_domain, api_port);
     json_t *upld_req = itest_filefetch_avail_resource_lookup(1, "mp4");
     RUN_CODE(upld_req, 0, 200)
     RUN_CODE(upld_req, 9987, 200)
