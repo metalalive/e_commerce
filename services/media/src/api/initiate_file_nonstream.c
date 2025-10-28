@@ -8,14 +8,11 @@
 
 static void
 _init_f_nonstream__cached_doc_basepath(json_t *spec, const char *_res_id_encoded, size_t _res_id_encoded_sz) {
-#define PATTERN "%s/%s/%s"
-    app_cfg_t *acfg = app_get_global_cfg();
-    size_t filepath_sz = sizeof(PATTERN) + strlen(acfg->tmp_buf.path) + sizeof(ATFP_CACHED_FILE_FOLDERNAME) +
-                         _res_id_encoded_sz + 1;
+#define PATTERN "%s/%s"
+    size_t filepath_sz = sizeof(PATTERN) + sizeof(ATFP_CACHED_FILE_FOLDERNAME) + _res_id_encoded_sz + 1;
     char   filepath[filepath_sz];
-    size_t nwrite = snprintf(
-        &filepath[0], filepath_sz, PATTERN, acfg->tmp_buf.path, ATFP_CACHED_FILE_FOLDERNAME, _res_id_encoded
-    );
+    size_t nwrite =
+        snprintf(&filepath[0], filepath_sz, PATTERN, ATFP_CACHED_FILE_FOLDERNAME, _res_id_encoded);
     if (filepath[nwrite - 1] == 0xa) // next line
         filepath[--nwrite] = 0;
     assert(filepath_sz >= nwrite); // `doc_basepath` stores file exposed to frontend client
@@ -74,7 +71,7 @@ RESTAPI_ENDPOINT_HANDLER(initiate_file_nonstream, GET, hdlr, req) {
             json_object_set_new(err_info, API_QPARAM_LABEL__DOC_DETAIL, json_string("invalid characters"));
     }
     if (json_object_size(err_info) == 0) {
-        const char *_asa_src_remote_alias = "localfs";
+        const char *_asa_src_remote_alias = "persist_usr_asset";
         json_object_set_new(spec, "storage_alias", json_string(_asa_src_remote_alias));
         _init_f_nonstream__cached_doc_basepath(spec, _res_id_encoded, _res_id_encoded_sz);
         _init_f_nonstream__asa_src_basepath(spec, _detail != NULL);

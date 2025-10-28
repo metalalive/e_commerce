@@ -83,15 +83,12 @@ static void _atfp_hls__close_crypto_keyfile_cb(asa_op_base_cfg_t *_asa_local, AS
     atfp_t     *processor = &hlsproc->super;
     json_t     *err_info = processor->data.error;
     json_t     *spec = processor->data.spec;
-    app_cfg_t  *acfg = app_get_global_cfg();
     if (result == ASTORAGE_RESULT_COMPLETE && json_object_size(err_info) == 0) {
         const char *_enc_doc_id = json_string_value(json_object_get(spec, "encrypted_doc_id"));
         size_t      doc_id_sz = strlen(_enc_doc_id);
-        size_t max_path_sz = strlen(acfg->tmp_buf.path) + 3 + doc_id_sz + sizeof(ATFP_CACHED_FILE_FOLDERNAME);
-        char   path[max_path_sz];
-        size_t path_sz = atfp_get_encrypted_file_basepath(
-            acfg->tmp_buf.path, &path[0], max_path_sz, _enc_doc_id, doc_id_sz
-        );
+        size_t      max_path_sz = 1 + 3 + doc_id_sz + sizeof(ATFP_CACHED_FILE_FOLDERNAME);
+        char        path[max_path_sz];
+        size_t      path_sz = atfp_get_encrypted_file_basepath(&path[0], max_path_sz, _enc_doc_id, doc_id_sz);
         if (path_sz == 0) {
             fprintf(
                 stderr, "[hls][init_stream] line:%d, memory error, path_sz:%ld not sufficient \r\n", __LINE__,
@@ -216,13 +213,11 @@ static void _atfp_hls__open_crypto_keyfile_cb(asa_op_base_cfg_t *_asa_local, ASA
         json_error_t j_err = {0}; // load entire file, it shouldn't be that large in most cases
         keyinfo = json_loadfd(fd, JSON_REJECT_DUPLICATES, &j_err);
         if (keyinfo) {
-            json_t    *update_interval = json_object_get(processor->data.spec, "update_interval");
-            float      keyfile_secs = json_real_value(json_object_get(update_interval, "keyfile"));
-            app_cfg_t *acfg = app_get_global_cfg();
-#define RUNNER(basepath) \
-    atfp_check_fileupdate_required(&processor->data, basepath, HLS_CRYPTO_KEY_FILENAME, keyfile_secs)
-            refresh_req = PATH_CONCAT_THEN_RUN(_asa_local->storage->base_path, acfg->tmp_buf.path, RUNNER);
-#undef RUNNER
+            json_t *update_interval = json_object_get(processor->data.spec, "update_interval");
+            float   keyfile_secs = json_real_value(json_object_get(update_interval, "keyfile"));
+            refresh_req = atfp_check_fileupdate_required(
+                &processor->data, _asa_local->storage->base_path, HLS_CRYPTO_KEY_FILENAME, keyfile_secs
+            );
         } else {
             keyinfo = json_object();
             refresh_req = 1;
@@ -343,15 +338,12 @@ void atfp__video_hls__init_stream(atfp_t *processor) {
         goto done;
     }
     hlsproc->asa_local.loop = loop;
-#define ASA_SRC_BASEPATH_PATTERN "%s/%d/%08x"
+#define ASA_SRC_BASEPATH_PATTERN "%d/%08x"
     { // ensure unencrypted path of collected master playlist and crypto key file
-        app_cfg_t *acfg = app_get_global_cfg();
-        size_t filepath_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + strlen(acfg->tmp_buf.path) + USR_ID_STR_SIZE +
-                             UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1;
+        size_t filepath_sz =
+            sizeof(ASA_SRC_BASEPATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1;
         char   filepath[filepath_sz];
-        size_t nwrite = snprintf(
-            &filepath[0], filepath_sz, ASA_SRC_BASEPATH_PATTERN, acfg->tmp_buf.path, _usr_id, _upld_req_id
-        );
+        size_t nwrite = snprintf(&filepath[0], filepath_sz, ASA_SRC_BASEPATH_PATTERN, _usr_id, _upld_req_id);
         assert(filepath_sz >= nwrite);
         char *ptr = calloc((filepath_sz << 1), sizeof(char));
         asa_local->op.mkdir.path.prefix = NULL;

@@ -16,7 +16,7 @@
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
-#define MOCK_STORAGE_ALIAS             "localfs"
+#define MOCK_STORAGE_ALIAS             "persist_usr_asset"
 
 #define MOCK_USER_ID       233
 #define MOCK_UPLD_REQ_1_ID 0x150de9a6
@@ -49,15 +49,17 @@ static void _utest_hls_cryptokey_req__common_cb(atfp_t *processor) {
     json_t     *mock_err_info = json_object(); \
     app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
     const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
-    asa_cfg_t   mock_storage_cfg = { \
-          .alias = MOCK_STORAGE_ALIAS, \
-          .base_path = sys_basepath, \
-          .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close} \
+    asa_cfg_t   mock_storage_cfg[2] = { \
+        {.alias = MOCK_STORAGE_ALIAS, \
+           .base_path = sys_basepath, \
+           .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close}}, \
+        {.alias = "local_tmpbuf", \
+           .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, strdup), \
+           .ops = {.fn_open = app_storage_localfs_open, .fn_close = app_storage_localfs_close}} \
     }; \
-    mock_appcfg->storages.size = 1; \
-    mock_appcfg->storages.capacity = 1; \
-    mock_appcfg->storages.entries = &mock_storage_cfg; \
-    mock_appcfg->tmp_buf.path = UTEST_ASALOCAL_BASEPATH; \
+    mock_appcfg->storages.size = 2; \
+    mock_appcfg->storages.capacity = 2; \
+    mock_appcfg->storages.entries = mock_storage_cfg; \
     atfp_hls_t *mock_fp = (atfp_hls_t *)atfp__video_hls__instantiate_stream(); \
     { \
         mock_fp->super.data = (atfp_data_t \
@@ -84,7 +86,7 @@ static void _utest_hls_cryptokey_req__common_cb(atfp_t *processor) {
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
-    mock_appcfg->tmp_buf.path = NULL; \
+    free(mock_storage_cfg[1].base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info); \
     mock_fp->asa_local.super.deinit(&mock_fp->asa_local.super);

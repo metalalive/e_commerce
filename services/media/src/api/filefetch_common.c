@@ -223,8 +223,8 @@ int api_filefetch_start_caching(
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__H2HDLR] = hdlr;
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__MIDDLEWARE] = node;
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__CACHE_PROCEED_FN_PTR] = proceed_fn;
-        if (json_object_get(spec, "storage_alias") == NULL)
-            json_object_set_new(spec, "storage_alias", json_string("localfs")); // for source storage
+        if (json_object_get(spec, "storage_alias") == NULL) // for source storage
+            json_object_set_new(spec, "storage_alias", json_string("persist_usr_asset"));
         json_object_set_new(spec, "db_alias", json_string("db_server_1"));
         _api_filefetch__determine_host_domain(req, spec);
         json_object_set_new(spec, "host_path", json_string(&endpoint_path[0]));

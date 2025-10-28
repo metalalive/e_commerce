@@ -39,15 +39,11 @@ RESTAPI_ENDPOINT_HANDLER(fetch_file_streaming_element, GET, self, req) {
         );
     if (json_object_size(err_info) > 0)
         goto done;
-    app_cfg_t  *acfg = app_get_global_cfg();
-    const char *basepath = acfg->tmp_buf.path;
     { // setup expected path to cached file
-#define PATTERN "%s/%s/%s"
-        size_t filepath_sz =
-            sizeof(PATTERN) + strlen(basepath) + sizeof(ATFP_CACHED_FILE_FOLDERNAME) + doc_id_sz + 1;
+#define PATTERN "%s/%s"
+        size_t filepath_sz = sizeof(PATTERN) + sizeof(ATFP_CACHED_FILE_FOLDERNAME) + doc_id_sz + 1;
         char   filepath[filepath_sz];
-        size_t nwrite =
-            snprintf(&filepath[0], filepath_sz, PATTERN, basepath, ATFP_CACHED_FILE_FOLDERNAME, doc_id);
+        size_t nwrite = snprintf(&filepath[0], filepath_sz, PATTERN, ATFP_CACHED_FILE_FOLDERNAME, doc_id);
         assert(filepath_sz >= nwrite); // `doc_basepath` stores file exposed to frontend client
         json_object_set_new(spec, "doc_basepath", json_string(&filepath[0]));
 #undef PATTERN

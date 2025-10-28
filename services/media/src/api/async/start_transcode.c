@@ -381,13 +381,15 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
             (uint32_t)APP_ENCODED_RD_BUF_SZ, (uint32_t)0
         );
         asa_local_tmpbuf = (asa_op_localfs_cfg_t *)api_rpc_transcode__init_asa_obj(
-            receipt, api_req, err_info, app_storage_cfg_lookup("localfs"), (uint8_t)NUM_USRARGS_ASA_LOCALTMP,
-            (uint32_t)0, (uint32_t)0
+            receipt, api_req, err_info, app_storage_cfg_lookup("local_tmpbuf"),
+            (uint8_t)NUM_USRARGS_ASA_LOCALTMP, (uint32_t)0, (uint32_t)0
         );
-        // set event loop to each file processor. TODO: event loop field should be moved to parent
-        // type
-        if (!strcmp(src_storage->alias, "localfs"))
-            ((asa_op_localfs_cfg_t *)asa_src)->loop = receipt->loop; // TODO
+        // set event loop to each file processor.
+        // TODO:
+        // - event loop field should be moved to parent
+        // - better approach to replace downcasting
+        if (!strcmp(src_storage->alias, "persist_usr_asset"))
+            ((asa_op_localfs_cfg_t *)asa_src)->loop = receipt->loop;
         asa_local_tmpbuf->loop = receipt->loop;
         atfp_asa_map_set_source(asaobj_map, asa_src);
         atfp_asa_map_set_localtmp(asaobj_map, asa_local_tmpbuf);
@@ -408,7 +410,10 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
                 receipt, api_req, err_info, dst_storage, (uint8_t)NUM_USRARGS_ASA_DST, (uint32_t)0,
                 (uint32_t)APP_ENCODED_WR_BUF_SZ
             );
-            if (!strcmp(dst_storage->alias, "localfs"))
+            // TODO:
+            // - event loop field should be moved to parent
+            // - better approach to replace downcasting
+            if (!strcmp(dst_storage->alias, "persist_usr_asset"))
                 ((asa_op_localfs_cfg_t *)asa_dst)->loop = receipt->loop; // TODO
             char *version_cpy = calloc(4, sizeof(char)); // used as key in json object, to make valgrind happy
             strncpy(version_cpy, version, APP_TRANSCODED_VERSION_SIZE);
@@ -421,12 +426,9 @@ static __attribute__((optimize("O0"))) void api_rpc_task_handler__start_transcod
         } // end of iteration
     }
     { // create work folder for local temp buffer
-        app_cfg_t *app_cfg = app_get_global_cfg();
-        size_t     path_sz = strlen(app_cfg->tmp_buf.path) + 1 + USR_ID_STR_SIZE + 1 +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1; // include NULL-terminated byte
-        char   basepath[path_sz];
-        size_t nwrite =
-            snprintf(&basepath[0], path_sz, "%s/%d/%08x", app_cfg->tmp_buf.path, _usr_id, _upld_req_id);
+        size_t path_sz = USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1;
+        char   basepath[path_sz]; // include NULL-terminated byte
+        size_t nwrite = snprintf(&basepath[0], path_sz, "%d/%08x", _usr_id, _upld_req_id);
         basepath[nwrite++] = 0x0; // NULL-terminated
         asa_local_tmpbuf->file.file = -1;
         asa_local_tmpbuf->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;

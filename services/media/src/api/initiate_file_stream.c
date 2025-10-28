@@ -32,7 +32,6 @@ RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req) {
     uint32_t    last_upld_seq = (uint32_t)json_integer_value(json_object_get(qparams, "last_upld_req"));
     uint32_t    res_owner_id = (uint32_t)json_integer_value(json_object_get(qparams, "resource_owner_id"));
     const char *label = "hls"; // TODO, store stream types to database once there are more to support
-    const char *storage_alias = "localfs";
     atfp_t     *processor = app_transcoder_file_processor(label);
     if (!processor) {
         req->res.status = 500;
@@ -59,7 +58,7 @@ RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req) {
     json_object_set_new(qparams, "loop", json_integer((uint64_t)req->conn->ctx->loop));
 #pragma GCC diagnostic pop
     json_object_set_new(qparams, "db_alias", json_string("db_server_1"));
-    json_object_set_new(qparams, "storage_alias", json_string(storage_alias));
+    json_object_set_new(qparams, "storage_alias", json_string("persist_usr_asset"));
     processor->data = (atfp_data_t
     ){.error = err_info,
       .spec = qparams,

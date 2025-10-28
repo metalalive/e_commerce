@@ -213,7 +213,7 @@ static void _api_discardfile__remove_transcoded_start(
     h2o_req_t *req, h2o_handler_t *hdlr, app_middleware_node_t *node, json_t *spec, json_t *err_info
 ) {
     atfp_t            *processor = calloc(1, sizeof(atfp_t));
-    asa_cfg_t         *storage = app_storage_cfg_lookup("localfs");
+    asa_cfg_t         *storage = app_storage_cfg_lookup("persist_usr_asset");
     asa_op_base_cfg_t *asa_remote = app_storage__init_asaobj_helper(storage, NUM_USR_ARGS_ASA_OBJ, 0, 0);
     ((asa_op_localfs_cfg_t *)asa_remote)->loop = req->conn->ctx->loop; // TODO
     asa_remote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = processor;

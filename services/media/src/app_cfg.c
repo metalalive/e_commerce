@@ -2,6 +2,7 @@
 #include <h2o.h>
 
 #include "app_cfg.h"
+#include "storage/cfg_parser.h"
 #include "utils.h"
 #include "models/pool.h"
 #include "transcoder/cfg_parser.h"
@@ -153,33 +154,25 @@ error:
 }
 
 int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
-    if (!json_is_object(obj)) {
+    asa_cfg_t *storage = app_storage_cfg_lookup_glbl("local_tmpbuf", _app_cfg);
+    if (!json_is_object(obj) || !storage) {
         goto error;
     }
-    json_t *path_obj = json_object_get((const json_t *)obj, "path");
     json_t *threshold_obj = json_object_get((const json_t *)obj, "threshold_in_bytes");
     int     threshold = (int)json_integer_value(threshold_obj);
 
-    const char *sys_basepath = _app_cfg->env_vars.sys_base_path;
-    const char *rel_path = json_string_value(path_obj); // relative path
-    if (!rel_path || threshold <= 0) {
+    const char *fullpath = storage->base_path;
+    if (!fullpath || threshold <= 0) {
         h2o_error_printf(
-            "[parsing][tmp-buf] invalid settings, rel-path: %s , threshold: %d bytes\n", rel_path, threshold
+            "[parsing][tmp-buf] invalid settings, fullpath: %s , threshold: %d bytes\n", fullpath, threshold
         );
         goto error;
     }
-    // access check to full path,
-#define RUNNER(fullpath) access(fullpath, F_OK | R_OK | W_OK)
-    int result = PATH_CONCAT_THEN_RUN(sys_basepath, rel_path, RUNNER);
-#undef RUNNER
-    if (result != 0) {
-        h2o_error_printf("[parsing][tmp-buf] missing permissions, rel-path: %s\n", rel_path);
+    if (access(fullpath, F_OK | R_OK | W_OK) != 0) {
+        h2o_error_printf("[parsing][tmp-buf] missing permissions, fullpath: %s\n", fullpath);
         goto error;
     }
     _app_cfg->tmp_buf.threshold_bytes = (unsigned int)threshold;
-    // full-path construction will be handled by each storage implementation,
-    // global app config instance still keeps the relative path to temporary buffer
-    _app_cfg->tmp_buf.path = strdup(rel_path);
     return EX_OK;
 error:
     return EX_CONFIG;

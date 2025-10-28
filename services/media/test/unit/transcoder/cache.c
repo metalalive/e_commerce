@@ -28,7 +28,6 @@ extern atfp_ops_entry_t atfp_ops_video_hls;
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ERRINFO_INDEX__IN_ASA_USRARG + 1)
 #define FILEDES2_INDEX__IN_ASA_USRARG  (ERRINFO_INDEX__IN_ASA_USRARG + 2)
 #define NUM_CB_ARGS_ASAOBJ             (FILEDES2_INDEX__IN_ASA_USRARG + 1)
-#define MOCK_STORAGE_ALIAS             "localfs"
 
 #define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
 #define RUNNER_OPEN_RDWR_CREATE_USR(fullpath)   open(fullpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR)
@@ -95,18 +94,25 @@ static uint8_t utest_mock_fp_deinit_fn(atfp_t *processor) {
     json_t     *mock_spec = json_object(), *mock_err_info = json_object(); \
     app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
     const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
-    asa_cfg_t   mock_storage_cfg = { \
-          .alias = MOCK_STORAGE_ALIAS, \
-          .base_path = sys_basepath, \
-          .ops = \
-            {.fn_close = app_storage_localfs_close, \
-               .fn_open = app_storage_localfs_open, \
-               .fn_mkdir = app_storage_localfs_mkdir, \
-               .fn_typesize = app_storage_localfs_typesize} \
+    asa_cfg_t   mock_storage_cfg[2] = { \
+        {.alias = "local_tmpbuf", \
+           .base_path = sys_basepath, \
+           .ops = \
+               {.fn_close = app_storage_localfs_close, \
+                .fn_open = app_storage_localfs_open, \
+                .fn_mkdir = app_storage_localfs_mkdir, \
+                .fn_typesize = app_storage_localfs_typesize}}, \
+        {.alias = "persist_usr_asset", \
+           .base_path = sys_basepath, \
+           .ops = \
+               {.fn_close = app_storage_localfs_close, \
+                .fn_open = app_storage_localfs_open, \
+                .fn_mkdir = app_storage_localfs_mkdir, \
+                .fn_typesize = app_storage_localfs_typesize}} \
     }; \
-    mock_appcfg->storages.size = 1; \
-    mock_appcfg->storages.capacity = 1; \
-    mock_appcfg->storages.entries = &mock_storage_cfg; \
+    mock_appcfg->storages.size = 2; \
+    mock_appcfg->storages.capacity = 2; \
+    mock_appcfg->storages.entries = mock_storage_cfg; \
     json_object_set_new(mock_spec, "doc_basepath", json_string(UTEST_CACHE_TARGETPATH)); \
     json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(UTEST_CACHED_FILEPATH)); \
     PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
@@ -332,7 +338,7 @@ Ensure(atfp_test__stcch_init__mk_detailpath_error) {
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__SETUP
     ATFP_STREAM_CACHE_INIT__SETUP
     ATFP_STREAMCACHE_INIT__METADATA_SETUP
-    mock_storage_cfg.ops.fn_mkdir = _utest_storage_mkdir_err1_fn;
+    mock_storage_cfg[0].ops.fn_mkdir = _utest_storage_mkdir_err1_fn;
     asa_op_localfs_cfg_t *_cch_entry = atfp_streamcache_init(
         loop, mock_spec, mock_err_info, NUM_CB_ARGS_ASAOBJ, mock_buf_sz, utest__stcch_init__done_cb,
         utest__stcch_deinit__done_cb
@@ -354,7 +360,7 @@ Ensure(atfp_test__stcch_init__mk_detailpath_error) {
         _cch_entry->super.deinit(&_cch_entry->super);
         uv_run(loop, UV_RUN_ONCE);
     }
-    mock_storage_cfg.ops.fn_mkdir = app_storage_localfs_mkdir;
+    mock_storage_cfg[0].ops.fn_mkdir = app_storage_localfs_mkdir;
     PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_CACHE_TARGETPATH "/Xbc/def", rmdir);
     PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_CACHE_TARGETPATH "/Xbc", rmdir);
     ATFP_STREAM_CACHE_INIT__TEARDOWN
@@ -382,7 +388,7 @@ Ensure(atfp_test__stcch_init__newentry_lock_fail) {
     ATFP_STREAM_CACHE_INIT__SETUP
     ATFP_STREAMCACHE_INIT__METADATA_SETUP
     int samefile_fd = -1;
-    mock_storage_cfg.ops.fn_open = _utest_storage_open_err_fn;
+    mock_storage_cfg[0].ops.fn_open = _utest_storage_open_err_fn;
     asa_op_localfs_cfg_t *_cch_entry = atfp_streamcache_init(
         loop, mock_spec, mock_err_info, NUM_CB_ARGS_ASAOBJ, mock_buf_sz, utest__stcch_init__done_cb,
         utest__stcch_deinit__done_cb
@@ -405,7 +411,7 @@ Ensure(atfp_test__stcch_init__newentry_lock_fail) {
         _cch_entry->super.deinit(&_cch_entry->super);
         uv_run(loop, UV_RUN_ONCE);
     }
-    mock_storage_cfg.ops.fn_open = app_storage_localfs_open;
+    mock_storage_cfg[0].ops.fn_open = app_storage_localfs_open;
     if (samefile_fd >= 0) {
         flock(samefile_fd, LOCK_UN | LOCK_NB);
         close(samefile_fd);
@@ -421,7 +427,7 @@ Ensure(atfp_test__stcch_init__newentry_lock_fail) {
 
 #define ATFP_NONSTREAM_CACHE_INIT__SETUP \
     ATFP_STREAM_CACHE_INIT__SETUP \
-    json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
+    json_object_set_new(mock_spec, "storage_alias", json_string("persist_usr_asset")); \
     json_object_set_new(mock_spec, "asa_src_basepath", json_string(UTEST_ASASRC_COMMIT_PATH)); \
     json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(MOCK_VERSION)); \
     PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_USR_PATH, RUNNER_CREATE_FOLDER); \
@@ -541,7 +547,7 @@ static void utest_cachecommon_proceed_done_cb(
     app_cfg_t *mock_appcfg = app_get_global_cfg(); \
     const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
     asa_cfg_t   mock_storage_cfg = { \
-          .alias = MOCK_STORAGE_ALIAS, \
+          .alias = "local_tmpbuf", \
           .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, strdup), \
           .ops = {.fn_write = app_storage_localfs_write, .fn_read = app_storage_localfs_read} \
     }; \

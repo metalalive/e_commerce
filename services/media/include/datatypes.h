@@ -114,7 +114,6 @@ typedef struct {
         int        num_curr_sessions;    // number of opened incoming connections
     } state;
     struct {
-        char        *path;
         unsigned int threshold_bytes;
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
     struct app_jwks_t jwks;

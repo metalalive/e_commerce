@@ -145,9 +145,8 @@ void app_storage_cfg_deinit(app_cfg_t *app_cfg) {
     app_cfg->storages.size = 0;
 } // end of app_storage_cfg_deinit
 
-asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
+asa_cfg_t *app_storage_cfg_lookup_glbl(const char *alias, app_cfg_t *app_cfg) {
     asa_cfg_t *out = NULL;
-    app_cfg_t *app_cfg = app_get_global_cfg();
     for (int idx = 0; !out && (idx < app_cfg->storages.size); idx++) {
         asa_cfg_t *item = &app_cfg->storages.entries[idx];
         int        ret = strncmp(alias, item->alias, strlen(item->alias));
@@ -155,6 +154,10 @@ asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
             out = item;
     }
     return out;
+}
+
+asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
+    return app_storage_cfg_lookup_glbl(alias, app_get_global_cfg());
 }
 
 asa_op_base_cfg_t *app_storage__init_asaobj_helper(

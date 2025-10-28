@@ -19,7 +19,7 @@
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
-#define MOCK_STORAGE_ALIAS             "localfs"
+#define MOCK_STORAGE_ALIAS             "persist_usr_asset"
 
 #define MOCK_USER_ID          104
 #define MOCK_UPLD_REQ_1_ID    0xdee5d1d0
@@ -71,8 +71,8 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
                .fn_typesize = app_storage_localfs_typesize} \
     }; \
     asa_cfg_t mock_storage_local_cfg = { \
-        .alias = NULL, \
-        .base_path = sys_basepath, \
+        .alias = "local_tmpbuf", \
+        .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, strdup), \
         .ops = \
             {.fn_read = app_storage_localfs_read, \
              .fn_open = app_storage_localfs_open, \
@@ -82,7 +82,6 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
     mock_appcfg->storages.entries = &mock_storage_src_cfg; \
-    mock_appcfg->tmp_buf.path = UTEST_ASALOCAL_BASEPATH; \
     atfp_hls_t mock_fp = { \
         .super = \
             {.data = \
@@ -147,7 +146,7 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
-    mock_appcfg->tmp_buf.path = NULL; \
+    free(mock_storage_local_cfg.base_path); \
     free(mock_storage_src_cfg.base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info);

@@ -360,7 +360,7 @@ static void upload_part__ensure_dst_folder(
     int part = (int)app_fetch_from_hashmap(node->data, "part");
 #pragma GCC diagnostic pop
     // application can select which storage configuration to use
-    asa_cfg_t *storage = app_storage_cfg_lookup("localfs");
+    asa_cfg_t *storage = app_storage_cfg_lookup("persist_usr_asset");
     // assume NULL-terminated string
     size_t dirpath_sz = USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(req_seq) + 1;
     size_t filepath_sz = (dirpath_sz - 1) + 1 + UPLOAD_INT2HEX_SIZE(part) + 1;

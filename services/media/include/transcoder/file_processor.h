@@ -262,9 +262,7 @@ int atfp_check_fileupdate_required(
 json_t *atfp_image_mask_pattern_index(const char *fullath);
 
 // for crypto / key encryption
-size_t atfp_get_encrypted_file_basepath(
-    const char *basepath, char *out, size_t o_sz, const char *doc_id, size_t id_sz
-);
+size_t      atfp_get_encrypted_file_basepath(char *out, size_t o_sz, const char *doc_id, size_t id_sz);
 const char *atfp_get_crypto_key(json_t *keyinfo, const char *key_id, json_t **item_out);
 int         atfp_encrypt_document_id(
             EVP_CIPHER_CTX *, atfp_data_t *, json_t *kitem, unsigned char **out, size_t *out_sz

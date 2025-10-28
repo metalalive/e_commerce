@@ -299,6 +299,7 @@ static int parse_cfg_listeners(const json_t *objs, app_cfg_t *_app_cfg) {
     return (num_objs == idx) ? 0 : EX_CONFIG;
 } // end of parse_cfg_listeners()
 
+// TODO, move to `./app_server` folder
 int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg) {
     int          result_error = 0;
     json_error_t jerror;
@@ -354,10 +355,6 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg) {
     if (result_error) {
         goto error;
     }
-    result_error = appcfg_parse_local_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
-    if (result_error) {
-        goto error;
-    }
     result_error = parse_cfg_auth_keystore(json_object_get((const json_t *)root, "auth_keystore"), _app_cfg);
     if (result_error) {
         goto error;
@@ -367,6 +364,10 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg) {
         goto error;
     }
     result_error = parse_cfg_storages(json_object_get((const json_t *)root, "storages"), _app_cfg);
+    if (result_error) {
+        goto error;
+    }
+    result_error = appcfg_parse_local_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
     if (result_error) {
         goto error;
     }

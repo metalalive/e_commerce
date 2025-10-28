@@ -83,8 +83,26 @@
     ],
     "storages": [
         {
-            "alias":"localfs",
+            "alias":"persist_usr_asset",
             "base_path": "filespace/test",
+            "ops": {
+                "mkdir" : "app_storage_localfs_mkdir",
+                "rmdir" : "app_storage_localfs_rmdir",
+                "scandir": "app_storage_localfs_scandir",
+                "scandir_next": "app_storage_localfs_scandir_next",
+                "rename": "app_storage_localfs_rename",
+                "unlink": "app_storage_localfs_unlink",
+                "open" : "app_storage_localfs_open",
+                "close": "app_storage_localfs_close",
+                "read" : "app_storage_localfs_read",
+                "write": "app_storage_localfs_write",
+                "typesize": "app_storage_localfs_typesize",
+                "seek" : "app_storage_localfs_seek"
+            }
+        },
+        {
+            "alias":"local_tmpbuf",
+            "base_path": "tmp/buffer",
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
@@ -184,7 +202,6 @@
         }
     },
     "tmp_buf": {
-        "path": "tmp/buffer",
         "threshold_in_bytes": 102400
     }
 }

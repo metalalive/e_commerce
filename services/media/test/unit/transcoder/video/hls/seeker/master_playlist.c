@@ -18,7 +18,7 @@
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
 #define RD_BUF_MAX_SZ                  512
-#define MOCK_STORAGE_ALIAS             "localfs"
+#define MOCK_STORAGE_ALIAS             "persist_usr_asset"
 
 #define MOCK_USER_ID                   426
 #define MOCK_UPLD_REQ_1_ID             0xd150de7a

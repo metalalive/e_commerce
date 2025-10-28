@@ -6,11 +6,13 @@ extern "C" {
 
 #include "app_cfg.h"
 
-void app_storage_cfg_deinit(app_cfg_t *app_cfg);
+void app_storage_cfg_deinit(app_cfg_t *);
 
-int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg);
+int parse_cfg_storages(json_t *objs, app_cfg_t *);
 
 asa_cfg_t *app_storage_cfg_lookup(const char *alias);
+
+asa_cfg_t *app_storage_cfg_lookup_glbl(const char *alias, app_cfg_t *);
 
 asa_op_base_cfg_t *app_storage__init_asaobj_helper(
     asa_cfg_t *storage, uint8_t num_cb_args, uint32_t rd_buf_bytes, uint32_t wr_buf_bytes

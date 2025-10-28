@@ -186,7 +186,7 @@ struct atfp_s *atfp__image_ffm_out__instantiate_transcoder(void) {
     out->ops.dst.has_done_flush_filter = atfp__image_dst__has_done_flush_filter;
     out->ops.dst.save_to_storage = atfp__image_dst__save_to_storage;
     asa_op_localfs_cfg_t *asalocal_dst = &out->internal.dst.asa_local;
-    asalocal_dst->super.storage = app_storage_cfg_lookup("localfs");
+    asalocal_dst->super.storage = app_storage_cfg_lookup("local_tmpbuf");
     void **cb_args_entries = calloc(NUM_USRARGS_FFO_ASA_LOCAL, sizeof(void *));
     cb_args_entries[ATFP_INDEX__IN_ASA_USRARG] = (void *)out;
     asalocal_dst->super.cb_args.entries = cb_args_entries;

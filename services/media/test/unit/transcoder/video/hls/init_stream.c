@@ -68,14 +68,14 @@ static void _utest_hls_init_stream__done_cb(atfp_t *processor) {
 } // end of  _utest_hls_init_stream__done_cb
 
 #define ATFP_HLS_TEST__INIT_STREAM__SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uint8_t    mock_done_flag = 0; \
     uv_loop_t *loop = uv_default_loop(); \
     json_t    *mock_spec = json_object(), *mock_err_info = json_object(); \
     void      *mock_asa_cb_args[NUM_CB_ARGS_ASAOBJ]; \
-    app_cfg_t *mock_appcfg = app_get_global_cfg(); \
-    mock_appcfg->tmp_buf.path = UTEST_ASALOCAL_BASEPATH; \
-    asa_cfg_t mock_local_storage_cfg = \
-        {.base_path = mock_appcfg->env_vars.sys_base_path, \
+    asa_cfg_t  mock_local_storage_cfg = \
+        {.base_path = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_BASEPATH, strdup), \
          .ops = { \
              .fn_mkdir = app_storage_localfs_mkdir, \
              .fn_open = app_storage_localfs_open, \
@@ -99,8 +99,8 @@ static void _utest_hls_init_stream__done_cb(atfp_t *processor) {
       }}; \
     mock_asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp->super; \
     mock_asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &mock_done_flag; \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER);
 
 #define ATFP_HLS_TEST__INIT_STREAM__SPEC_SETUP \
     { \
@@ -117,10 +117,11 @@ static void _utest_hls_init_stream__done_cb(atfp_t *processor) {
     }
 
 #define ATFP_HLS_TEST__INIT_STREAM__TEARDOWN \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, MOCK_USRREQ_DIRPATH, rmdir); \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, MOCK_USRBUF_DIRPATH, rmdir); \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, UTEST_ASALOCAL_BASEPATH, rmdir); \
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, UTEST_FILE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, MOCK_USRREQ_DIRPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, MOCK_USRBUF_DIRPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, rmdir); \
+    free(mock_local_storage_cfg.base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info);
 
@@ -207,8 +208,7 @@ Ensure(atfp_hls_test__init_stream__skip_key_rotation) {
 #define RUNNER(fullpath) json_load_file(fullpath, 0, NULL)
         const char *expect_filepath = UTEST_ASALOCAL_BASEPATH
             "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID_1 "/" ATFP_ENCRYPT_METADATA_FILENAME;
-        json_t *_metadata =
-            PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, expect_filepath, RUNNER);
+        json_t *_metadata = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_filepath, RUNNER);
 #undef RUNNER
         assert_that(json_string_value(json_object_get(_metadata, "key_id")), is_equal_to_string(key_id_hex));
         assert_that(json_string_value(json_object_get(_metadata, "mimetype")), is_equal_to_string("hls"));
@@ -229,22 +229,22 @@ Ensure(atfp_hls_test__init_stream__update_ok_2) {
         const char *path = NULL;
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID_1
                                        "/" ATFP_ENCRYPT_METADATA_FILENAME;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, unlink);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, unlink);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID_2
                                        "/" ATFP_ENCRYPT_METADATA_FILENAME;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, unlink);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, unlink);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID_1;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, rmdir);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID_2;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, rmdir);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID1__HALF1;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, rmdir);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME "/" MOCK_DOC_ID2__HALF1;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, rmdir);
         path = UTEST_ASALOCAL_BASEPATH "/" ATFP_CACHED_FILE_FOLDERNAME;
-        PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, path, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, path, rmdir);
     }
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
     ATFP_HLS_TEST__INIT_STREAM__TEARDOWN
 } // end of  atfp_hls_test__init_stream__update_ok_2
 #undef _COMMON_CODE
@@ -302,7 +302,7 @@ Ensure(atfp_hls_test__init_stream__key_rotate_fail) {
             assert_that(actual_err_msg, contains_string("rotation failure"));
         }
     }
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
     ATFP_HLS_TEST__INIT_STREAM__TEARDOWN
 } // end of atfp_hls_test__init_stream__key_rotate_fail
 #undef MOCK_UPDATE_SECS_KEYFILE
@@ -344,7 +344,7 @@ Ensure(atfp_hls_test__init_stream__encrypt_id_error) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_equal_to(1));
     }
-    PATH_CONCAT_THEN_RUN(mock_appcfg->env_vars.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, MOCK_CRYPTOKEY_FILEPATH, unlink);
     ATFP_HLS_TEST__INIT_STREAM__TEARDOWN
 } // end of  atfp_hls_test__init_stream__encrypt_id_error
 #undef MOCK_UPDATE_SECS_KEYFILE
