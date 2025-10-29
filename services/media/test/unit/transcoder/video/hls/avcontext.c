@@ -3,6 +3,7 @@
 #include <cgreen/mocks.h>
 #include <cgreen/unit.h>
 
+#include "storage/datatypes.h"
 #include "transcoder/datatypes.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
@@ -54,6 +55,7 @@
     for (idx = 0; idx < EXPECT_NB_STREAMS_IFMT_CTX; mock_decoder_ctxs[idx].codec = &mock_codecs[idx], \
         mock_decoder_ctx_ptrs[idx] = &mock_decoder_ctxs[idx], idx++) \
         ; \
+    asa_cfg_t     mock_local_starage = {.base_path = "/path/to/myapp"}; \
     atfp_av_ctx_t mock_avctx_src = { \
         .fmt_ctx = &mock_ifmt_ctx, .stream_ctx = {.decode = mock_decoder_ctx_ptrs} \
     }; \
@@ -73,7 +75,9 @@
                   .version = EXPECT_VERSION, \
                   .storage = {.handle = &mock_asa_dst}}, \
              .backend_id = ATFP_BACKEND_LIB__FFMPEG}, \
-        .asa_local = {.super = {.op = {.mkdir = {.path = {.origin = &local_path[0]}}}}} \
+        .asa_local = \
+            {.super = \
+                 {.storage = &mock_local_starage, .op = {.mkdir = {.path = {.origin = &local_path[0]}}}}} \
     }; \
     asasrc_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp_src; \
     asadst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp_dst;

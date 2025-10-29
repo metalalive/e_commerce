@@ -92,8 +92,8 @@ static void _atfp__hls_init__dst_version_folder_cb(asa_op_base_cfg_t *asa_dst, A
             sizeof(HLS_SEGMENT_FILENAME_PREFIX) - 1 + HLS_SEGMENT_FILENAME_FORMAT_MAX_DIGITS;
         size_t filename_max_sz = MAX(l2_playlist_name_sz, pktmap_name_sz);
         filename_max_sz = MAX(filename_max_sz, mst_playlist_name_sz);
-        filename_max_sz =
-            MAX(filename_max_sz, segment_name_sz) + 2; // extra slash char, and NUL-terminated char
+        // extra slash char, and NUL-terminated char
+        filename_max_sz = MAX(filename_max_sz, segment_name_sz) + 2;
         size_t fullpath_sz_local = strlen(asa_local_dstdata->super.op.mkdir.path.origin) + filename_max_sz;
         size_t fullpath_sz_dst = strlen(asa_dst->op.mkdir.path.prefix) + 1 +
                                  strlen(asa_dst->op.mkdir.path.origin) + filename_max_sz;

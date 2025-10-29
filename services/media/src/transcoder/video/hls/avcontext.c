@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include "utils.h"
 #include "transcoder/video/common.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
@@ -190,25 +191,31 @@ static int atfp_hls__av_encoder_init(
 } // end of atfp_hls__av_encoder_init
 
 int atfp_hls__av_init(atfp_hls_t *hlsproc) {
-    int              err = 0;
     AVFormatContext *fmt_ctx = NULL;
-    atfp_t          *processor = &hlsproc->super;
+    assert(hlsproc->asa_local.super.storage);
+    atfp_t *processor = &hlsproc->super;
     assert(processor->data.version);
     assert(processor->data.spec);
-    json_t     *req_spec = processor->data.spec;
-    json_t     *output = json_object_get(json_object_get(req_spec, "outputs"), processor->data.version);
-    json_t     *elm_st_map = json_object_get(req_spec, "elementary_streams");
-    const char *local_basepath = hlsproc->asa_local.super.op.mkdir.path.origin;
+    int     err = 0;
+    json_t *req_spec = processor->data.spec;
+    json_t *output = json_object_get(json_object_get(req_spec, "outputs"), processor->data.version);
+    json_t *elm_st_map = json_object_get(req_spec, "elementary_streams");
+#define PATTERN "%s/%s/%s"
+    const char *sys_basepath = hlsproc->asa_local.super.storage->base_path;
+    const char *localbuf_path = hlsproc->asa_local.super.op.mkdir.path.origin;
     { // Note everything in `spec` field has to be validated at app server
         const char *fmt_name = json_string_value(json_object_get(output, "container"));
-        size_t      playlist_path_sz = strlen(local_basepath) + 1 + sizeof(HLS_PLAYLIST_FILENAME);
-        char        playlist_path[playlist_path_sz];
-        size_t      nwrite =
-            snprintf(&playlist_path[0], playlist_path_sz, "%s/%s", local_basepath, HLS_PLAYLIST_FILENAME);
+        size_t      playlist_path_sz =
+            sizeof(PATTERN) + strlen(sys_basepath) + strlen(localbuf_path) + sizeof(HLS_PLAYLIST_FILENAME);
+        char   playlist_path[playlist_path_sz];
+        size_t nwrite = snprintf(
+            &playlist_path[0], playlist_path_sz, PATTERN, sys_basepath, localbuf_path, HLS_PLAYLIST_FILENAME
+        );
         playlist_path[nwrite++] = 0;
         err = avformat_alloc_output_context2(&fmt_ctx, NULL, fmt_name, &playlist_path[0]);
         hlsproc->av->fmt_ctx = fmt_ctx;
     } // does output format context require low-level AVIO context ?
+#undef PATTERN
     atfp_av_ctx_t *avctx_src = NULL;
     if (!err) {
         atfp_t            *fp_dst = &hlsproc->super;
@@ -230,8 +237,10 @@ int atfp_hls__av_init(atfp_hls_t *hlsproc) {
     }
     if (!err)
         err = atfp_hls__av_encoder_init(hlsproc->av, avctx_src, output, elm_st_map, processor->data.error);
+#define RUNNER(fullpath) atfp_hls__av_setup_options(fmt_ctx, fullpath)
     if (!err)
-        err = atfp_hls__av_setup_options(fmt_ctx, local_basepath);
+        err = PATH_CONCAT_THEN_RUN(sys_basepath, localbuf_path, RUNNER);
+#undef RUNNNER
     // TODO, add function and data structure to monitor how many segment files are done by encoding
     //  function and ready to traansfer to destination storage. This is for certain types of output
     //  formats which support content segmentation such as HLS or mpeg-DASH
