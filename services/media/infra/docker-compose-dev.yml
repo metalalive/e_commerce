@@ -1,0 +1,88 @@
+services:
+  mariadb-media:
+    container_name: media-dev-mariadb
+    env_file:
+      - ./container-dev.env
+    restart: no
+    networks:
+      - net1
+    volumes:
+      # Mounts the custom configuration file into the container.
+      # The source path is relative to this compose file.
+      - ./mariadb-cfg/dev.cnf:/etc/mysql/conf.d/app.cnf:ro
+
+  db-schema-migration-up-media:
+    container_name: media-dev-db-schema-upgrade
+    env_file:
+      - ./container-dev.env
+    restart: no
+    networks:
+      - net1
+
+  renew-cert-media:
+    container_name: media-dev-cert-renew
+    environment:
+      - CONFIG_FILE_PATH=media/settings/development.json
+    volumes:
+      - ../data/certs/development:/app/media/data/certs
+      - ../settings/development.json:/app/media/settings/development.json:ro
+    networks:
+      - net1
+
+  api-server-media:
+    container_name: media-dev-apisrv
+    restart: no
+    env_file:
+      - ./container-dev.env
+    environment:
+      - CONFIG_FILE_PATH=media/settings/development.json
+      - API_HOST=media-dev-apisrv
+    volumes:
+      - ../settings/development.json:/app/media/settings/development.json:ro
+      - ../data/certs/development:/app/media/data/certs:ro
+      - ../data/dev:/app/media/data/dev:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/data/cors-dev.json:/app/common/data/cors.json:ro
+      - ../../tmp/proc:/app/proc
+      - ../../tmp/log/dev:/app/log
+      - ../../tmp/buffer/media/development:/app/tmp/buffer
+      - ../../filespace/dev:/app/filespace/dev
+    networks:
+      - net1
+      - net2
+
+  rpc-consumer-media:
+    container_name: media-dev-rpcconsumer
+    restart: no
+    env_file:
+      - ./container-dev.env
+    environment:
+      - CONFIG_FILE_PATH=media/settings/development.json
+    volumes:
+      - ../settings/development.json:/app/media/settings/development.json:ro
+      - ../data/dev:/app/media/data/dev:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/proc:/app/proc
+      - ../../tmp/log/dev:/app/log
+      - ../../tmp/buffer/media/development:/app/tmp/buffer
+      - ../../filespace/dev:/app/filespace/dev
+    networks:
+      - net1
+      - net2
+
+
+networks:
+  net1:
+    name: ec-mediamgt-dev-net
+    # auto-create network on start the containers,
+    # auto-delete it on stop (and no other containers are attached to the network)
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.14.0/24
+          ip_range: 172.19.14.0/25
+          gateway: 172.19.14.254
+  
+  net2:
+    name: ec-intersrvs-dev-net
+    external: true
