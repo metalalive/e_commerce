@@ -24,7 +24,7 @@ services:
     environment:
       - CONFIG_FILE_PATH=media/settings/test.json
     volumes:
-      - ../data/certs/test:/app/media/data/certs/test
+      - ../data/certs/test:/app/media/data/certs
       - ../settings/test.json:/app/media/settings/test.json:ro
     networks:
       - net1
@@ -54,6 +54,7 @@ services:
       - ./container-test.env
     environment:
       - CONFIG_FILE_PATH=media/settings/test.json
+      - API_HOST=media-test-apisrv
     volumes:
       - ../settings/test.json:/app/media/settings/test.json:ro
       - ../data/certs/test:/app/media/data/certs:ro
@@ -67,7 +68,6 @@ services:
     depends_on:
       mock-auth-pubkey-server-media:
         condition: service_started # service_healthy
-    #command: sleep 360000
     networks:
       - net1
       - net2
@@ -100,6 +100,7 @@ services:
       - SYS_BASE_PATH=/app
     working_dir: /app/media
     command: ["/bin/sh", "-c", "python3 -m filechunk FilechunkSetup ./media/settings.json"]
+    # TODO, run python -m  media.task_loader  FilechunkTeardown ${ITEST_APPCFG_PATH} after test
     volumes:
       - ../test/integration/settings.json:/app/media/settings.json:ro
       - ../test/integration/filechunk.py:/app/media/filechunk.py:ro
@@ -131,12 +132,15 @@ services:
     env_file:
       - ./container-test.env
     environment:
+      - CGREEN_NO_FORK=1
       - SYS_BASE_PATH=/app
       - API_HOST=media-test-apisrv
       - API_PORT=8010
+      - API_TIMEOUT_SECONDS=23
     stop_signal: SIGTERM
     working_dir: /app/media/build
-    command: ["/bin/sh", "-c", "./itest_start.out media/build/itest_start.out media/settings.json"]
+    command: ["/bin/sh", "-c", "./itest_start.out  media/settings.json"]
+    #command: sleep 360000
     volumes:
       - ../data/certs/test:/app/media/data/certs/test:ro
       - ../test/integration/settings.json:/app/media/settings.json:ro
@@ -144,8 +148,8 @@ services:
       - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
       - ../../tmp/buffer/media/test:/app/tmp/buffer:ro
       - ../../tmp/cache/test/jwks/media-rsa-privkey.json:/app/jwks/media-rsa-privkey.json:ro
+      - ../../tmp/log/test/test_file_chunks:/app/tmp/test_file_chunks:ro
       - ../../tmp/log/test:/app/log
-      - ../../tmp/log/test:/app/tmp
     depends_on:
       api-server-media:
         condition: service_healthy

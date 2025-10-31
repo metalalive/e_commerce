@@ -1,5 +1,0 @@
-
-make itest_app_server -C ./build
-
-python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};
-

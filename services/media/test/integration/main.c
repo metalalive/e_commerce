@@ -1,6 +1,5 @@
-#include "../test/integration/test.h"
 #include "utils.h"
-#include "app_server.h"
+#include "../test/integration/test.h"
 
 static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg) {
     CURLcode res;
@@ -104,25 +103,27 @@ Ensure(api_discard_ongoing_job_test) {
 }
 
 TestSuite *app_api_tests(json_t *root_cfg) {
+    uint8_t    skip_transcoding = getenv("SKIP_TRANSCODING_TEST") != NULL;
     TestSuite *suite = create_test_suite();
     add_suite(suite, api_initiate_multipart_upload_tests(root_cfg));
     add_suite(suite, api_upload_part_tests(root_cfg));
     add_suite(suite, api_complete_multipart_upload_tests());
-
     add_suite(suite, api_file_acl_tests());
-    add_suite(suite, api_start_transcoding_file_tests());
-    add_suite(suite, api_monitor_job_progress_tests());
-    add_suite(suite, api_file_streaming_init_tests());
-    add_suite(suite, api_file_nonstream_init_tests());
-    add_suite(suite, api_file_stream_seek_elm_tests(root_cfg));
-    add_suite(suite, api_start_transcoding_file_v2_tests());
-    add_suite(suite, api_monitor_job_progress_tests());
+    if (!skip_transcoding) {
+        add_suite(suite, api_start_transcoding_file_tests());
+        add_suite(suite, api_monitor_job_progress_tests());
+        add_suite(suite, api_file_streaming_init_tests());
+        add_suite(suite, api_file_nonstream_init_tests());
+        add_suite(suite, api_file_stream_seek_elm_tests(root_cfg));
+        add_suite(suite, api_start_transcoding_file_v2_tests());
+        add_suite(suite, api_monitor_job_progress_tests());
+    }
     add_suite(suite, api_discard_committed_file_tests());
     add_test(suite, api_abort_multipart_upload_test);
     add_test(suite, api_single_chunk_upload_test);
-    add_test(suite, api_discard_ongoing_job_test);
-#ifdef PROCEED_TRANSCODING_TEST
-#endif
+    if (!skip_transcoding) {
+        add_test(suite, api_discard_ongoing_job_test);
+    }
     return suite;
 }
 

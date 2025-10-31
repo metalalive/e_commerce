@@ -108,7 +108,8 @@ ENV PKG_CONFIG_PATH="${FFM_INSTALLED_PATH}/lib/pkgconfig:${H2O_INSTALLED_PATH}/l
 
 ENV LD_LIBRARY_PATH="/usr/lib:/usr/libexec:/usr/local/lib"
 
-RUN cmake -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_EXPORT_COMPILE_COMMANDS=1  ${DST_APP_PATH}
+RUN cmake -DCMAKE_BUILD_TYPE=Debug -DDEBUG_RPC=OFF \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=1  ${DST_APP_PATH}
 
 RUN make app_server.out && make rpc_consumer.out && make appserver_health_check.out
 RUN make unit_test.out && make itest_start.out && make itest_rpc_consumer.out
