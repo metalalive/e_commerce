@@ -345,7 +345,6 @@ static void _atfp_remote_rmdir_g_rmdir_start(asa_op_base_cfg_t *asa_remote, json
     asa_remote->op.rmdir.path = asa_remote->op.scandir.path;
     asa_remote->op.rmdir.cb = _atfp_remote_rmdir_g_rmdir_done;
     ASA_RES_CODE result = asa_remote->storage->ops.fn_rmdir(asa_remote);
-    asa_remote->op.rmdir.path = NULL;
     if (result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "transcode", json_string("[storage] failed to issue rmdir operation"));
         fprintf(

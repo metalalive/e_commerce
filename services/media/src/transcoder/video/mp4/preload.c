@@ -124,8 +124,12 @@ atfp_mp4__read_input_atom_header_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE resu
     } else {
         json_object_set_new(err_info, "storage", json_string("failed to read atom header from mp4 input"));
     }
-    if (json_object_size(err_info) > 0)
+    if (json_object_size(err_info) > 0) {
+        json_t     *req_spec = processor->data.spec;
+        const char *res_id = json_string_value(json_object_get(req_spec, "res_id_encoded"));
+        json_object_set_new(err_info, "orig_resource", json_string(res_id));
         mp4proc->internal.callback.preload_done(mp4proc);
+    }
 } // end of atfp_mp4__read_input_atom_header_cb
 
 static void atfp_mp4__read_input_byte_sequence_cb(
