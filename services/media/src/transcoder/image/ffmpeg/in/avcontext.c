@@ -72,11 +72,11 @@ void atfp__image_src__avctx_init(atfp_av_ctx_t *_avctx, const char *filepath, js
         _atfp_img_src__avctx_init_decoder(_avctx, err_info);
     } else {
         json_object_set_new(
-            err_info, "transcoder", json_string("[ff_in] failed to initialize input format context")
+            err_info, "transcoder", json_string("[ff-in][avctx] failed to init input format context")
         );
         json_object_set_new(err_info, "err_code", json_integer(ret));
     }
-} // end of  atfp__image_src__avctx_init
+}
 
 void atfp__image_src__avctx_deinit(atfp_av_ctx_t *_avctx) {
     AVCodecContext **dec_ctxs = _avctx->stream_ctx.decode;

@@ -27,6 +27,15 @@ itest_verify__job_progress_update_ok(CURL *curl, test_setup_priv_t *privdata, vo
     json_t *err_info_recv = json_object_get(resp_obj, "error");
     assert_that(resp_obj, is_not_equal_to(NULL));
     assert_that(err_info_recv, is_equal_to(NULL));
+#if 1
+    if (err_info_recv) {
+        const char *target_job_id = json_string_value(json_object_get(job_item, "job_id"));
+        fprintf(
+            stderr, "[itest][api][start_transcoding_file] line:%d, async-job-err-result, %s \n", __LINE__,
+            target_job_id
+        );
+    }
+#endif
     if (json_object_get(resp_obj, "percent_done")) {
         // there should be only one item returned for specific job progress
         float old_percent_done = json_real_value(json_object_get(job_item, "percent_done"));

@@ -1,15 +1,30 @@
+#include "utils.h"
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
 
 static void atfp__image_ffm_in__preload_done_cb(atfp_img_t *imgproc) {
-    atfp_t *processor = &imgproc->super;
-    json_t *err_info = processor->data.error;
+    atfp_t     *processor = &imgproc->super;
+    json_t     *err_info = processor->data.error;
+    const char *localbuf_path = NULL, *sys_basepath = NULL;
     if (json_object_size(err_info) == 0) {
         asa_op_base_cfg_t    *_asa_src = processor->data.storage.handle;
         atfp_asa_map_t       *_map = _asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
         asa_op_localfs_cfg_t *_asa_local = atfp_asa_map_get_localtmp(_map);
-        char                 *localbuf_fullpath = _asa_local->super.op.open.dst_path;
-        imgproc->ops.src.avctx_init(imgproc->av, localbuf_fullpath, err_info);
+        asa_cfg_t            *storage = _asa_local->super.storage;
+        if (storage) {
+            sys_basepath = storage->base_path;
+            localbuf_path = _asa_local->super.op.open.dst_path;
+            if (!localbuf_path || !sys_basepath) {
+                json_object_set_new(err_info, "storage", json_string("[img][ff-in][init] path incomplete"));
+            }
+        } else {
+            json_object_set_new(err_info, "storage", json_string("[img][ff-in][init] missing storage"));
+        }
+    }
+    if (json_object_size(err_info) == 0) {
+#define RUNNER(fullpath) imgproc->ops.src.avctx_init(imgproc->av, fullpath, err_info)
+        PATH_CONCAT_THEN_RUN(sys_basepath, localbuf_path, RUNNER);
+#undef RUNNER
     }
     processor->data.callback(processor);
 } // end of atfp__image_ffm_in__preload_done_cb

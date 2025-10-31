@@ -164,20 +164,20 @@ static int parse_cfg_transcoder_resolution_image(json_t *obj, aav_cfg_img_t *cfg
     }
     int         lmt_width = (int)json_integer_value(json_object_get(pxl_limit, "width"));
     int         lmt_height = (int)json_integer_value(json_object_get(pxl_limit, "height"));
-    const char *masks_filepath = json_string_value(json_object_get(msk_item, "basepath"));
+    const char *masks_idxpath = json_string_value(json_object_get(msk_item, "basepath"));
     if (lmt_width <= 0 || lmt_height <= 0) {
         fprintf(
             stderr, "[cfg-parser][transcoder] line:%d, invalid, lmt_width:%d, lmt_height:%d \n", __LINE__,
             lmt_width, lmt_height
         );
         goto error;
-    } else if (!masks_filepath || strlen(masks_filepath) == 0) {
+    } else if (!masks_idxpath || strlen(masks_idxpath) == 0) {
         fprintf(stderr, "[cfg-parser][transcoder] line:%d, invalid masks_filepath \n", __LINE__);
         goto error;
     }
     cfg->limit.width = lmt_width;
     cfg->limit.height = lmt_height;
-    cfg->mask.basepath = strdup(masks_filepath); // FIXME, ensure full path
+    cfg->mask.indexpath = strdup(masks_idxpath);
     return 0;
 error:
     return -1;
@@ -288,9 +288,9 @@ void app_transcoder_cfg_deinit(aav_cfg_transcode_t *cfg) {
         free(rso_v->fps.entries);
     if (rso_a->bitrate_kbps.entries)
         free(rso_a->bitrate_kbps.entries);
-    if (cfg->output.image.mask.basepath) {
-        free(cfg->output.image.mask.basepath);
-        cfg->output.image.mask.basepath = NULL;
+    if (cfg->output.image.mask.indexpath) {
+        free(cfg->output.image.mask.indexpath);
+        cfg->output.image.mask.indexpath = NULL;
     }
     memset(rso_a, 0, sizeof(aav_cfg_resolution_a_t));
     memset(rso_v, 0, sizeof(aav_cfg_resolution_v_t));

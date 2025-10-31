@@ -23,7 +23,7 @@ typedef struct {
 typedef struct {
     aav_cfg_resolution_pix_t limit;
     struct {
-        char *basepath;
+        char *indexpath;
     } mask;
 } aav_cfg_img_t;
 

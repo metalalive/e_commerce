@@ -1,4 +1,5 @@
 #include "storage/cfg_parser.h"
+#include "storage/datatypes.h"
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
 #define NUM_USRARGS_FFO_ASA_LOCAL (ASAMAP_INDEX__IN_ASA_USRARG + 1)
@@ -28,17 +29,23 @@ void atfp__image_ffm_out__init_transcode(atfp_t *processor) {
     if ((fp_dst->backend_id != fp_src->backend_id) || (fp_dst->backend_id == ATFP_BACKEND_LIB__UNKNOWN)) {
         json_object_set_new(
             err_info, "transcoder",
-            json_string("[ff_out] invalid backend"
-                        " library in source file processor")
+            json_string("[img][ff-out][init] invalid backend library in source file processor")
+        );
+    } else if (!asalocal_dst->super.storage) {
+        json_object_set_new(
+            err_info, "transcoder", json_string("[img][ff-out][init] missing storage in asalocal-dst")
         );
     } else {
         const char *_version = processor->data.version;
         json_t     *filt_spec = json_object_get(json_object_get(spec, "outputs"), _version);
-#define PATH_PATTERN "%s.%s"
-        const char *local_tmpfile_basepath = asalocal_src->super.op.open.dst_path;
-        size_t      f_path_sz = strlen(local_tmpfile_basepath) + sizeof(PATH_PATTERN) + strlen(_version);
-        char        f_fullpath[f_path_sz];
-        size_t nwrite = snprintf(&f_fullpath[0], f_path_sz, PATH_PATTERN, local_tmpfile_basepath, _version);
+#define PATH_PATTERN "%s/%s.%s"
+        const char *sys_basepath = asalocal_dst->super.storage->base_path;
+        const char *local_tmpfile_path = asalocal_src->super.op.open.dst_path;
+        size_t      f_path_sz =
+            strlen(sys_basepath) + strlen(local_tmpfile_path) + sizeof(PATH_PATTERN) + strlen(_version);
+        char   f_fullpath[f_path_sz];
+        size_t nwrite =
+            snprintf(&f_fullpath[0], f_path_sz, PATH_PATTERN, sys_basepath, local_tmpfile_path, _version);
         assert(nwrite < f_path_sz);
 #undef PATH_PATTERN
         _avctx_src = ((atfp_img_t *)fp_src)->av;
@@ -60,7 +67,7 @@ void atfp__image_ffm_out__init_transcode(atfp_t *processor) {
               .transfer = {0}};
             asalocal_dst->super.op.mkdir.path.origin = asalocal_src->super.op.mkdir.path.origin;
         }
-    } // end of  if backend-id matches
+    }
     processor->op_async_done.init = 0;
     processor->data.callback(processor);
 } // end of  atfp__image_ffm_out__init_transcode

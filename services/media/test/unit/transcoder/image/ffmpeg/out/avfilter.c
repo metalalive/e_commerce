@@ -42,12 +42,12 @@
     }; \
     app_cfg_t     *mock_acfg = app_get_global_cfg(); \
     aav_cfg_img_t *mock__imgcfg = &mock_acfg->transcoder.output.image; \
-    mock__imgcfg->mask.basepath = _msk_patt_idxpath; \
+    mock__imgcfg->mask.indexpath = _msk_patt_idxpath; \
     json_t *mock_filtspec = json_loadb(UTEST_FILT_SPEC, sizeof(UTEST_FILT_SPEC) - 1, (size_t)0, NULL); \
     json_t *mock_err_info = json_object();
 
 #define UTEST_IMGFILT_INIT__TEARDOWN \
-    mock__imgcfg->mask.basepath = NULL; \
+    mock__imgcfg->mask.indexpath = NULL; \
     json_decref(mock_filtspec); \
     json_decref(mock_err_info);
 

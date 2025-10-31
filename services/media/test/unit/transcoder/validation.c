@@ -366,7 +366,7 @@ Ensure(atfp_test__validate_video_req__err_output_map_elm_st) {
     json_t        *mock_err_info = json_object(); \
     app_cfg_t     *acfg = app_get_global_cfg(); \
     aav_cfg_img_t *mock_imgcfg = &acfg->transcoder.output.image; \
-    mock_imgcfg->mask.basepath = msk_patt_basepath; \
+    mock_imgcfg->mask.indexpath = msk_patt_basepath; \
     mock_imgcfg->limit = (aav_cfg_resolution_pix_t){.width = _limit_width, .height = _limit_height};
 
 #define UTEST_VALIDATE_IMG_REQ__TEARDOWN \

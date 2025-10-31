@@ -154,9 +154,10 @@ Ensure(atfp_img_ffi_test__init_ok) {
         );
         atfp__image_ffm_in__init_transcode(&mock_fp->super);
         expect(utest_img__preload_from_storage, will_return(ASTORAGE_RESULT_ACCEPT));
-        expect(
-            utest_img__av_init, will_return(0), when(filepath, begins_with_string(UTEST_ASALOCAL_BASEPATH))
-        );
+#define RUNNER(expect_fullpath) \
+    expect(utest_img__av_init, will_return(0), when(filepath, begins_with_string(expect_fullpath)))
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, RUNNER);
+#undef RUNNER
         expect(
             utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
             when(num_err_items, is_equal_to(0))

@@ -396,7 +396,7 @@ _validate_image_req__mask(json_t *item, json_t *err_info, app_envvars_t *env, aa
         } // end of loop
         if (json_object_size(err_detail) == 0) {
 #define RUNNER(fullpath) atfp_image_mask_pattern_index(fullpath)
-            json_t *msk_fmap = PATH_CONCAT_THEN_RUN(env->sys_base_path, img_cfg->mask.basepath, RUNNER);
+            json_t *msk_fmap = PATH_CONCAT_THEN_RUN(env->sys_base_path, img_cfg->mask.indexpath, RUNNER);
 #undef RUNNER
             if (msk_fmap) {
                 json_t *filename_item = json_object_getn(msk_fmap, _patt_label, patt_label_sz);
