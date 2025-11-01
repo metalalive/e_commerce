@@ -70,6 +70,16 @@ jobs:
           docker load --input ${{ runner.temp }}/media-backend-build0.tar
           docker image list --all
 
+      - name: Create test environment files
+        working-directory: services/media/infra
+        run: |
+          echo "DB_HOST=media-test-mariadb" > ./container-test.env
+          echo "MARIADB_ROOT_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "SITEDBA_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "SITEDBA_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "DB_APP_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "DB_APP_PASSWORD=DB_PASSWORD" >> ./container-test.env
+
       - name: Set up mock credentials for test
         working-directory: services/common/data
         run: |
@@ -144,18 +154,17 @@ jobs:
         run: |
           # container-test.env contains variables directly consumed by services (e.g., DB_HOST)
           echo "DB_HOST=media-test-mariadb" > ./container-test.env
-          echo "DB_PORT=3313" >> ./container-test.env
-          echo "SYS_BASE_PATH=/app" >> ./container-test.env
+          echo "MARIADB_ROOT_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "SITEDBA_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "SITEDBA_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "DB_APP_UNAME=DB_USERNAME"    >> ./container-test.env
+          echo "DB_APP_PASSWORD=DB_PASSWORD" >> ./container-test.env
+          echo "CONTAINER_IP_RANGE=172.19.13.%" >> ./container-test.env
+          echo "MIGRATE_VERSION_TAG=0.0.0" >> ./container-test.env
           echo "SKIP_TRANSCODING_TEST=1" >> ./container-test.env
           # interpolation-test.env contains variables for Docker Compose CLI and database setup
           echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
           echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
-          echo "MARIADB_ROOT_PASSWORD=DB_PASSWORD" >> ./interpolation-test.env
-          echo "SITEDBA_UNAME=DB_USERNAME"    >> ./interpolation-test.env
-          echo "SITEDBA_PASSWORD=DB_PASSWORD" >> ./interpolation-test.env
-          echo "DB_APP_UNAME=DB_USERNAME"    >> ./interpolation-test.env
-          echo "DB_APP_PASSWORD=DB_PASSWORD" >> ./container-test.env
-          echo "MIGRATE_VERSION_TAG=0.0.0" >> ./interpolation-test.env
 
       - name: Set up mock credentials for test
         working-directory: services/common/data
