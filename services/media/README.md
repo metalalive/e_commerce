@@ -125,7 +125,7 @@ docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-c
 
 ### Test
 ```bash
-docker compose --file ./infra/docker-compose-utest.yml --env-file ./infra/interpolation-test.env up --detach
+docker compose --file ./infra/docker-compose-utest.yml up --detach
 
 docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-itest.yml \
     --env-file ./infra/interpolation-test.env up --detach
