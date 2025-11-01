@@ -142,6 +142,35 @@ jobs:
           docker load --input ${{ runner.temp }}/media-backend-build0.tar
           docker load --input ${{ runner.temp }}/media-helper-tool-build0.tar
           docker image list --all
+      
+      - name: Set up rabbitMQ persistence path
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p installed/rabbitmq/data installed/rabbitmq/log
+          sudo chown --recursive installed/rabbitmq
+
+      - name: setup env file for RabbitMQ container
+        working-directory: infra
+        run: |
+          echo "RABBITMQ_NODENAME=mouse@inter-apps-msgq-dev" > ./dev.env
+          echo "RABBITMQ_DEFAULT_USER=AMQP_BROKER_USERNAME" >> ./dev.env
+          echo "RABBITMQ_DEFAULT_PASS=AMQP_BROKER_PASSWORD" >> ./dev.env
+          echo "RABBIT_TEST_USER=AMQP_ANOTHER_USERNAME" >> ./dev.env
+          echo "RABBIT_TEST_PASS=AMQP_ANOTHER_PASSWORD" >> ./dev.env
+          echo "RABBITMQ_PID_FILE=/var/lib/rabbitmq/mnesia/ec-mq-server.pid" >> ./dev.env
+
+      - name: start RabbitMQ container for test
+        working-directory: infra
+        run: |
+          docker run --name inter-apps-msgq-dev  --env-file ./dev.env \
+              -v ${{ github.workspace }}/installed/rabbitmq/data:/var/lib/rabbitmq \
+              -v ${{ github.workspace }}/installed/rabbitmq/log:/var/log/rabbitmq \
+              -v ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro \
+              -v ./rabbit-defs.json:/app/rabbit-defs.json:ro \
+              -v ./rabbitmq-custom-init.sh:/init.sh:ro \
+              --network ec-intersrvs-dev-net  rabbitmq-custom-init:3.13-management
+          sleep 30
+          docker logs inter-apps-msgq-dev --tail 40
 
       - name: Set up database persistence path
         working-directory: ${{ github.workspace }}
