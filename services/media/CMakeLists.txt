@@ -10,8 +10,8 @@ INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(CTest)
 
-option(ONLY_REFORMAT "Set to ON to skip finding required packages for regular build targets, useful for 'reformat' target only." OFF)
-if(ONLY_REFORMAT)
+option(SKIP_PKG_CHECK "Set to ON to skip finding required packages for regular build targets, useful for 'reformat' target only." OFF)
+if(SKIP_PKG_CHECK)
     set(_PKG_REQUIRED "")
 else()
     set(_PKG_REQUIRED "REQUIRED")
@@ -473,12 +473,17 @@ TARGET_LINK_LIBRARIES(${APP_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${
 TARGET_LINK_LIBRARIES(${RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${EXTRA_LIBS})
 TARGET_LINK_LIBRARIES(${HEALTH_CHECK_EXE_NAME}  ${LIBCURL_LIBRARIES})
 
-if(ONLY_REFORMAT)
-    ADD_CUSTOM_TARGET(reformat
-        COMMAND clang-format-18 -i --style=file ${REFMT_SRC_FILES} ${REFMT_HEADER_FILES}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-else()
+ADD_CUSTOM_TARGET(build-help
+    COMMAND cat ./doc/build-helper-doc
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+ADD_CUSTOM_TARGET(reformat
+    COMMAND clang-format-18 -i --style=file ${REFMT_SRC_FILES} ${REFMT_HEADER_FILES}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+if(NOT SKIP_PKG_CHECK)
     SET(UNIT_TEST_EXE_NAME unit_test.out)
     ADD_EXECUTABLE(${UNIT_TEST_EXE_NAME} ${UNIT_TEST_SOURCE_FILES})
     TARGET_INCLUDE_DIRECTORIES(${UNIT_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
@@ -497,12 +502,11 @@ else()
         TARGET_LINK_OPTIONS(${ITEST_START_EXE_NAME} PRIVATE -rdynamic)
         MESSAGE(STATUS "symbols added to app-server executable")
     endif()
-endif() # end of ONLY_REFORMAT
+endif() # end of SKIP_PKG_CHECK
 
 
 # TODO, better way to scale app servers, without manually adding more custom targets
 # SET(APP_REP1_CFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-replica-1.json)
-# SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 # 
 # ADD_CUSTOM_TARGET(app_server_replica_1
 #     COMMAND
