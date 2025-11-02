@@ -249,10 +249,11 @@ jobs:
         run: |
             ln -s ./secrets_template.json  ./secrets.json
 
-      - name: download mock user asset for integration test
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.13' 
+          python-version: '3.13'
+
+      - name: download mock user asset for integration test
         working-directory: services/media/test/integration/examples
         run: |
           pip install gdown
