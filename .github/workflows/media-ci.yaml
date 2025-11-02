@@ -216,7 +216,8 @@ jobs:
               -v ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro \
               -v ./rabbit-defs.json:/app/rabbit-defs.json:ro \
               -v ./rabbitmq-custom-init.sh:/init.sh:ro \
-              --network ec-intersrvs-dev-net  rabbitmq-custom-init:3.13-management
+              --network ec-intersrvs-dev-net --detach \
+              rabbitmq-custom-init:3.13-management
           sleep 30
           docker logs inter-apps-msgq-dev --tail 40
 
