@@ -98,9 +98,8 @@ static void atfp_cachecommon_deinit(asa_op_base_cfg_t *_asa_cch_local) {
     }
 } // end of  atfp_cachecommon_deinit
 
-int atfp_cache_save_metadata(
-    const char *basepath, const char *mimetype, atfp_data_t *fp_data
-) { // new file to save key ID applied to this video, TODO, async operation
+int atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data) {
+    // new local file to save key ID applied to this video, TODO, async operation
     if (!basepath || !mimetype || !fp_data || !fp_data->spec || fp_data->usr_id == 0 ||
         fp_data->upld_req_id == 0)
         return 1;
@@ -331,12 +330,7 @@ static void _atfp_streamcache_metadata_open_cb(asa_op_base_cfg_t *_asa_cch_local
 } // end of _atfp_streamcache_metadata_open_cb
 
 /* TODO, implement timeout attribute in cache so existing cache file can be evicted after specified
- * expiry time int  UPDATE_INTERVAL_SECS = 30 // from metadata file atfp_data_t  data =
- * {.usr_id=usr_id, .upld_req_id=upld_req_id}; int refresh_req =
- * atfp_check_fileupdate_required(&data, acfg->tmp_buf.path, detail_filepath, UPDATE_INTERVAL_SECS);
- *   if(refresh_req) {
- *       // start file processor
- *   }
+ * expiry time , by reusing `atfp_check_fileupdate_required`
  */
 static void _atfp_streamcache_existence_check(asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result) {
     json_t *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
@@ -420,7 +414,8 @@ static void _atfp_nonstreamcache_existence_check(asa_op_base_cfg_t *_asa_cch_loc
         asa_src_remote->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG] = err_info;
         asa_src_remote->op.read.dst = _asa_cch_local->op.write.src; // reuse the same buffer
         asa_src_remote->op.read.dst_max_nbytes = _asa_cch_local->op.write.src_max_nbytes;
-        if (strncmp(_appstorage_alias, "localfs", sizeof("localfs") - 1) == 0) // TODO
+        // TODO, better implementation to replace downcasting
+        if (strncmp(_appstorage_alias, "persist_usr_asset", sizeof("persist_usr_asset") - 1) == 0)
             ((asa_op_localfs_cfg_t *)asa_src_remote)->loop = ((asa_op_localfs_cfg_t *)_asa_cch_local)->loop;
         // ----------
         const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
@@ -457,7 +452,12 @@ static asa_op_localfs_cfg_t *_atfp_cache_init_common(
         fprintf(stderr, "[atfp][cache] line:%d, insufficient number of callback arguments \r\n", __LINE__);
         return NULL;
     }
-    asa_cfg_t            *storage = app_storage_cfg_lookup("localfs");
+    asa_cfg_t *storage = app_storage_cfg_lookup("local_tmpbuf");
+    if (!storage) {
+        json_object_set_new(err_info, "storage", json_string("internal error"));
+        fprintf(stderr, "[atfp][cache] line:%d, storage local_tmpbuf missing \r\n", __LINE__);
+        return NULL;
+    }
     asa_op_localfs_cfg_t *asa_cached_local =
         (asa_op_localfs_cfg_t *)app_storage__init_asaobj_helper(storage, num_cb_args, buf_sz, 0);
     if (!asa_cached_local) {

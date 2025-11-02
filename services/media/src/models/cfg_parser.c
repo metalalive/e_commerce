@@ -1,3 +1,5 @@
+#include "datatypes.h"
+#include "utils.h"
 #include "routes.h"
 #include "models/cfg_parser.h"
 #include "models/pool.h"
@@ -34,23 +36,23 @@ static void parse_cfg_free_db_conn_detail(db_conn_cfg_t *detail) {
     }
 }
 
-static int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out) {
+static int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out, app_envvars_t *env) {
     const char *filepath = json_string_value(json_object_get(in, "filepath"));
     json_t     *hierarchy = json_object_get(in, "hierarchy");
-    json_t     *root = NULL;
-    json_t     *dst = NULL;
-    json_t     *hier_tag = NULL;
-    int         idx = 0;
+    json_t     *root = NULL, *dst = NULL, *hier_tag = NULL;
     if (!filepath || !hierarchy || !json_is_array(hierarchy)) {
         h2o_error_printf("[parsing] missing filepath parameters in database credential\n");
         goto error;
     }
-    root = json_load_file(filepath, (size_t)0, NULL);
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, NULL)
+    root = PATH_CONCAT_THEN_RUN(env->sys_base_path, filepath, RUNNER);
+#undef RUNNER
     if (!root) {
         h2o_error_printf("[parsing] failed to load database credential from file %s \n", filepath);
         goto error;
     }
     dst = root;
+    int idx = 0;
     json_array_foreach(hierarchy, idx, hier_tag) {
         const char *tag = json_string_value(hier_tag);
         if (!tag) {
@@ -69,13 +71,12 @@ static int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out) {
     } // end of loop
     const char *db_user = json_string_value(json_object_get(dst, "USER"));
     const char *db_passwd = json_string_value(json_object_get(dst, "PASSWORD"));
-    const char *db_host = json_string_value(json_object_get(dst, "HOST"));
-    json_int_t  db_port = json_integer_value(json_object_get(dst, "PORT"));
-    int         invalid_port_num = (db_port >= 0xFFFF) || (db_port <= 0);
-    if (!db_user || !db_passwd || !db_host || invalid_port_num) {
+    const char *db_host = env->db_host;
+    uint16_t    db_port = env->db_port;
+    if (!db_user || !db_passwd || !db_host || (db_port == 0)) {
         h2o_error_printf(
             "[parsing] invalid database credential: db_user(%s), db_passwd(%s), db_host(%s), "
-            "db_port(%lld) \n",
+            "db_port(%uh) \n",
             (db_user ? "not null" : "null"), (db_passwd ? "not null" : "null"), db_host, db_port
         );
         goto error;
@@ -83,9 +84,9 @@ static int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out) {
     out->db_user = strdup(db_user);
     out->db_passwd = strdup(db_passwd);
     out->db_host = strdup(db_host);
-    out->db_port = (uint16_t)(db_port & 0xFFFF);
+    out->db_port = db_port;
     json_decref(root);
-    return 0;
+    return EX_OK;
 error:
     if (root) {
         json_decref(root);
@@ -129,10 +130,11 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg) {
             .skip_tls = skip_tls
         };
         app_internal_cb_arg_t probe_args = {.cfg = &cfg_opts.ops, .done = 0, .fn_label = init_cfg_ops_label};
-        int                   err = app_elf_traverse_functions(
-            app_cfg->exe_path, _app_elf_gather_db_operation_cb, (void *)&probe_args
-        );
-        if (err != 0) { // parsing error
+#define RUNNER(fullpath) \
+    app_elf_traverse_functions(fullpath, _app_elf_gather_db_operation_cb, (void *)&probe_args)
+        int err = PATH_CONCAT_THEN_RUN(app_cfg->env_vars.sys_base_path, app_cfg->exe_path, RUNNER);
+#undef RUNNER
+        if (err != EX_OK) {
             goto error;
         } else if (!probe_args.done) {
             h2o_error_printf(
@@ -142,7 +144,8 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg) {
             );
             goto error;
         }
-        if (parse_cfg_db_credential(credential, &cfg_opts.conn_detail)) {
+        err = parse_cfg_db_credential(credential, &cfg_opts.conn_detail, &app_cfg->env_vars);
+        if (err != EX_OK) {
             h2o_error_printf(
                 "[parsing][db][cfg] idx=%d, alias=%s, failed to parse \
                     credential \n",
@@ -158,7 +161,7 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg) {
         }
         parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
     } // end of database configuration iteration
-    return 0;
+    return EX_OK;
 error:
     app_db_pool_map_deinit();
     return EX_CONFIG;

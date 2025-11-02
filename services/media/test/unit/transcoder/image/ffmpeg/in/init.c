@@ -2,6 +2,8 @@
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
 
+#include "app_cfg.h"
+#include "utils.h"
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
 
@@ -16,6 +18,9 @@ extern const atfp_ops_entry_t atfp_ops_image_ffmpg_in;
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define RUNNER_ACCESS_F_OK(fullpath)   access(fullpath, F_OK)
 
 #define DEINIT_IF_EXISTS(var, fn_label) \
     if (var) { \
@@ -76,19 +81,23 @@ static void utest_atfp_usr_cb(atfp_t *processor) {
 } // end of utest_atfp_usr_cb
 
 #define UTEST_ATFP_IMG__INIT_SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uv_loop_t  *loop = uv_default_loop(); \
     uint8_t     done_flag = 0; \
     const char *local_buf_fname_postfix = UTEST_LOCAL_BUF_FNAME_POSTFIX; \
     void       *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     void       *asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     asa_cfg_t   mock_storage_local_cfg = { \
+          .base_path = env.sys_base_path, \
           .ops = \
             {.fn_open = app_storage_localfs_open, \
                .fn_close = app_storage_localfs_close, \
                .fn_unlink = app_storage_localfs_unlink} \
     }; \
     asa_cfg_t mock_storage_remote_cfg = \
-        {.ops = { \
+        {.base_path = env.sys_base_path, \
+         .ops = { \
              .fn_close = utest_storage_remote_close, \
          }}; \
     asa_op_base_cfg_t mock_asa_src = { \
@@ -125,81 +134,94 @@ static void utest_atfp_usr_cb(atfp_t *processor) {
     asalocal_cb_args[ATFP_INDEX__IN_ASA_USRARG] = mock_fp; \
     asalocal_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
     asalocal_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER);
 
 #define UTEST_ATFP_IMG__INIT_TEARDOWN \
     DEINIT_IF_EXISTS(mock_errinfo, json_decref); \
-    rmdir(UTEST_ASALOCAL_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, rmdir);
 
-Ensure(atfp_img_ffi_test__init_ok
-){UTEST_ATFP_IMG__INIT_SETUP{// init
-                             expect(uuid_generate_random, when(uuo, is_not_null));
-expect(
-    uuid_unparse, when(uuo, is_not_null),
-    will_set_contents_of_parameter(
-        out, local_buf_fname_postfix, sizeof(char) * strlen(local_buf_fname_postfix)
-    )
-);
-atfp__image_ffm_in__init_transcode(&mock_fp->super);
-expect(utest_img__preload_from_storage, will_return(ASTORAGE_RESULT_ACCEPT));
-expect(utest_img__av_init, will_return(0));
-expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)), when(num_err_items, is_equal_to(0)));
-while (!done_flag)
-    uv_run(loop, UV_RUN_ONCE);
-assert_that(mock_asa_local.file.file, is_greater_than(-1));
-assert_that(access(UTEST_LOCAL_TMPBUF, F_OK), is_equal_to(0));
-}
-{ // de-init
-    expect(utest_img__av_deinit);
-    expect(
-        utest_storage_remote_close, will_return(ASTORAGE_RESULT_UNKNOWN_ERROR),
-        when(_asaobj, is_equal_to(&mock_asa_src))
-    );
-    atfp__image_ffm_in__deinit_transcode(&mock_fp->super);
-    expect(utest_img__asalocal_final_dealloc, when(asaobj, is_equal_to(&mock_asa_local)));
-    expect(utest_img__asasrc_final_dealloc, when(asaobj, is_equal_to(&mock_asa_src)));
-    expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
-    while (access(UTEST_LOCAL_TMPBUF, F_OK) == 0)
-        uv_run(loop, UV_RUN_ONCE);
-}
-UTEST_ATFP_IMG__INIT_TEARDOWN
+Ensure(atfp_img_ffi_test__init_ok) {
+    UTEST_ATFP_IMG__INIT_SETUP;
+    { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(
+            uuid_unparse, when(uuo, is_not_null),
+            will_set_contents_of_parameter(
+                out, local_buf_fname_postfix, sizeof(char) * strlen(local_buf_fname_postfix)
+            )
+        );
+        atfp__image_ffm_in__init_transcode(&mock_fp->super);
+        expect(utest_img__preload_from_storage, will_return(ASTORAGE_RESULT_ACCEPT));
+#define RUNNER(expect_fullpath) \
+    expect(utest_img__av_init, will_return(0), when(filepath, begins_with_string(expect_fullpath)))
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILE_BASEPATH, RUNNER);
+#undef RUNNER
+        expect(
+            utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
+            when(num_err_items, is_equal_to(0))
+        );
+        while (!done_flag)
+            uv_run(loop, UV_RUN_ONCE);
+        assert_that(mock_asa_local.file.file, is_greater_than(-1));
+        assert_that(
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK), is_equal_to(0)
+        );
+    }
+    { // de-init
+        expect(utest_img__av_deinit);
+        expect(
+            utest_storage_remote_close, will_return(ASTORAGE_RESULT_UNKNOWN_ERROR),
+            when(_asaobj, is_equal_to(&mock_asa_src))
+        );
+        atfp__image_ffm_in__deinit_transcode(&mock_fp->super);
+        expect(utest_img__asalocal_final_dealloc, when(asaobj, is_equal_to(&mock_asa_local)));
+        expect(utest_img__asasrc_final_dealloc, when(asaobj, is_equal_to(&mock_asa_src)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        while (PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK) == 0)
+            uv_run(loop, UV_RUN_ONCE);
+    }
+    UTEST_ATFP_IMG__INIT_TEARDOWN
 } // end of  atfp_img_ffi_test__init_ok
 
-Ensure(atfp_img_ffi_test__preload_error
-){UTEST_ATFP_IMG__INIT_SETUP{// init
-                             expect(uuid_generate_random, when(uuo, is_not_null));
-expect(
-    uuid_unparse, when(uuo, is_not_null),
-    will_set_contents_of_parameter(
-        out, local_buf_fname_postfix, sizeof(char) * strlen(local_buf_fname_postfix)
-    )
-);
-atfp__image_ffm_in__init_transcode(&mock_fp->super);
-expect(utest_img__preload_from_storage, will_return(ASTORAGE_RESULT_OS_ERROR));
-expect(
-    utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)), when(num_err_items, is_greater_than(0))
-);
-while (!done_flag)
-    uv_run(loop, UV_RUN_ONCE);
-assert_that(mock_asa_local.file.file, is_greater_than(-1));
-assert_that(access(UTEST_LOCAL_TMPBUF, F_OK), is_equal_to(0));
-}
-{ // de-init
-    expect(utest_img__av_deinit);
-    expect(
-        utest_storage_remote_close, will_return(ASTORAGE_RESULT_UNKNOWN_ERROR),
-        when(_asaobj, is_equal_to(&mock_asa_src))
-    );
-    atfp__image_ffm_in__deinit_transcode(&mock_fp->super);
-    expect(utest_img__asalocal_final_dealloc, when(asaobj, is_equal_to(&mock_asa_local)));
-    expect(utest_img__asasrc_final_dealloc, when(asaobj, is_equal_to(&mock_asa_src)));
-    expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
-    while (access(UTEST_LOCAL_TMPBUF, F_OK) == 0)
-        uv_run(loop, UV_RUN_ONCE);
-}
-UTEST_ATFP_IMG__INIT_TEARDOWN
+Ensure(atfp_img_ffi_test__preload_error) {
+    UTEST_ATFP_IMG__INIT_SETUP;
+    { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(
+            uuid_unparse, when(uuo, is_not_null),
+            will_set_contents_of_parameter(
+                out, local_buf_fname_postfix, sizeof(char) * strlen(local_buf_fname_postfix)
+            )
+        );
+        atfp__image_ffm_in__init_transcode(&mock_fp->super);
+        expect(utest_img__preload_from_storage, will_return(ASTORAGE_RESULT_OS_ERROR));
+        expect(
+            utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
+            when(num_err_items, is_greater_than(0))
+        );
+        while (!done_flag)
+            uv_run(loop, UV_RUN_ONCE);
+        assert_that(mock_asa_local.file.file, is_greater_than(-1));
+        assert_that(
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK), is_equal_to(0)
+        );
+    }
+    { // de-init
+        expect(utest_img__av_deinit);
+        expect(
+            utest_storage_remote_close, will_return(ASTORAGE_RESULT_UNKNOWN_ERROR),
+            when(_asaobj, is_equal_to(&mock_asa_src))
+        );
+        atfp__image_ffm_in__deinit_transcode(&mock_fp->super);
+        expect(utest_img__asalocal_final_dealloc, when(asaobj, is_equal_to(&mock_asa_local)));
+        expect(utest_img__asasrc_final_dealloc, when(asaobj, is_equal_to(&mock_asa_src)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        while (PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK) == 0)
+            uv_run(loop, UV_RUN_ONCE);
+    }
+    UTEST_ATFP_IMG__INIT_TEARDOWN
 } // end of  atfp_img_ffi_test__preload_error
 
 Ensure(atfp_img_ffi_test__avctx_error) {
@@ -223,7 +245,9 @@ Ensure(atfp_img_ffi_test__avctx_error) {
         while (!done_flag)
             uv_run(loop, UV_RUN_ONCE);
         assert_that(mock_asa_local.file.file, is_greater_than(-1));
-        assert_that(access(UTEST_LOCAL_TMPBUF, F_OK), is_equal_to(0));
+        assert_that(
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK), is_equal_to(0)
+        );
     }
     { // de-init
         expect(utest_img__av_deinit);
@@ -235,7 +259,7 @@ Ensure(atfp_img_ffi_test__avctx_error) {
         expect(utest_img__asalocal_final_dealloc, when(asaobj, is_equal_to(&mock_asa_local)));
         expect(utest_img__asasrc_final_dealloc, when(asaobj, is_equal_to(&mock_asa_src)));
         expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
-        while (access(UTEST_LOCAL_TMPBUF, F_OK) == 0)
+        while (PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_LOCAL_TMPBUF, RUNNER_ACCESS_F_OK) == 0)
             uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_IMG__INIT_TEARDOWN

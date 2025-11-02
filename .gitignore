@@ -13,6 +13,16 @@ services/media/data/certs/development/*.crt
 services/media/data/certs/development/*.key
 services/media/data/certs/test/*.crt
 services/media/data/certs/test/*.key
+services/media/infra/container-dev.env
+services/media/infra/container-test.env
+services/media/infra/interpolation-dev.env
+services/media/infra/interpolation-test.env
+services/media/test/integration/examples/*.mp4
+services/media/test/integration/examples/*.avi
+services/media/test/integration/examples/*.jpg
+services/media/test/integration/examples/*.png
+services/media/test/integration/examples/*.gif
+services/media/test/integration/examples/*.tif
 services/order/tests/integration/target/
 services/order/target/
 services/order/infra/container-dev.env

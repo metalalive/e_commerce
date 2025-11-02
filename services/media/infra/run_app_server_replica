@@ -1,0 +1,3 @@
+python -m  media.task_loader DevAppSrvCertRenewal  ${APP_REP1_CFG_PATH}
+
+make app_server_replica_1 -C ./build

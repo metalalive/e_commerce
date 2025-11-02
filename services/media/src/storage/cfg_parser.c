@@ -1,3 +1,5 @@
+#include <sysexits.h>
+#include "utils.h"
 #include "routes.h"
 #include "storage/cfg_parser.h"
 
@@ -70,8 +72,9 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg) {
     app_cfg->storages.size = 0;
     json_array_foreach(objs, idx, obj) {
         const char *alias = json_string_value(json_object_get(obj, "alias"));
-        const char *base_path = json_string_value(json_object_get(obj, "base_path"));
-        if (!alias || !base_path) {
+        const char *filestore_path = json_string_value(json_object_get(obj, "base_path"));
+        const char *sys_basepath = app_cfg->env_vars.sys_base_path;
+        if (!alias || !filestore_path) {
             h2o_error_printf("[parsing] storage (idx=%d) missing alias or base_path \n", idx);
             goto error;
         }
@@ -96,12 +99,16 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg) {
             free(_asa_cfg->base_path);
         }
         _asa_cfg->alias = strdup(alias);
-        _asa_cfg->base_path = strdup(base_path);
+        // TODO, FIXME, `sys_basepath` should work only with local file system
+        // for other storage selections in remote servers (e.g. AWS S3), there should
+        // be full path to remote site specified in configuration file
+        _asa_cfg->base_path = PATH_CONCAT_THEN_RUN(sys_basepath, filestore_path, strdup);
         _asa_cfg->ops = (asa_cfg_ops_t){0};
         asa_internal_cb_arg_t cb_args = {.app_cfg = _asa_cfg, .json_ops = ops};
-        int                   err = app_elf_traverse_functions(
-            app_cfg->exe_path, _app_elf_gather_storage_operation_cb, (void *)&cb_args
-        );
+#define RUNNER(fullpath) \
+    app_elf_traverse_functions(fullpath, _app_elf_gather_storage_operation_cb, (void *)&cb_args)
+        int err = PATH_CONCAT_THEN_RUN(sys_basepath, app_cfg->exe_path, RUNNER);
+#undef RUNNER
         if (err != 0) {
             goto error;
         }
@@ -113,12 +120,12 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg) {
             goto error;
         } // TODO, check whether any operation function is missing
     } // end of storage configuration iteration
-    return 0;
+    return EX_OK;
 error:
     if (realloc_mem && app_cfg->storages.entries) {
         app_storage_cfg_deinit(app_cfg);
     }
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_storages
 
 void app_storage_cfg_deinit(app_cfg_t *app_cfg) {
@@ -138,9 +145,8 @@ void app_storage_cfg_deinit(app_cfg_t *app_cfg) {
     app_cfg->storages.size = 0;
 } // end of app_storage_cfg_deinit
 
-asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
+asa_cfg_t *app_storage_cfg_lookup_glbl(const char *alias, app_cfg_t *app_cfg) {
     asa_cfg_t *out = NULL;
-    app_cfg_t *app_cfg = app_get_global_cfg();
     for (int idx = 0; !out && (idx < app_cfg->storages.size); idx++) {
         asa_cfg_t *item = &app_cfg->storages.entries[idx];
         int        ret = strncmp(alias, item->alias, strlen(item->alias));
@@ -148,6 +154,10 @@ asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
             out = item;
     }
     return out;
+}
+
+asa_cfg_t *app_storage_cfg_lookup(const char *alias) {
+    return app_storage_cfg_lookup_glbl(alias, app_get_global_cfg());
 }
 
 asa_op_base_cfg_t *app_storage__init_asaobj_helper(

@@ -8,7 +8,7 @@ atfp_t *atfp__video_hls__instantiate(void) {
     atfp_hls_t *out = calloc(0x1, tot_sz);
     char       *ptr = (char *)out + sizeof(atfp_hls_t);
     out->av = (atfp_av_ctx_t *)ptr;
-    out->asa_local.super.storage = app_storage_cfg_lookup("localfs");
+    out->asa_local.super.storage = app_storage_cfg_lookup("local_tmpbuf");
     return &out->super;
 } // end of atfp__video_hls__instantiate
 

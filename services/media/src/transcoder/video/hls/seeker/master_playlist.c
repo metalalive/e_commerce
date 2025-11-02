@@ -202,14 +202,13 @@ static void atfp_hls__scandir_versions_cb(asa_op_base_cfg_t *asa_src, ASA_RES_CO
 static ASA_RES_CODE atfp_hls_stream__build_mst_plist__start(asa_op_base_cfg_t *asa_src, atfp_t *processor) {
     uint32_t _usr_id = processor->data.usr_id;
     uint32_t _upld_req_id = processor->data.upld_req_id;
-#define ASA_SRC_BASEPATH_PATTERN "%s/%d/%08x/%s"
-    size_t scan_path_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + strlen(asa_src->storage->base_path) +
-                          USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) +
-                          sizeof(ATFP__COMMITTED_FOLDER_NAME) + 1;
+#define ASA_SRC_BASEPATH_PATTERN "%d/%08x/%s"
+    size_t scan_path_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + USR_ID_STR_SIZE +
+                          UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) + 1;
     char  *scanning_path = calloc(scan_path_sz, sizeof(char));
     size_t nwrite = snprintf(
-        &scanning_path[0], scan_path_sz, ASA_SRC_BASEPATH_PATTERN, asa_src->storage->base_path, _usr_id,
-        _upld_req_id, ATFP__COMMITTED_FOLDER_NAME
+        &scanning_path[0], scan_path_sz, ASA_SRC_BASEPATH_PATTERN, _usr_id, _upld_req_id,
+        ATFP__COMMITTED_FOLDER_NAME
     );
     assert(scan_path_sz >= nwrite);
     asa_src->op.scandir.path = scanning_path;

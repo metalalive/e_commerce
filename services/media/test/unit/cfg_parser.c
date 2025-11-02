@@ -1,3 +1,4 @@
+#include <sysexits.h>
 #include <openssl/ssl.h>
 #include <sys/resource.h>
 #include <h2o.h>
@@ -13,12 +14,13 @@ Ensure(cfg_pid_file_tests) {
     json_t   *obj = NULL;
     app_cfg_t app_cfg = {.pid_file = NULL};
     result = appcfg_parse_pid_file(NULL, NULL);
-    assert_that(result, is_equal_to(-1));
+    assert_that(result, is_equal_to(EX_CONFIG));
     obj = json_string("/path/to/invalid/not_permitted.pid");
     result = appcfg_parse_pid_file(obj, &app_cfg);
     json_decref(obj);
-    assert_that(result, is_equal_to(-1));
+    assert_that(result, is_equal_to(EX_NOINPUT));
     assert_that(app_cfg.pid_file, is_equal_to(NULL));
+    app_load_envvars(&app_cfg.env_vars);
     const char *filename = "./tmp/proc/media_server_test.pid";
     obj = json_string(filename);
     result = appcfg_parse_pid_file(obj, &app_cfg);
@@ -27,7 +29,7 @@ Ensure(cfg_pid_file_tests) {
         fclose(app_cfg.pid_file);
         remove(filename);
     }
-    assert_that(result, is_equal_to(0));
+    assert_that(result, is_equal_to(EX_OK));
     assert_that(app_cfg.pid_file, is_not_equal_to(NULL));
 }
 
@@ -77,9 +79,11 @@ Ensure(cfg_listener_ssl_tests) {
     const char    *privkey_path = "media/data/certs/test/localhost.private.key";
     const char    *cert_path = "media/data/certs/test/localhost.crt";
     const char    *ciphersuite_list = "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256";
-    const uint16_t tls12 = 0x0303;
-    const uint16_t tls13 = 0x0304;
-    json_t        *obj = json_object();
+    const uint16_t tls12 = 0x0303, tls13 = 0x0304;
+    app_envvars_t  env = {0};
+    app_load_envvars(&env);
+    json_t *obj = json_object();
+    json_object_set_new(obj, "sys_base_path", json_string(env.sys_base_path));
     json_object_set_new(obj, "cert_file", json_string(cert_path));
     json_object_set_new(obj, "privkey_file", json_string(privkey_path));
     json_object_set_new(obj, "cipher_suites", json_string(ciphersuite_list));

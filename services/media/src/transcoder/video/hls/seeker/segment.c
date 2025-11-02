@@ -197,14 +197,13 @@ static ASA_RES_CODE atfp_hls_stream__enc_seg__init_asasrc(asa_op_base_cfg_t *asa
     uint32_t    _usr_id = processor->data.usr_id;
     uint32_t    _upld_req_id = processor->data.upld_req_id;
     const char *_detail_path = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
-#define PATH_PATTERN "%s/%d/%08x/%s/%s"
-    size_t filepath_sz = sizeof(PATH_PATTERN) + strlen(asa_src->storage->base_path) + USR_ID_STR_SIZE +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) +
-                         strlen(_detail_path);
+#define PATH_PATTERN "%d/%08x/%s/%s"
+    size_t filepath_sz = sizeof(PATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) +
+                         sizeof(ATFP__COMMITTED_FOLDER_NAME) + strlen(_detail_path);
     char   filepath[filepath_sz];
     size_t nwrite = snprintf(
-        &filepath[0], filepath_sz, PATH_PATTERN, asa_src->storage->base_path, _usr_id, _upld_req_id,
-        ATFP__COMMITTED_FOLDER_NAME, _detail_path
+        &filepath[0], filepath_sz, PATH_PATTERN, _usr_id, _upld_req_id, ATFP__COMMITTED_FOLDER_NAME,
+        _detail_path
     );
 #undef PATH_PATTERN
     assert(filepath_sz >= nwrite);
@@ -214,8 +213,8 @@ static ASA_RES_CODE atfp_hls_stream__enc_seg__init_asasrc(asa_op_base_cfg_t *asa
     asa_src->op.open.cb = _atfp_hls__open_src_segfile_cb;
     ASA_RES_CODE result = asa_src->storage->ops.fn_open(asa_src);
     asa_src->op.open.dst_path = NULL;
-    asa_src->deinit =
-        _atfp_hls__stream_seeker_asasrc_deinit; // not apply the deinit function in seeker/common.c
+    // not apply the deinit function in seeker/common.c
+    asa_src->deinit = _atfp_hls__stream_seeker_asasrc_deinit;
     return result;
 } // end of  atfp_hls_stream__enc_seg__init_asasrc
 
@@ -227,4 +226,4 @@ void atfp_hls_stream__encrypt_segment__start(atfp_hls_t *hlsproc) {
     json_object_set_new(spec, "num_usrargs_asa_src", json_integer(NUM_USRARGS_ASA_SRC));
     atfp_hls_stream_seeker__init_common(hlsproc, atfp_hls_stream__enc_seg__init_asasrc);
     json_object_del(spec, "num_usrargs_asa_src");
-} // end of atfp_hls_stream__encrypt_segment__start
+}

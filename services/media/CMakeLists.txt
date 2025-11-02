@@ -3,62 +3,53 @@ PROJECT(media_app C)
 
 SET(VERSION_MAJOR "0")
 SET(VERSION_MINOR "1")
-SET(VERSION_PATCH "0")
+SET(VERSION_PATCH "1")
 
 INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(CTest)
 
+option(SKIP_PKG_CHECK "Set to ON to skip finding required packages for regular build targets, useful for 'reformat' target only." OFF)
+if(SKIP_PKG_CHECK)
+    set(_PKG_REQUIRED "")
+else()
+    set(_PKG_REQUIRED "REQUIRED")
+endif()
+
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-FIND_PACKAGE(PkgConfig REQUIRED)
-FIND_PACKAGE(Threads REQUIRED)
-FIND_PACKAGE(OpenSSL REQUIRED)
-FIND_PACKAGE(Cmagic  REQUIRED)
-# TODO, optionally running test
-FIND_PACKAGE(Cgreen REQUIRED)
+FIND_PACKAGE(PkgConfig ${_PKG_REQUIRED})
+FIND_PACKAGE(Threads ${_PKG_REQUIRED})
+PKG_CHECK_MODULES(OPENSSL ${_PKG_REQUIRED} libssl>=3.0.0 libcrypto>=3.0.0)
+PKG_CHECK_MODULES(CMAGIC  ${_PKG_REQUIRED} libmagic>=5.39)
+# TODO, should be optional for running test
+FIND_PACKAGE(Cgreen ${_PKG_REQUIRED})
 
-IF (OPENSSL_VERSION VERSION_LESS 1.0.2)
-    # also to prevent heartbleed bug (see CVE-2014-0160 for detail)
-    MESSAGE(SEND_ERROR 
-        "   ****************************************************************\n"
-        "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with   *\n"
-        "   * web browsers.                                                *\n"
-        "   ****************************************************************\n")
-ENDIF (OPENSSL_VERSION VERSION_LESS 1.0.2)
-IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
-    MESSAGE(WARNING 
-        "   ********************************************************************\n"
-        "   * OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed     *\n"
-        "   * when using external cache.                                       *\n"
-        "   ********************************************************************\n")
-ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+PKG_CHECK_MODULES(LIBELF  ${_PKG_REQUIRED} libelf>=0.8.13)
+PKG_CHECK_MODULES(LIBUV   ${_PKG_REQUIRED} libuv>=1.42.0)
+PKG_CHECK_MODULES(H2O     ${_PKG_REQUIRED} libh2o)
+PKG_CHECK_MODULES(JANSSON ${_PKG_REQUIRED} jansson>=2.14)
+PKG_CHECK_MODULES(BROTLI_DEC ${_PKG_REQUIRED} libbrotlidec)
+PKG_CHECK_MODULES(BROTLI_ENC ${_PKG_REQUIRED} libbrotlienc)
 
-PKG_CHECK_MODULES(LIBELF  REQUIRED libelf>=0.8.13)
-PKG_CHECK_MODULES(LIBUV   REQUIRED libuv>=1.42.0)
-PKG_CHECK_MODULES(H2O     REQUIRED libh2o)
-PKG_CHECK_MODULES(JANSSON REQUIRED jansson>=2.14)
-PKG_CHECK_MODULES(BROTLI_DEC REQUIRED libbrotlidec)
-PKG_CHECK_MODULES(BROTLI_ENC REQUIRED libbrotlienc)
+PKG_CHECK_MODULES(RHONABWY  ${_PKG_REQUIRED}  librhonabwy>=1.1.9)
+PKG_CHECK_MODULES(GNUTLS    ${_PKG_REQUIRED}  gnutls>=3.7.2)
+PKG_CHECK_MODULES(NETTLE    ${_PKG_REQUIRED}  nettle>=3.7.2)
+PKG_CHECK_MODULES(P11KIT    ${_PKG_REQUIRED}  p11-kit-1>=0.24.0)
 
-PKG_CHECK_MODULES(RHONABWY  REQUIRED  librhonabwy>=1.1.2)
-PKG_CHECK_MODULES(GNUTLS    REQUIRED  gnutls>=3.7.2)
-PKG_CHECK_MODULES(NETTLE    REQUIRED  nettle>=3.7.2)
-PKG_CHECK_MODULES(P11KIT    REQUIRED  p11-kit-1>=0.24.0)
+PKG_CHECK_MODULES(MARIADB  ${_PKG_REQUIRED}  libmariadb>=3.4.1)
+PKG_CHECK_MODULES(RABBITMQ ${_PKG_REQUIRED}  librabbitmq>=0.11.0)
 
-PKG_CHECK_MODULES(MARIADB  REQUIRED  libmariadb>=3.4.1)
-PKG_CHECK_MODULES(RABBITMQ REQUIRED  librabbitmq>=0.11.0)
+PKG_CHECK_MODULES(AVCODEC   ${_PKG_REQUIRED}  libavcodec>=58.91.100)
+PKG_CHECK_MODULES(AVFORMAT  ${_PKG_REQUIRED}  libavformat>=58.45.100)
+PKG_CHECK_MODULES(AVUTIL    ${_PKG_REQUIRED}  libavutil>=56.51.100)
+PKG_CHECK_MODULES(AVFILTER  ${_PKG_REQUIRED}  libavfilter>=7.85.100)
+PKG_CHECK_MODULES(AVDEVICE  ${_PKG_REQUIRED}  libavdevice>=58.10.100)
 
-PKG_CHECK_MODULES(AVCODEC   REQUIRED  libavcodec>=58.91.100)
-PKG_CHECK_MODULES(AVFORMAT  REQUIRED  libavformat>=58.45.100)
-PKG_CHECK_MODULES(AVUTIL    REQUIRED  libavutil>=56.51.100)
-PKG_CHECK_MODULES(AVFILTER  REQUIRED  libavfilter>=7.85.100)
-PKG_CHECK_MODULES(AVDEVICE  REQUIRED  libavdevice>=58.10.100)
-
-PKG_CHECK_MODULES(LIBUUID  REQUIRED uuid>=2.20.0)
-PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
-PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
+PKG_CHECK_MODULES(LIBUUID  ${_PKG_REQUIRED} uuid>=2.20.0)
+PKG_CHECK_MODULES(LIBCURL  ${_PKG_REQUIRED} libcurl>=7.69.0)
+PKG_CHECK_MODULES(LIBNGHTTP2  ${_PKG_REQUIRED} libnghttp2>=1.46.0)
 
 MESSAGE(STATUS "OPENSSL_INCLUDE_DIR : ${OPENSSL_INCLUDE_DIR}")
 MESSAGE(STATUS "OPENSSL_LIBRARIES : ${OPENSSL_LIBRARIES}")
@@ -110,48 +101,11 @@ IF (LIBC_HAS_BACKTRACE)
     ENDIF()
 ENDIF ()
 
-IF(DEFINED PYVENV_PATH)
-    SET(PYVENV_BIN_PATH   ${PYVENV_PATH}/bin)
-    SET(PYVENV_EXEC_PATH  ${PYVENV_BIN_PATH}/python)
-    IF (EXISTS ${PYVENV_PATH} AND EXISTS ${PYVENV_BIN_PATH}
-             AND EXISTS ${PYVENV_EXEC_PATH})
-        SET(PYVENV_AVAIL  ON)
-    ELSE()
-        SET(PYVENV_AVAIL  OFF)
-    ENDIF()
-ELSE()
-    SET(PYVENV_AVAIL  OFF)
-ENDIF()
-
-IF(NOT ${PYVENV_AVAIL})
-    MESSAGE(SEND_ERROR "Path to Python virtual environment is missing \n")
-ENDIF()
-
-IF(DEFINED NGINX_INSTALL_PATH)
-    SET(NGINX_EXECUTABLE_PATH  ${NGINX_INSTALL_PATH}/sbin/nginx)
-    SET(NGINX_CONFIG_BASEPATH  ${NGINX_INSTALL_PATH}/conf)
-    IF(EXISTS ${NGINX_EXECUTABLE_PATH} AND EXISTS ${NGINX_CONFIG_BASEPATH}
-            AND EXISTS ${NGINX_INSTALL_PATH}/logs)
-        SET(NGINX_PATH_EXISTS  ON)
-    ELSE()
-        SET(NGINX_PATH_EXISTS  OFF)
-    ENDIF()
-ELSE()
-    SET(NGINX_PATH_EXISTS  OFF)
-ENDIF()
-
-IF (${NGINX_PATH_EXISTS} AND DEFINED CDN_USERNAME AND DEFINED CDN_USERGRP
-        AND ${PYVENV_AVAIL})
-    SET(CDN_ENABLE  ON)
-ELSE()
-    SET(CDN_ENABLE  OFF)
-ENDIF()
-
-MESSAGE(STATUS "PYVENV_PATH: ${PYVENV_PATH}")
-MESSAGE(STATUS "Nginx installed path exists: ${NGINX_PATH_EXISTS}")
-MESSAGE(STATUS "CDN_USERNAME: ${CDN_USERNAME}")
-MESSAGE(STATUS "CDN_USERGRP:  ${CDN_USERGRP}")
-MESSAGE(STATUS "CDN_ENABLE: ${CDN_ENABLE}")
+option(DEBUG_RPC "Set to ON to enable RPC debug logging." OFF)
+MESSAGE(STATUS "DEBUG_RPC: ${DEBUG_RPC}")
+if(DEBUG_RPC)
+    add_compile_definitions(DEBUG_RPC)
+ENDIF ()
 
 
 INCLUDE_DIRECTORIES(
@@ -427,11 +381,11 @@ SET(UNIT_TEST_SOURCE_FILES
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
-SET(ITEST_APPSRV_SOURCE_FILES
+SET(ITEST_START_SOURCE_FILES
+    src/utils.c
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
-    test/integration/rpc_consumer.c
     test/integration/api/access_control_list.c
     test/integration/api/monitor_job_progress.c
     test/integration/api/start_transcoding_file.c
@@ -442,8 +396,7 @@ SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/api/initiate_file_nonstream.c
     test/integration/api/initiate_file_stream.c
     test/integration/api/stream_file_lookup.c
-    test/integration/api/discard_committed_file.c
-    ${APP_SERVER_SOURCE_FILES} )
+    test/integration/api/discard_committed_file.c )
 
 SET(ITEST_RPCCONSUMER_SOURCE_FILES
     test/integration/rpc_consumer.c
@@ -497,137 +450,69 @@ FOREACH(hdr_dir IN LISTS REFMT_HEADER_DIRS)
 ENDFOREACH()
 file(GLOB_RECURSE REFMT_HEADER_FILES ${HEADER_SEARCH_PATTERNS})
 
+SET(HEALTH_CHECK_SOURCE_FILES     src/app_server/health_check.c)
+
 SET(REFMT_SRC_FILES
     ${APP_SERVER_SOURCE_FILES}    src/app_server/main.c
     ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c
-    ${UNIT_TEST_SOURCE_FILES} ${ITEST_APPSRV_SOURCE_FILES}
-    ${ITEST_RPCCONSUMER_SOURCE_FILES}
+    ${UNIT_TEST_SOURCE_FILES} ${ITEST_START_SOURCE_FILES}
+    ${ITEST_RPCCONSUMER_SOURCE_FILES} ${HEALTH_CHECK_SOURCE_FILES}
 )
 
-SET(APP_SERVER_EXE_NAME   app_server.out)
-SET(RPC_CONSUMER_EXE_NAME rpc_consumer.out)
+SET(APP_SERVER_EXE_NAME    app_server.out)
+SET(RPC_CONSUMER_EXE_NAME  rpc_consumer.out)
+SET(HEALTH_CHECK_EXE_NAME  appserver_health_check.out)
+
 ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server/main.c)
 ADD_EXECUTABLE(${RPC_CONSUMER_EXE_NAME} ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
+ADD_EXECUTABLE(${HEALTH_CHECK_EXE_NAME} ${HEALTH_CHECK_SOURCE_FILES})
 TARGET_INCLUDE_DIRECTORIES(${APP_SERVER_EXE_NAME}    PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(${RPC_CONSUMER_EXE_NAME}  PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_INCLUDE_DIRECTORIES(${HEALTH_CHECK_EXE_NAME}  PUBLIC ${LIBCURL_INCLUDE_DIRS})
 TARGET_LINK_LIBRARIES(${APP_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${EXTRA_LIBS})
 TARGET_LINK_LIBRARIES(${RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(${HEALTH_CHECK_EXE_NAME}  ${LIBCURL_LIBRARIES})
 
-SET(UNIT_TEST_EXE_NAME unit_test.out)
-ADD_EXECUTABLE(${UNIT_TEST_EXE_NAME} ${UNIT_TEST_SOURCE_FILES})
-TARGET_INCLUDE_DIRECTORIES(${UNIT_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(${UNIT_TEST_EXE_NAME} ${APP_UNIT_TEST_LIBRARIES} ${CGREEN_LIBRARIES})
-
-SET(ITEST_API_SERVER_EXE_NAME    itest_app_server.out)
-SET(ITEST_RPC_CONSUMER_EXE_NAME  itest_rpc_consumer.out)
-ADD_EXECUTABLE(${ITEST_API_SERVER_EXE_NAME}   ${ITEST_APPSRV_SOURCE_FILES})
-ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
-TARGET_INCLUDE_DIRECTORIES(${ITEST_API_SERVER_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
-TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
-TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    # Add the linker option -rdynamic for the target
-    TARGET_LINK_OPTIONS(${ITEST_API_SERVER_EXE_NAME} PRIVATE -rdynamic)
-    MESSAGE(STATUS "symbols added to app-server executable")
-endif()
-
-# TODO, better way to scale app servers, without manually adding more custom targets
-SET(DEV_CDN_CFG_PATH   ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-cdn.json)
-SET(APP_REP1_CFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-replica-1.json)
-SET(DEV_APPCFG_PATH    ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
-SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
-
-# bash script for creating another shell process to run in specific python virtual environment
-SET(PYVENV_SHELL_FILEPATH  $ENV{PWD}/tmp_shell)
-#FILE(WRITE  ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "source ${PYVENV_BIN_PATH}/activate;")
-#FILE(APPEND ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "python --version;")
-    
-ADD_CUSTOM_TARGET(dev_app_server
-    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${DEV_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND bash ${PYVENV_SHELL_FILEPATH}
-    COMMAND 
-        ##gdb -args
-        ##valgrind --leak-check=full   --show-leak-kinds=definite 
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${DEV_APPCFG_PATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${APP_SERVER_EXE_NAME}
-    VERBATIM # properly esacpe every token of a command string
+ADD_CUSTOM_TARGET(build-help
+    COMMAND cat ./doc/build-helper-doc
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
-
-ADD_CUSTOM_TARGET(app_server_replica_1
-    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${APP_REP1_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND bash ${PYVENV_SHELL_FILEPATH}
-    COMMAND
-        ##gdb -args
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${APP_REP1_CFG_PATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${APP_SERVER_EXE_NAME}  VERBATIM)
-
-IF(${CDN_ENABLE})
-    ADD_CUSTOM_TARGET(dev_cdn_setup
-        COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-        COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppCdnCertRenewal  ${DEV_CDN_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-        COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader NginxConfigGenerator  ${DEV_CDN_CFG_PATH}  ${CDN_USERNAME}  ${CDN_USERGRP}  2  ${DEV_APPCFG_PATH}  ${APP_REP1_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-        COMMAND ${CMAKE_COMMAND} -E echo "sudo -u ${CDN_USERNAME}  ${PYVENV_EXEC_PATH} -m  media.task_loader NginxPathSetup   ${DEV_CDN_CFG_PATH}  ${NGINX_INSTALL_PATH}" >>  ${PYVENV_SHELL_FILEPATH}
-        COMMAND bash ${PYVENV_SHELL_FILEPATH}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-        DEPENDS ${NGINX_EXECUTABLE_PATH} ${NGINX_CONFIG_BASEPATH}
-        VERBATIM)
-ENDIF()
-
-ADD_CUSTOM_TARGET(dev_rpc_worker
-    ##gdb -args
-    ##valgrind --leak-check=full
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME}  ${DEV_APPCFG_PATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${RPC_CONSUMER_EXE_NAME})
-
-
-ADD_CUSTOM_TARGET(unit_test
-    # uncomment the following line, make cgreen test suite run in single (main) process
-    # without forking, then you can set breakpoints using debugger (currently only supports GDB)
-    ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-    ##gdb -args # uncomment this line for debugging
-    valgrind --leak-check=full # uncomment this line for extra memory check
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${UNIT_TEST_EXE_NAME})
-
-
-ADD_CUSTOM_TARGET(itest_app_server
-    ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
-    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.test.integration.auth  --host=localhost --port=8008  --path2privkey=${CMAKE_CURRENT_SOURCE_DIR}/../tmp/cache/test/jwks/media-rsa-privkey.json  --sslcertpath=${CMAKE_CURRENT_SOURCE_DIR}/data/certs/test &" >>  ${PYVENV_SHELL_FILEPATH}
-
-    COMMAND bash ${PYVENV_SHELL_FILEPATH}
-    COMMAND sleep 5
-    COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
-        ##gdb -args # uncomment this line for debugging
-        valgrind --leak-check=full
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND bash ${PYVENV_SHELL_FILEPATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME}
-    VERBATIM)
-
-ADD_CUSTOM_TARGET(itest_rpc_worker
-    COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
-        ##gdb -args
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${ITEST_RPC_CONSUMER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(reformat
     COMMAND clang-format-18 -i --style=file ${REFMT_SRC_FILES} ${REFMT_HEADER_FILES}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+if(NOT SKIP_PKG_CHECK)
+    SET(UNIT_TEST_EXE_NAME unit_test.out)
+    ADD_EXECUTABLE(${UNIT_TEST_EXE_NAME} ${UNIT_TEST_SOURCE_FILES})
+    TARGET_INCLUDE_DIRECTORIES(${UNIT_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(${UNIT_TEST_EXE_NAME} ${APP_UNIT_TEST_LIBRARIES} ${CGREEN_LIBRARIES})
+
+    SET(ITEST_START_EXE_NAME    itest_start.out)
+    SET(ITEST_RPC_CONSUMER_EXE_NAME  itest_rpc_consumer.out)
+    ADD_EXECUTABLE(${ITEST_START_EXE_NAME}   ${ITEST_START_SOURCE_FILES})
+    ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES})
+    TARGET_INCLUDE_DIRECTORIES(${ITEST_START_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(${ITEST_START_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        # Add the linker option -rdynamic for the target
+        TARGET_LINK_OPTIONS(${ITEST_START_EXE_NAME} PRIVATE -rdynamic)
+        MESSAGE(STATUS "symbols added to app-server executable")
+    endif()
+endif() # end of SKIP_PKG_CHECK
+
+
+# TODO, better way to scale app servers, without manually adding more custom targets
+# SET(APP_REP1_CFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-replica-1.json)
+# 
+# ADD_CUSTOM_TARGET(app_server_replica_1
+#     COMMAND
+#         ##gdb -args
+#         ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${APP_REP1_CFG_PATH}
+#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+#     DEPENDS ${APP_SERVER_EXE_NAME}  VERBATIM)
+# 
+

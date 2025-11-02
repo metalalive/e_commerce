@@ -2,11 +2,18 @@
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
 
+#include "app_cfg.h"
+#include "datatypes.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/image/common.h"
 
 #define EXPECT_DONE_FLAG__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define UTEST_NUM_USRARGS_ASA           (EXPECT_DONE_FLAG__IN_ASA_USRARG + 1)
+
+#define RUNNER_CREATE_FOLDER(fullpath)          mkdir(fullpath, S_IRWXU)
+#define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+#define RUNNER_ACCESS_F_OK(fullpath)            access(fullpath, F_OK)
 
 #define STRINGIFY(x) #x
 
@@ -27,12 +34,14 @@
 #define UTEST_ASAREMOTE_DISCARDED_FILEPATH UTEST_ASAREMOTE_DISCARDING_PATH "/" UTEST_VERSION
 
 static void utest_atfp_rm_remote_version(atfp_t *processor, const char *status) {
+    asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
+    const char        *actual_syspath = asa_remote->storage->base_path;
     if (strcmp(status, ATFP__TEMP_TRANSCODING_FOLDER_NAME) == 0) {
-        unlink(UTEST_ASAREMOTE_UNCLOSED_FILEPATH);
-    } else if (strcmp(status, ATFP__DISCARDING_FOLDER_NAME)) {
-        unlink(UTEST_ASAREMOTE_DISCARDED_FILEPATH);
+        PATH_CONCAT_THEN_RUN(actual_syspath, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, unlink);
+    } else if (!strcmp(status, ATFP__DISCARDING_FOLDER_NAME)) {
+        PATH_CONCAT_THEN_RUN(actual_syspath, UTEST_ASAREMOTE_DISCARDED_FILEPATH, unlink);
     }
-    int err = (int)mock(processor, status);
+    int err = (int)mock(processor, actual_syspath, status);
     if (err)
         json_object_set_new(processor->data.error, "utest", json_string("assume error happened"));
     processor->data.callback(processor);
@@ -46,10 +55,13 @@ static void utest_atfp_img__common_deinit_done_cb(atfp_img_t *igproc) {
 }
 
 #define UTEST_STORAGE__DEINIT_SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uint8_t    done_flag = 0; \
     uv_loop_t *loop = uv_default_loop(); \
     void      *mock_asa_cb_args[UTEST_NUM_USRARGS_ASA] = {0}; \
     asa_cfg_t  mock_common_storage_cfg = { \
+         .base_path = env.sys_base_path, \
          .ops = {.fn_close = app_storage_localfs_close, .fn_unlink = app_storage_localfs_unlink} \
     }; \
     asa_op_localfs_cfg_t mock_asa_remote = { \
@@ -90,90 +102,133 @@ static void utest_atfp_img__common_deinit_done_cb(atfp_img_t *igproc) {
     }; \
     mock_asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
     mock_asa_cb_args[EXPECT_DONE_FLAG__IN_ASA_USRARG] = &done_flag; \
-    mkdir(UTEST_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_APP_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_LOCAL_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_REMOTE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_TRANSCODING_PATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_DISCARDING_PATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_APP_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_LOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDING_PATH, RUNNER_CREATE_FOLDER);
 
 #define UTEST_STORAGE__DEINIT_TEARDOWN \
-    rmdir(UTEST_ASAREMOTE_DISCARDING_PATH); \
-    rmdir(UTEST_ASAREMOTE_TRANSCODING_PATH); \
-    rmdir(UTEST_ASA_REMOTE_BASEPATH); \
-    rmdir(UTEST_ASA_LOCAL_BASEPATH); \
-    rmdir(UTEST_APP_BASEPATH); \
-    rmdir(UTEST_BASEPATH);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDING_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_LOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_APP_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASEPATH, rmdir);
 
 Ensure(atfp_img_storage_test__common_deinit_ok) {
     UTEST_STORAGE__DEINIT_SETUP
-    mock_fp.internal.dst.asa_local.file.file =
-        open(UTEST_ASALOCAL_UNCLOSED_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    mock_asa_remote.file.file =
-        open(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    mock_fp.internal.dst.asa_local.file.file = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
+    mock_asa_remote.file.file = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
     atfp_img_dst_common_deinit(&mock_fp, utest_atfp_img__common_deinit_done_cb);
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(0));
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(0));
+    int access_result;
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(0));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(0));
     expect(
         utest_atfp_rm_remote_version, will_return(0),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__DISCARDING_FOLDER_NAME))
     );
     expect(
         utest_atfp_rm_remote_version, will_return(0),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__TEMP_TRANSCODING_FOLDER_NAME))
     );
     expect(utest_atfp_img__common_deinit_done_cb, when(igproc, is_equal_to(&mock_fp)));
     while (!done_flag)
         uv_run(loop, UV_RUN_ONCE);
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     UTEST_STORAGE__DEINIT_TEARDOWN
 } // end of atfp_img_storage_test__common_deinit_ok
 
 Ensure(atfp_img_storage_test__common_deinit_localf_err
 ) { // assume files on both sides were already deleted without closing it
     UTEST_STORAGE__DEINIT_SETUP
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
+    int access_result;
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     atfp_img_dst_common_deinit(&mock_fp, utest_atfp_img__common_deinit_done_cb);
     expect(
         utest_atfp_rm_remote_version, will_return(0),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__DISCARDING_FOLDER_NAME))
     );
     expect(
         utest_atfp_rm_remote_version, will_return(0),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__TEMP_TRANSCODING_FOLDER_NAME))
     );
     expect(utest_atfp_img__common_deinit_done_cb, when(igproc, is_equal_to(&mock_fp)));
     while (!done_flag)
         uv_run(loop, UV_RUN_ONCE);
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     UTEST_STORAGE__DEINIT_TEARDOWN
 } // end of atfp_img_storage_test__common_deinit_localf_err
 
 Ensure(atfp_img_storage_test__common_deinit_remotef_err) {
     UTEST_STORAGE__DEINIT_SETUP
-    mock_fp.internal.dst.asa_local.file.file =
-        open(UTEST_ASALOCAL_UNCLOSED_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    mock_asa_remote.file.file =
-        open(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    mock_fp.internal.dst.asa_local.file.file = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
+    mock_asa_remote.file.file = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
     atfp_img_dst_common_deinit(&mock_fp, utest_atfp_img__common_deinit_done_cb);
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(0));
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(0));
+    int access_result;
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(0));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(0));
     expect(
         utest_atfp_rm_remote_version, will_return(1),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__DISCARDING_FOLDER_NAME))
     );
     expect(
         utest_atfp_rm_remote_version, will_return(1),
+        when(actual_syspath, is_equal_to_string(env.sys_base_path)),
         when(status, is_equal_to_string(ATFP__TEMP_TRANSCODING_FOLDER_NAME))
     );
     expect(utest_atfp_img__common_deinit_done_cb, when(igproc, is_equal_to(&mock_fp)));
     while (!done_flag)
         uv_run(loop, UV_RUN_ONCE);
-    assert_that(access(UTEST_ASALOCAL_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
-    assert_that(access(UTEST_ASAREMOTE_UNCLOSED_FILEPATH, F_OK), is_equal_to(-1));
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASALOCAL_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UNCLOSED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     UTEST_STORAGE__DEINIT_TEARDOWN
 } // end of atfp_img_storage_test__common_deinit_remotef_err
 
@@ -200,16 +255,19 @@ static void utest_atfp_img__remove_version_done_cb(atfp_t *processor) {
 }
 
 #define UTEST_STORAGE__RM_VERSION_SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uv_loop_t *loop = uv_default_loop(); \
     json_t    *mock_err_info = json_object(); \
     void      *mock_asa_cb_args[UTEST_NUM_USRARGS_ASA] = {0}; \
-    asa_cfg_t  mock_common_storage_cfg = { \
-         .ops = {.fn_unlink = app_storage_localfs_unlink}, .base_path = UTEST_ASA_REMOTE_BASEPATH \
+    asa_cfg_t  mock_storage_remote_cfg = { \
+         .base_path = PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, strdup), \
+         .ops = {.fn_unlink = app_storage_localfs_unlink}, \
     }; \
     asa_op_localfs_cfg_t mock_asa_remote = { \
         .loop = loop, \
         .super = \
-            {.storage = &mock_common_storage_cfg, \
+            {.storage = &mock_storage_remote_cfg, \
              .cb_args = {.entries = &mock_asa_cb_args[0], .size = UTEST_NUM_USRARGS_ASA}} \
     }; \
     atfp_t mock_fp = \
@@ -222,32 +280,37 @@ static void utest_atfp_img__remove_version_done_cb(atfp_t *processor) {
              .callback = utest_atfp_img__remove_version_done_cb, \
          }}; \
     mock_asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
-    mkdir(UTEST_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_APP_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASA_REMOTE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_UESR_PATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_RESOURCE_PATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_TRANSCODING_PATH, S_IRWXU); \
-    mkdir(UTEST_ASAREMOTE_DISCARDING_PATH, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_APP_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UESR_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_RESOURCE_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDING_PATH, RUNNER_CREATE_FOLDER);
 
 #define UTEST_STORAGE__RM_VERSION_TEARDOWN \
     json_decref(mock_err_info); \
-    unlink(UTEST_ASAREMOTE_TRANSCODING_FILEPATH); \
-    unlink(UTEST_ASAREMOTE_DISCARDED_FILEPATH); \
-    rmdir(UTEST_ASAREMOTE_DISCARDING_PATH); \
-    rmdir(UTEST_ASAREMOTE_TRANSCODING_PATH); \
-    rmdir(UTEST_ASAREMOTE_RESOURCE_PATH); \
-    rmdir(UTEST_ASAREMOTE_UESR_PATH); \
-    rmdir(UTEST_ASA_REMOTE_BASEPATH); \
-    rmdir(UTEST_APP_BASEPATH); \
-    rmdir(UTEST_BASEPATH);
+    free(mock_storage_remote_cfg.base_path); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_FILEPATH, unlink); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDED_FILEPATH, unlink); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDING_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_RESOURCE_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_UESR_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASA_REMOTE_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_APP_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_BASEPATH, rmdir);
 
 Ensure(atfp_img_storage_test__remove_version_ok) {
     UTEST_STORAGE__RM_VERSION_SETUP
     int fd = 0;
-    fd = open(UTEST_ASAREMOTE_TRANSCODING_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    fd = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
     close(fd);
-    fd = open(UTEST_ASAREMOTE_DISCARDED_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    fd = PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_ASAREMOTE_DISCARDED_FILEPATH, RUNNER_OPEN_WRONLY_CREATE_USR
+    );
     close(fd);
     atfp_storage_image_remove_version(&mock_fp, ATFP__TEMP_TRANSCODING_FOLDER_NAME);
     expect(
@@ -255,21 +318,32 @@ Ensure(atfp_img_storage_test__remove_version_ok) {
         when(processor, is_equal_to(&mock_fp))
     );
     uv_run(loop, UV_RUN_ONCE);
-    assert_that(access(UTEST_ASAREMOTE_TRANSCODING_FILEPATH, F_OK), is_equal_to(-1));
+    int access_result;
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     atfp_storage_image_remove_version(&mock_fp, ATFP__DISCARDING_FOLDER_NAME);
     expect(
         utest_atfp_img__remove_version_done_cb, when(num_errs, is_equal_to(0)),
         when(processor, is_equal_to(&mock_fp))
     );
     uv_run(loop, UV_RUN_ONCE);
-    assert_that(access(UTEST_ASAREMOTE_DISCARDED_FILEPATH, F_OK), is_equal_to(-1));
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     UTEST_STORAGE__RM_VERSION_TEARDOWN
 } // end of atfp_img_storage_test__remove_version_ok
 
 Ensure(atfp_img_storage_test__remove_version_err) { // assume the transcoding file was already deleted
     UTEST_STORAGE__RM_VERSION_SETUP
-    assert_that(access(UTEST_ASAREMOTE_TRANSCODING_FILEPATH, F_OK), is_equal_to(-1));
-    assert_that(access(UTEST_ASAREMOTE_DISCARDED_FILEPATH, F_OK), is_equal_to(-1));
+    int access_result;
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_TRANSCODING_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
+
+    access_result =
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_ASAREMOTE_DISCARDED_FILEPATH, RUNNER_ACCESS_F_OK);
+    assert_that(access_result, is_equal_to(-1));
     atfp_storage_image_remove_version(&mock_fp, ATFP__TEMP_TRANSCODING_FOLDER_NAME);
     expect(
         utest_atfp_img__remove_version_done_cb, when(num_errs, is_equal_to(0)),

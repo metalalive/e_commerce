@@ -2,6 +2,7 @@
 #include <string.h>
 #include <h2o/memory.h>
 #include "storage/localfs.h"
+#include "utils.h"
 
 static void _app_storage_localfs_open_cb(uv_fs_t *req) {
     const char        *filepath = req->path;
@@ -25,14 +26,18 @@ ASA_RES_CODE app_storage_localfs_open(asa_op_base_cfg_t *cfg) {
         return ASTORAGE_RESULT_ARG_ERROR;
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     _cfg->file.file = -1; // TODO, may risk unclosed file-descriptor if application developers forgot
-    int err = uv_fs_open(
-        _cfg->loop, &_cfg->file, cfg->op.open.dst_path, cfg->op.open.flags, cfg->op.open.mode,
-        _app_storage_localfs_open_cb
-    );
+    const char *syspath = cfg->storage ? cfg->storage->base_path : ".";
+#define RUNNER(fullpath) \
+    uv_fs_open( \
+        _cfg->loop, &_cfg->file, fullpath, cfg->op.open.flags, cfg->op.open.mode, \
+        _app_storage_localfs_open_cb \
+    )
+    int err = PATH_CONCAT_THEN_RUN(syspath, cfg->op.open.dst_path, RUNNER);
+#undef RUNNER
     if (err != 0)
         result = ASTORAGE_RESULT_OS_ERROR;
     return result;
-} // end of app_storage_localfs_open
+}
 
 static void _app_storage_localfs_close_cb(uv_fs_t *req) {
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *)H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
@@ -57,10 +62,10 @@ ASA_RES_CODE app_storage_localfs_close(asa_op_base_cfg_t *cfg) {
 } // end of app_storage_localfs_close
 
 static ASA_RES_CODE _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg) {
-    char   *tok = NULL;
-    char   *origin = NULL;
+    char   *tok = NULL, *origin = NULL;
     uint8_t init_round = cfg->op.mkdir.path.curr_parent[0] == 0x0;
     if (init_round) {
+        // TODO, check whether should add `cfg->storage->base_path` to form full path
         cfg->op.mkdir.path.tok_saveptr = NULL;
         origin = cfg->op.mkdir.path.origin;
         cfg->op.mkdir.path._fullpath_sz = strlen(origin); // exclude NULL-terminating char
@@ -127,16 +132,17 @@ static void _app_storage_localfs_mkdir_cb(uv_fs_t *req) {
 ASA_RES_CODE app_storage_localfs_mkdir(asa_op_base_cfg_t *cfg, uint8_t allow_exists) {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *)cfg;
     if (!_cfg || !_cfg->loop || !cfg->op.mkdir.cb || !cfg->op.mkdir.path.origin ||
-        !cfg->op.mkdir.path.curr_parent) {
+        !cfg->op.mkdir.path.curr_parent || !cfg->storage) {
         return ASTORAGE_RESULT_ARG_ERROR;
     }
     cfg->op.mkdir._allow_exists = allow_exists;
     ASA_RES_CODE result = _app_storage_mkdir_nxt_parent(cfg);
     if (result == ASTORAGE_RESULT_ACCEPT) {
-        int err = uv_fs_mkdir(
-            _cfg->loop, &_cfg->file, cfg->op.mkdir.path.curr_parent, cfg->op.mkdir.mode,
-            _app_storage_localfs_mkdir_cb
-        );
+        const char *sys_basepath = cfg->storage->base_path;
+#define RUNNER(finalpath) \
+    uv_fs_mkdir(_cfg->loop, &_cfg->file, finalpath, cfg->op.mkdir.mode, _app_storage_localfs_mkdir_cb)
+        int err = PATH_CONCAT_THEN_RUN(sys_basepath, cfg->op.mkdir.path.curr_parent, RUNNER);
+#undef RUNNER
         if (err != 0) {
             result = ASTORAGE_RESULT_OS_ERROR;
         }
@@ -154,17 +160,17 @@ static void _app_storage_localfs_rmdir_cb(uv_fs_t *req) {
     } // libuv internally allocates extra space for file path
 } // end of _app_storage_localfs_rmdir_cb
 
-ASA_RES_CODE app_storage_localfs_rmdir(asa_op_base_cfg_t *cfg) { // TODO, recursively remove sub folders
+ASA_RES_CODE app_storage_localfs_rmdir(asa_op_base_cfg_t *cfg) {
+    // TODO, recursively remove sub folders
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *)cfg;
-    if (!_cfg || !_cfg->loop || !cfg->op.rmdir.cb || !cfg->op.rmdir.path)
+    if (!_cfg || !_cfg->loop || !cfg->storage || !cfg->op.rmdir.cb || !cfg->op.rmdir.path)
         return ASTORAGE_RESULT_ARG_ERROR;
-    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
-    int err = uv_fs_rmdir(_cfg->loop, &_cfg->file, cfg->op.rmdir.path, _app_storage_localfs_rmdir_cb);
-    if (err != 0) {
-        result = ASTORAGE_RESULT_OS_ERROR;
-    }
-    return result;
-} // end of app_storage_localfs_rmdir
+    const char *basepath = cfg->storage->base_path;
+#define RUNNER(fullpath) uv_fs_rmdir(_cfg->loop, &_cfg->file, fullpath, _app_storage_localfs_rmdir_cb)
+    int err = PATH_CONCAT_THEN_RUN(basepath, cfg->op.rmdir.path, RUNNER);
+#undef RUNNER
+    return (err != 0) ? ASTORAGE_RESULT_OS_ERROR : ASTORAGE_RESULT_ACCEPT;
+}
 
 static void _app_storage_localfs__scandir_cb(uv_fs_t *req) {
     const char        *path = req->path; // `new_path` and `path` fields were allocated together
@@ -181,16 +187,15 @@ static void _app_storage_localfs__scandir_cb(uv_fs_t *req) {
 
 ASA_RES_CODE app_storage_localfs_scandir(asa_op_base_cfg_t *cfg) {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *)cfg;
-    if (!_cfg || !_cfg->loop || !cfg->op.scandir.cb || !cfg->op.scandir.path)
+    if (!_cfg || !_cfg->loop || !cfg->storage || !cfg->op.scandir.cb || !cfg->op.scandir.path)
         return ASTORAGE_RESULT_ARG_ERROR;
     if (cfg->op.scandir.fileinfo.data || cfg->op.scandir.fileinfo.size > 0)
         return ASTORAGE_RESULT_ARG_ERROR; // previous scan data should be cleaned
-    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
-    int          err =
-        uv_fs_scandir(_cfg->loop, &_cfg->file, cfg->op.scandir.path, 0, _app_storage_localfs__scandir_cb);
-    if (err != 0)
-        result = ASTORAGE_RESULT_OS_ERROR;
-    return result;
+    const char *basepath = cfg->storage->base_path;
+#define RUNNER(fullpath) uv_fs_scandir(_cfg->loop, &_cfg->file, fullpath, 0, _app_storage_localfs__scandir_cb)
+    int err = PATH_CONCAT_THEN_RUN(basepath, cfg->op.scandir.path, RUNNER);
+#undef RUNNER
+    return (err != 0) ? ASTORAGE_RESULT_OS_ERROR : ASTORAGE_RESULT_ACCEPT;
 }
 
 ASA_RES_CODE app_storage_localfs_scandir_next(asa_op_base_cfg_t *cfg, asa_dirent_t *e) {
@@ -238,16 +243,23 @@ static void _app_storage_localfs__rename_cb(uv_fs_t *req) {
 
 ASA_RES_CODE app_storage_localfs_rename(asa_op_base_cfg_t *cfg) {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *)cfg;
-    if (!_cfg || !_cfg->loop || !cfg->op.rename.cb || !cfg->op.rename.path._new || !cfg->op.rename.path._old)
+    if (!_cfg || !_cfg->loop || !cfg->storage || !cfg->op.rename.cb || !cfg->op.rename.path._new ||
+        !cfg->op.rename.path._old)
         return ASTORAGE_RESULT_ARG_ERROR;
-    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
-    int          err = uv_fs_rename(
-        _cfg->loop, &_cfg->file, cfg->op.rename.path._old, cfg->op.rename.path._new,
-        _app_storage_localfs__rename_cb
-    );
-    if (err != 0)
-        result = ASTORAGE_RESULT_OS_ERROR;
-    return result;
+    const char *sys_basepath = cfg->storage->base_path;
+
+    size_t fullpath_old_sz = strlen(sys_basepath) + strlen(cfg->op.rename.path._old) + 2;
+    size_t fullpath_new_sz = strlen(sys_basepath) + strlen(cfg->op.rename.path._new) + 2;
+    char   fullpath_old[fullpath_old_sz], fullpath_new[fullpath_new_sz];
+#define CPY_OLD_PATH(src) strncpy(fullpath_old, src, fullpath_old_sz)
+#define CPY_NEW_PATH(src) strncpy(fullpath_new, src, fullpath_new_sz)
+    PATH_CONCAT_THEN_RUN(sys_basepath, cfg->op.rename.path._old, CPY_OLD_PATH);
+    PATH_CONCAT_THEN_RUN(sys_basepath, cfg->op.rename.path._new, CPY_NEW_PATH);
+#undef CPY_OLD_PATH
+#undef CPY_NEW_PATH
+    int err =
+        uv_fs_rename(_cfg->loop, &_cfg->file, fullpath_old, fullpath_new, _app_storage_localfs__rename_cb);
+    return (err != 0) ? ASTORAGE_RESULT_OS_ERROR : ASTORAGE_RESULT_ACCEPT;
 }
 
 static void _app_storage_localfs_unlink_cb(uv_fs_t *req) {
@@ -262,14 +274,14 @@ static void _app_storage_localfs_unlink_cb(uv_fs_t *req) {
 
 ASA_RES_CODE app_storage_localfs_unlink(asa_op_base_cfg_t *cfg) {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *)cfg;
-    if (!_cfg || !_cfg->loop || !cfg->op.unlink.path)
+    if (!_cfg || !_cfg->loop || !cfg->storage || !cfg->op.unlink.path)
         return ASTORAGE_RESULT_ARG_ERROR;
-    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
-    int err = uv_fs_unlink(_cfg->loop, &_cfg->file, cfg->op.unlink.path, _app_storage_localfs_unlink_cb);
-    if (err != 0)
-        result = ASTORAGE_RESULT_OS_ERROR;
-    return result;
-} // end of app_storage_localfs_unlink
+    const char *sys_basepath = cfg->storage->base_path;
+#define RUNNER(fullpath) uv_fs_unlink(_cfg->loop, &_cfg->file, fullpath, _app_storage_localfs_unlink_cb)
+    int err = PATH_CONCAT_THEN_RUN(sys_basepath, cfg->op.unlink.path, RUNNER);
+#undef RUNNER
+    return (err != 0) ? ASTORAGE_RESULT_OS_ERROR : ASTORAGE_RESULT_ACCEPT;
+}
 
 #define NUM_BUFS 1
 static void _app_storage_localfs_read_cb(uv_fs_t *req) {

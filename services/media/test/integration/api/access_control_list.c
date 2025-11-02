@@ -1,4 +1,5 @@
 #include <jansson.h>
+#include "utils.h"
 #include "../test/integration/test.h"
 
 #define ITEST_REQ_ITEM_GEN(_usr_id, _tr, _ed) \
@@ -18,8 +19,8 @@
 #define REQ_ITEM_11 ITEST_REQ_ITEM_GEN(71, false, true)
 #define REQ_ITEM_12 ITEST_REQ_ITEM_GEN(34, true, false)
 
-#define ULVL_ACL_URL_PATT "https://localhost:8010/file/acl/usr?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
-#define FLVL_ACL_URL_PATT "https://localhost:8010/file/acl?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
+#define ULVL_ACL_URL_PATT "/file/acl/usr?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
+#define FLVL_ACL_URL_PATT "/file/acl?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
 
 typedef struct {
     json_t     *upld_req;
@@ -28,6 +29,26 @@ typedef struct {
 } itest_usrarg_t;
 
 extern json_t *_app_itest_active_upload_requests;
+
+static void itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp) {
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+#define RUNNER(fullpath) open(fullpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR)
+    int idx = 0, target_fd = PATH_CONCAT_THEN_RUN(sys_basepath, ITEST_USERMGT_MOCK_DATABASE, RUNNER);
+#undef RUNNER
+    json_t *info = json_object(), *usr_id_list = json_array();
+    for (idx = 0; idx < in_sz; idx++)
+        json_array_append_new(usr_id_list, json_integer(in[idx]));
+    json_object_set_new(info, "usr_ids", usr_id_list);
+    json_object_set_new(info, "no_resp", json_boolean(_no_resp));
+    ftruncate(target_fd, (off_t)0);
+    lseek(target_fd, 0, SEEK_SET);
+    json_dumpfd(
+        (const json_t *)info, target_fd, JSON_COMPACT
+    ); // will call low-level write() without buffering this
+    if (target_fd >= 0)
+        close(target_fd);
+    json_decref(info);
+}
 
 static void _available_resource_lookup(json_t **upld_req, const char *lvl, const char *fsubtype_in) {
     json_t     *req = NULL, *existing_acl = NULL;
@@ -129,8 +150,8 @@ static void _itest_edit_usrlvl_acl__common(
     ITEST_ACL_COMMON_CODE_SETUP(ULVL)
     test_setup_pub_t setup_data = {
         .method = "PUT",
-        .verbose = 0,
-        .url = &url[0],
+        .verbose = 0, // no need to inspect curl verbose here
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = req_body_serialtxt, .src_filepath = NULL},
     };
@@ -144,7 +165,7 @@ static void _itest_edit_usrlvl_acl__common(
 static void _itest_read_usrlvl_acl__common(json_t *upld_req, uint32_t auth_usr_id, int expect_resp_code) {
     ITEST_ACL_COMMON_CODE_SETUP(ULVL)
     test_setup_pub_t setup_data = {
-        .method = "GET", .verbose = 0, .url = &url[0], .headers = header_kv_serials
+        .method = "GET", .verbose = 0, .url_rel_ref = &url[0], .headers = header_kv_serials
     };
     itest_usrarg_t usr_args = {.upld_req = upld_req, .expect_resp_code = expect_resp_code};
     run_client_request(&setup_data, test_verify__usrlvl_acl_cb, &usr_args);
@@ -280,8 +301,8 @@ static void _itest_edit_filelvl_acl__common(
     ITEST_ACL_COMMON_CODE_SETUP(FLVL)
     test_setup_pub_t setup_data = {
         .method = "PATCH",
-        .verbose = 0,
-        .url = &url[0],
+        .verbose = 0, // no need to inspect curl verbose here
+        .url_rel_ref = &url[0],
         .headers = header_kv_serials,
         .req_body = {.serial_txt = req_body_serialtxt, .src_filepath = NULL},
     };

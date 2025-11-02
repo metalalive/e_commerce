@@ -5,6 +5,7 @@
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "transcoder/datatypes.h"
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
@@ -12,6 +13,9 @@
 #define LOCAL_TMPBUF_BASEPATH "tmp/buffer/media/test"
 #define UNITTEST_FOLDER_NAME  "utest"
 #define LOCAL_TMPBUF_NAME     "local_tmpbuf"
+
+#define RUNNER_OPEN_WRONLY_CREATE_USR(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+#define RUNNER_CREATE_FOLDER(fullpath)          mkdir(fullpath, S_IRWXU)
 
 #define UNITTEST_FULLPATH LOCAL_TMPBUF_BASEPATH "/" UNITTEST_FOLDER_NAME
 #define LOCAL_TMPBUF_PATH UNITTEST_FULLPATH "/" LOCAL_TMPBUF_NAME
@@ -68,6 +72,8 @@ static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg
 // assume mdat starts at the first chunk, and currently mp4 processor object positions the same
 // chunk assume there is only one chunk in the source
 #define UNITTEST_AVCTX_INIT__SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     uint8_t           mock_avio_ctx_buffer[20] = {0}; \
     AVCodecParameters mock_codec_param = {0}; \
     AVIndexEntry      mock_idx_entry_video[NUM_PKTS_VIDEO_STREAM] = PACKET_INDEX_ENTRY_VIDEO; \
@@ -86,11 +92,13 @@ static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg
     AVCodecContext mock_av_codec_ctx[NUM_STREAMS_FMTCTX] = { \
         {.codec_type = AVMEDIA_TYPE_AUDIO}, {.codec_type = AVMEDIA_TYPE_VIDEO} \
     }; \
-    AVStream            *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
-    AVCodecContext      *mock_dec_ctxs[NUM_STREAMS_FMTCTX] = {0}; \
-    AVIOContext          mock_avio_ctx = {0}; \
-    AVFormatContext      mock_avfmt_ctx = {.nb_streams = NUM_STREAMS_FMTCTX, .streams = mock_av_streams_ptr}; \
-    asa_cfg_t            storage_src = {.ops = {.fn_read = mock_asa_src_initial_read_fn}}; \
+    AVStream       *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
+    AVCodecContext *mock_dec_ctxs[NUM_STREAMS_FMTCTX] = {0}; \
+    AVIOContext     mock_avio_ctx = {0}; \
+    AVFormatContext mock_avfmt_ctx = {.nb_streams = NUM_STREAMS_FMTCTX, .streams = mock_av_streams_ptr}; \
+    asa_cfg_t       storage_src = { \
+              .base_path = env.sys_base_path, .ops = {.fn_read = mock_asa_src_initial_read_fn} \
+    }; \
     asa_op_base_cfg_t    asa_cfg_src = {.storage = &storage_src}; \
     asa_op_localfs_cfg_t asa_local = {0}; \
     atfp_asa_map_t      *mock_map = atfp_asa_map_init(2); \
@@ -111,16 +119,17 @@ static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg
         asa_cfg_src.cb_args.size = NUM_CB_ARGS_ASAOBJ; \
         atfp_asa_map_set_source(mock_map, &asa_cfg_src); \
         atfp_asa_map_set_localtmp(mock_map, &asa_local); \
-        mkdir(LOCAL_TMPBUF_PATH, S_IRWXU); \
-        asa_local.file.file = open(LOCAL_TMPBUF_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, RUNNER_CREATE_FOLDER); \
+        asa_local.file.file = \
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, RUNNER_OPEN_WRONLY_CREATE_USR); \
     }
 
 #define UNITTEST_AVCTX_INIT__TEARDOWN \
     { \
         if (asa_local.file.file > 0) \
             close(asa_local.file.file); \
-        unlink(LOCAL_TMPBUF_PATH); \
-        rmdir(UNITTEST_FULLPATH); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, unlink); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UNITTEST_FULLPATH, rmdir); \
         json_decref(mp4proc.super.data.spec); \
         json_decref(mp4proc.super.data.error); \
         if (mock_av_ctx->stats) \
@@ -342,16 +351,20 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
 #undef NUM_VIDEO_CODEC_CTXS
 
 #define UNITTEST_AVCTX__PRELOAD_PKT_SETUP \
+    app_envvars_t env = {0}; \
+    app_load_envvars(&env); \
     AVIndexEntry mock_idx_entry_video[NUM_PKTS_VIDEO_STREAM] = PACKET_INDEX_ENTRY_VIDEO; \
     AVIndexEntry mock_idx_entry_audio[NUM_PKTS_AUDIO_STREAM] = PACKET_INDEX_ENTRY_AUDIO; \
     AVStream     mock_av_streams[NUM_STREAMS_FMTCTX] = { \
         {.nb_index_entries = NUM_PKTS_VIDEO_STREAM, .index_entries = &mock_idx_entry_video[0], .index = 0}, \
         {.nb_index_entries = NUM_PKTS_AUDIO_STREAM, .index_entries = &mock_idx_entry_audio[0], .index = 1}, \
     }; \
-    AVStream            *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
-    AVFormatContext      mock_avfmt_ctx = {.nb_streams = NUM_STREAMS_FMTCTX, .streams = mock_av_streams_ptr}; \
-    atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0}; \
-    asa_cfg_t            storage_src = {.ops = {.fn_read = mock_asa_src_subsequent_read_fn}}; \
+    AVStream           *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
+    AVFormatContext     mock_avfmt_ctx = {.nb_streams = NUM_STREAMS_FMTCTX, .streams = mock_av_streams_ptr}; \
+    atfp_stream_stats_t mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0}; \
+    asa_cfg_t           storage_src = { \
+                  .base_path = env.sys_base_path, .ops = {.fn_read = mock_asa_src_subsequent_read_fn} \
+    }; \
     asa_op_base_cfg_t    asa_cfg_src = {.storage = &storage_src}; \
     asa_op_localfs_cfg_t asa_local = {0}; \
     atfp_asa_map_t      *mock_map = atfp_asa_map_init(2); \
@@ -378,16 +391,17 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
         asa_cfg_src.cb_args.size = NUM_CB_ARGS_ASAOBJ; \
         atfp_asa_map_set_source(mock_map, &asa_cfg_src); \
         atfp_asa_map_set_localtmp(mock_map, &asa_local); \
-        mkdir(LOCAL_TMPBUF_PATH, S_IRWXU); \
-        asa_local.file.file = open(LOCAL_TMPBUF_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, RUNNER_CREATE_FOLDER); \
+        asa_local.file.file = \
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, RUNNER_OPEN_WRONLY_CREATE_USR); \
     }
 
 #define UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN \
     { \
         if (asa_local.file.file > 0) \
             close(asa_local.file.file); \
-        unlink(LOCAL_TMPBUF_PATH); \
-        rmdir(UNITTEST_FULLPATH); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_PATH, unlink); \
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, UNITTEST_FULLPATH, rmdir); \
         json_decref(mp4proc.super.data.spec); \
         json_decref(mp4proc.super.data.error); \
         atfp_asa_map_deinit(mock_map); \

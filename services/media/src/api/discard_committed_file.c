@@ -8,8 +8,6 @@
 #include "transcoder/video/common.h"
 #include "transcoder/image/common.h"
 
-#define RESOURCE_PATH_PATTERN "%s/%d/%08x"
-
 #define HTTPREQ_INDEX__IN_ASA_USRARG    (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define HTTPHDLR_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 2)
 #define MIDDLEWARE_INDEX__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 3)
@@ -183,19 +181,17 @@ static void _api_discardfile__rm_upld_fchunks_done(atfp_t *processor) {
         api_discard_committedfile__deinit_asaobj(asa_remote);
 } // end of  _api_discardfile__rm_upld_fchunks_done
 
+#define RESOURCE_PATH_PATTERN "%d/%08x"
 static void _api_discardfile__rm_transcoded_done(atfp_t *processor) {
     json_t            *err_info = processor->data.error;
     asa_op_base_cfg_t *asa_remote = processor->data.storage.handle;
     if (json_object_size(err_info) == 0) {
         uint32_t _usr_id = processor->data.usr_id;
         uint32_t _upld_req_id = processor->data.upld_req_id;
-        size_t   fullpath_sz = sizeof(RESOURCE_PATH_PATTERN) + strlen(asa_remote->storage->base_path) +
-                             USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id);
+        size_t   fullpath_sz =
+            sizeof(RESOURCE_PATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id);
         char   fullpath[fullpath_sz];
-        size_t nwrite = snprintf(
-            &fullpath[0], fullpath_sz, RESOURCE_PATH_PATTERN, asa_remote->storage->base_path, _usr_id,
-            _upld_req_id
-        );
+        size_t nwrite = snprintf(&fullpath[0], fullpath_sz, RESOURCE_PATH_PATTERN, _usr_id, _upld_req_id);
         fullpath[nwrite++] = 0x0;
         assert(nwrite <= fullpath_sz);
         processor->data.callback = _api_discardfile__rm_upld_fchunks_done;
@@ -211,12 +207,13 @@ static void _api_discardfile__rm_transcoded_done(atfp_t *processor) {
         api_discard_committedfile__deinit_asaobj(asa_remote);
     }
 } // end of  _api_discardfile__rm_transcoded_done
+#undef RESOURCE_PATH_PATTERN
 
 static void _api_discardfile__remove_transcoded_start(
     h2o_req_t *req, h2o_handler_t *hdlr, app_middleware_node_t *node, json_t *spec, json_t *err_info
 ) {
     atfp_t            *processor = calloc(1, sizeof(atfp_t));
-    asa_cfg_t         *storage = app_storage_cfg_lookup("localfs");
+    asa_cfg_t         *storage = app_storage_cfg_lookup("persist_usr_asset");
     asa_op_base_cfg_t *asa_remote = app_storage__init_asaobj_helper(storage, NUM_USR_ARGS_ASA_OBJ, 0, 0);
     ((asa_op_localfs_cfg_t *)asa_remote)->loop = req->conn->ctx->loop; // TODO
     asa_remote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = processor;

@@ -1,21 +1,31 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sysexits.h>
 #include <unistd.h>
 #include <jansson.h>
 
+#include "app_cfg.h"
+#include "datatypes.h"
+#include "utils.h"
+#include "cfg_parser.h"
+#include "rpc/cfg_parser.h"
 #include "rpc/core.h"
+#include "rpc/consumer.h"
+#include "../test/integration/test.h"
 
-#define ITEST_USERMGT_MOCK_DATABASE "tmp/log/test/media_rpc_usermgt_mock_db.json"
-
-static __attribute__((optimize("O0"))) void itest_rpc_handler__verify_usr_ids(arpc_receipt_t *receipt
-) { // this function mimics python celery consumer, which is currently applied to user_management
-    // app
+static __attribute__((optimize("O0"))) void itest_rpc_handler__verify_usr_ids(arpc_receipt_t *receipt) {
+    // this function mimics python celery consumer, which is currently applied
+    // to user_management app
+    app_cfg_t *acfg = app_get_global_cfg();
 #define PY_CELERY_RESP_PATTERN "{\"status\":null,\"result\":[]}"
     json_error_t jerror = {0};
-    json_t      *mock_db = json_load_file(ITEST_USERMGT_MOCK_DATABASE, 0, NULL);
-    json_t      *_usr_id_list = json_object_get(mock_db, "usr_ids");
-    json_t      *api_req =
+    const char  *sys_basepath = acfg->env_vars.sys_base_path;
+#define RUNNER(fullpath) json_load_file(fullpath, 0, NULL)
+    json_t *mock_db = PATH_CONCAT_THEN_RUN(sys_basepath, ITEST_USERMGT_MOCK_DATABASE, RUNNER);
+#undef RUNNER
+    json_t *_usr_id_list = json_object_get(mock_db, "usr_ids");
+    json_t *api_req =
         json_loadb((const char *)receipt->msg_body.bytes, receipt->msg_body.len, (size_t)0, &jerror);
     json_t *resp_body = json_loadb(PY_CELERY_RESP_PATTERN, sizeof(PY_CELERY_RESP_PATTERN) - 1, 0, NULL);
     json_t *lookup_ids_item = NULL, *usr_id_item = NULL, *app_result = NULL;
@@ -23,6 +33,10 @@ static __attribute__((optimize("O0"))) void itest_rpc_handler__verify_usr_ids(ar
     int     idx = 0;
     // send the first reply to indicate this consumer received the message
     json_object_set_new(resp_body, "status", json_string("STARTED"));
+    fprintf(
+        stderr, "[DEBUG][mock_rpc] line:%d, sent STARTED reply, corr_id:%.*s\n", __LINE__,
+        (int)receipt->job_id.len, receipt->job_id.bytes
+    );
     app_rpc_task_send_reply(receipt, resp_body, 0);
     if (!api_req || !mock_db) {
         fprintf(
@@ -70,8 +84,14 @@ error:
 done:
     // send the second reply to indicate this consumer has done the task and returned the final
     // output
-    if (!_no_resp)
+    if (!_no_resp) {
+        fprintf(
+            stderr, "[DEBUG][mock_rpc] line:%d, sent final reply, status:%s, corr_id:%.*s\n", __LINE__,
+            json_string_value(json_object_get(resp_body, "status")), (int)receipt->job_id.len,
+            receipt->job_id.bytes
+        );
         app_rpc_task_send_reply(receipt, resp_body, 1);
+    }
     if (mock_db)
         json_decref(mock_db);
     if (api_req)
@@ -80,19 +100,52 @@ done:
 #undef PY_CELERY_RESP_PATTERN
 } // end of  itest_rpc_handler__verify_usr_ids
 
-void itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp) {
-    int     idx = 0, target_fd = open(ITEST_USERMGT_MOCK_DATABASE, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-    json_t *info = json_object(), *usr_id_list = json_array();
-    for (idx = 0; idx < in_sz; idx++)
-        json_array_append_new(usr_id_list, json_integer(in[idx]));
-    json_object_set_new(info, "usr_ids", usr_id_list);
-    json_object_set_new(info, "no_resp", json_boolean(_no_resp));
-    ftruncate(target_fd, (off_t)0);
-    lseek(target_fd, 0, SEEK_SET);
-    json_dumpfd(
-        (const json_t *)info, target_fd, JSON_COMPACT
-    ); // will call low-level write() without buffering this
-    if (target_fd >= 0)
-        close(target_fd);
-    json_decref(info);
-} // end of  itest_rpc_usermgt__setup_usr_ids
+static int itest_parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg) {
+    int          err = EX_OK;
+    json_error_t jerror;
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, &jerror);
+    json_t *root = PATH_CONCAT_THEN_RUN(app_cfg->env_vars.sys_base_path, cfg_file_path, RUNNER);
+#undef RUNNER
+    if (!json_is_object(root)) {
+        h2o_error_printf(
+            "[parsing] decode error on JSON file %s at line %d, column %d\n", &jerror.source[0], jerror.line,
+            jerror.column
+        );
+        err = EX_CONFIG;
+        goto error;
+    }
+    json_t *err_log = json_object_get((const json_t *)root, "error_log");
+    json_t *filepath = json_object_get((const json_t *)err_log, "rpc_consumer");
+    err = appcfg_parse_errlog_path(filepath, app_cfg);
+    if (err) {
+        goto error;
+    }
+    err = parse_cfg_rpc_callee(json_object_get((const json_t *)root, "rpc"), app_cfg);
+error:
+    if (root) {
+        json_decref(root);
+    }
+    return err;
+} // end of itest_parse_cfg_params
+
+int main(int argc, char *argv[]) {
+    assert(argc > 2);
+    const char *cfg_file_path = argv[argc - 1];
+    // ensure relative path to executable program name ,
+    // Note `argv[0]` is also the path to prgoram, however it might be full path
+    // or relative path depending on system environment, to reduce such uncertainty
+    // executable path is always retrieved from user-defined argument.
+    const char *exe_path = argv[argc - 2];
+    app_cfg_t  *acfg = app_get_global_cfg();
+    app_global_cfg_set_exepath(exe_path);
+    int err = itest_parse_cfg_params(cfg_file_path, acfg);
+    if (!err) {
+#define NUM_THREADS 1 // main thread included
+        struct worker_init_data_t worker_data[NUM_THREADS];
+        err = appcfg_start_workers(acfg, &worker_data[0], run_app_worker);
+        appcfg_terminate_workers(acfg, &worker_data[0]);
+#undef NUM_THREADS
+    }
+    deinit_app_cfg(acfg);
+    return err;
+}

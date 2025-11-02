@@ -1,25 +1,25 @@
 {
     "pid_file" : {
-        "app_server"  :"tmp/proc/media_app_server.pid",
-        "rpc_consumer":"tmp/proc/media_rpc_consumer.pid"
+        "app_server"  :"proc/media_app_server.pid",
+        "rpc_consumer":"proc/media_rpc_consumer.pid"
     },
     "error_log": {
-        "app_server"  :"tmp/log/dev/media_app_server.err",
-        "rpc_consumer":"tmp/log/dev/media_rpc_consumer.err"
+        "app_server"  :"log/media_app_server.err",
+        "rpc_consumer":"log/media_rpc_consumer.err"
     },
     "access_log": {
-        "path":"tmp/log/dev/media_app_server.access.log",
+        "path":"log/media_app_server.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
         {
             "port": 8010,
-            "host":"localhost",
+            "host":"media-dev-apisrv",
             "max_fails": 3,
             "retry_after_unavail_secs": 9,
             "ssl":{
-                "cert_file"   : "media/data/certs/development/localhost_8010.crt",
-                "privkey_file": "media/data/certs/development/localhost_8010.private.key",
+                "cert_file"   : "media/data/certs/media-dev-apisrv_8010.crt",
+                "privkey_file": "media/data/certs/media-dev-apisrv_8010.private.key",
                 "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
                 "min_version": 772
             },
@@ -47,8 +47,8 @@
             "max_fails": 2,
             "retry_after_unavail_secs": 18,
             "ssl":{
-                "cert_file"   : "media/data/certs/development/localhost_8020.crt",
-                "privkey_file": "media/data/certs/development/localhost_8020.private.key",
+                "cert_file"   : "media/data/certs/localhost_8020.crt",
+                "privkey_file": "media/data/certs/localhost_8020.private.key",
                 "cipher_suites": "TLS_AES_128_CCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
                 "min_version": 772
             },
@@ -56,15 +56,15 @@
         }
     ],
     "ca":{
-        "cert_file"   : "media/data/certs/development/ca.crt",
-        "privkey_file": "media/data/certs/development/ca.private.key"
+        "cert_file"   : "media/data/certs/ca.crt",
+        "privkey_file": "media/data/certs/ca.private.key"
     },
     "max_connections": 256,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "tcp_fastopen_queue_size": 113,
     "auth_keystore": {
-        "url":"http://localhost:8008/jwks",
+        "url":"http://usrmgt-dev-apisrv:8008/jwks",
         "ca_path": null,
         "ca_form": null
     },
@@ -98,8 +98,26 @@
     ],
     "storages": [
         {
-            "alias":"localfs",
+            "alias":"persist_usr_asset",
             "base_path": "filespace/dev",
+            "ops": {
+                "mkdir" : "app_storage_localfs_mkdir",
+                "rmdir" : "app_storage_localfs_rmdir",
+                "scandir": "app_storage_localfs_scandir",
+                "scandir_next": "app_storage_localfs_scandir_next",
+                "rename": "app_storage_localfs_rename",
+                "unlink": "app_storage_localfs_unlink",
+                "open" : "app_storage_localfs_open",
+                "close": "app_storage_localfs_close",
+                "read" : "app_storage_localfs_read",
+                "write": "app_storage_localfs_write",
+                "typesize": "app_storage_localfs_typesize",
+                "seek" : "app_storage_localfs_seek"
+            }
+        },
+        {
+            "alias":"local_tmpbuf",
+            "base_path": "tmp/buffer",
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
@@ -186,7 +204,7 @@
             },
             "image": {
                 "pixel_limit":{"width":2080, "height":1960},
-                "mask":{"basepath":"media/data/dev/image/mask"}
+                "mask":{"basepath":"media/data/dev/image/mask/index.json"}
             },
             "video": {
                 "pixels": [[1080, 600], [720, 540], [480, 360], [480,300], [360, 220], [300,210],
@@ -199,7 +217,6 @@
         }
     },
     "tmp_buf": {
-        "path": "tmp/buffer/media/development",
         "threshold_in_bytes": 102400
     }
 }

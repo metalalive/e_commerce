@@ -4,18 +4,15 @@
 #include "transcoder/file_processor.h"
 
 // build path for cacheable encrypted files
-size_t atfp_get_encrypted_file_basepath(
-    const char *basepath, char *out, size_t o_sz, const char *doc_id, size_t id_sz
-) {
+size_t atfp_get_encrypted_file_basepath(char *out, size_t o_sz, const char *doc_id, size_t id_sz) {
     size_t nwrite = 0;
-#define PATTERN "%s/%s/%s"
-    size_t expect_out_sz =
-        strlen(basepath) + 1 + sizeof(ATFP_CACHED_FILE_FOLDERNAME) + 1 + strlen(doc_id) + 1;
+#define PATTERN "%s/%s"
+    size_t expect_out_sz = sizeof(ATFP_CACHED_FILE_FOLDERNAME) + 1 + strlen(doc_id) + 1;
     if (o_sz >= expect_out_sz)
-        nwrite = snprintf(out, o_sz, PATTERN, basepath, ATFP_CACHED_FILE_FOLDERNAME, doc_id);
+        nwrite = snprintf(out, o_sz, PATTERN, ATFP_CACHED_FILE_FOLDERNAME, doc_id);
     return nwrite;
 #undef PATTERN
-} // end of atfp_get_encrypted_file_basepath
+}
 
 const char *atfp_get_crypto_key(json_t *_keyinfo, const char *_key_id, json_t **_item_out) {
     if (!_keyinfo || !_key_id || !_item_out)

@@ -1,0 +1,193 @@
+services:
+  mariadb-media:
+    container_name: media-test-mariadb
+    env_file:
+      - ./container-test.env
+    restart: no
+    networks:
+      - net1
+    volumes:
+      # Mounts the custom configuration file into the container.
+      # The source path is relative to this compose file.
+      - ./mariadb-cfg/test.cnf:/etc/mysql/conf.d/app.cnf:ro
+
+  db-schema-migration-up-media:
+    container_name: media-test-db-schema-upgrade
+    env_file:
+      - ./container-test.env
+    restart: no
+    networks:
+      - net1
+
+  renew-cert-media:
+    container_name: media-test-cert-renew
+    environment:
+      - CONFIG_FILE_PATH=media/settings/test.json
+    volumes:
+      - ../data/certs/test:/app/media/data/certs
+      - ../settings/test.json:/app/media/settings/test.json:ro
+    networks:
+      - net1
+
+  mock-auth-pubkey-server-media:
+    container_name: media-test-authkey-mockserver
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./renew_certs.py:/app/media/infra/renew_certs.py:ro
+      - ../test/integration/auth.py:/app/media/mockauth.py:ro
+      - ../data/certs/test:/app/certs
+      - ../../tmp/cache/test/jwks:/app/jwks
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python3 -m mockauth --host=media-test-authkey-mockserver --port=8008  --path2privkey=/app/jwks/media-rsa-privkey.json  --sslcertpath=/app/certs"]
+    # TODO, support HTTPS for python health-check program `httpsrv_accessible.py`
+    networks:
+      - net1
+
+  api-server-media:
+    container_name: media-test-apisrv
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - CONFIG_FILE_PATH=media/settings/test.json
+      - API_HOST=media-test-apisrv
+    volumes:
+      - ../settings/test.json:/app/media/settings/test.json:ro
+      - ../data/certs/test:/app/media/data/certs:ro
+      - ../data/test:/app/media/data/test:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../common/data/cors-test.json:/app/common/data/cors.json:ro
+      - ../../tmp/proc:/app/proc
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/buffer/media/test:/app/tmp/buffer
+      - ../../filespace/test:/app/filespace/test
+    depends_on:
+      mock-auth-pubkey-server-media:
+        condition: service_started # service_healthy
+    networks:
+      - net1
+      - net2
+
+  rpc-consumer-media:
+    container_name: media-test-rpcconsumer
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - CONFIG_FILE_PATH=media/settings/test.json
+    volumes:
+      - ../settings/test.json:/app/media/settings/test.json:ro
+      - ../data/test:/app/media/data/test:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/proc:/app/proc
+      - ../../tmp/log/test:/app/log
+      - ../../tmp/buffer/media/test:/app/tmp/buffer
+      - ../../filespace/test:/app/filespace/test
+    networks:
+      - net1
+      - net2
+
+  itest-filechunk-setup-media:
+    container_name: media-test-filechunk-setup
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python3 -m filechunk FilechunkSetup ./media/settings.json"]
+    # TODO, run python -m  media.task_loader  FilechunkTeardown ${ITEST_APPCFG_PATH} after test
+    volumes:
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../test/integration/filechunk.py:/app/media/filechunk.py:ro
+      - ../test/integration/examples:/app/media/test/integration/examples:ro
+      - ../../tmp/log/test:/app/tmp
+  
+  rpc-consumer-mock_usrmgt-media:
+    container_name: media-test-rpcconsumer-mock-usrmgt
+    image: media-backend-base:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./itest_rpc_consumer.out media/build/itest_rpc_consumer.out media/settings.json"]
+    volumes:
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/log/test:/app/log
+    networks:
+      - net2
+
+  run-itest-media:
+    container_name: media-itest-0
+    image: media-backend-base:latest
+    pull_policy: never
+    restart: no
+    env_file:
+      - ./container-test.env
+    environment:
+      - CGREEN_NO_FORK=1
+      - SYS_BASE_PATH=/app
+      - API_HOST=media-test-apisrv
+      - API_PORT=8010
+      - API_TIMEOUT_SECONDS=23
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./itest_start.out  media/settings.json"]
+    #command: sleep 360000
+    volumes:
+      - ../data/certs/test:/app/media/data/certs/test:ro
+      - ../test/integration/settings.json:/app/media/settings.json:ro
+      - ../test/integration/examples:/app/media/test/integration/examples:ro
+      - ../../common/data/secrets.json:/app/common/data/secrets.json:ro
+      - ../../tmp/buffer/media/test:/app/tmp/buffer:ro
+      - ../../tmp/cache/test/jwks/media-rsa-privkey.json:/app/jwks/media-rsa-privkey.json:ro
+      - ../../tmp/log/test/test_file_chunks:/app/tmp/test_file_chunks:ro
+      - ../../tmp/log/test:/app/log
+    depends_on:
+      api-server-media:
+        condition: service_healthy
+      rpc-consumer-media:
+        condition: service_started
+      rpc-consumer-mock_usrmgt-media:
+        condition: service_started
+      itest-filechunk-setup-media:
+        condition: service_completed_successfully
+    networks:
+      - net1
+      - net2
+  
+  # db-schema-migration-down-media:
+  #   container_name: media-test-db-schema-downgrade
+  #   env_file:
+  #     - ./container-test.env
+  #   restart: no
+  #   depends_on:
+  #     run-itest-media:
+  #       condition: service_completed_successfully
+  #   networks:
+  #     - net1
+
+
+networks:
+  net1:
+    name: ec-mediamgt-test-net
+    # auto-create network on start the containers,
+    # auto-delete it on stop (and no other containers are attached to the network)
+    external: false
+    ipam:
+      config:
+        - subnet: 172.19.13.0/24
+          ip_range: 172.19.13.0/25
+          gateway: 172.19.13.254
+  
+  net2:
+    name: ec-intersrvs-dev-net
+    external: true
+

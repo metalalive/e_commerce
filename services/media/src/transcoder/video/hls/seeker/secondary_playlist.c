@@ -382,14 +382,14 @@ static void _atfp_hls__open_src_l2_plist_cb(asa_op_base_cfg_t *asa_src, ASA_RES_
 static ASA_RES_CODE atfp_hls_stream__lvl2_plist__start(asa_op_base_cfg_t *asa_src, atfp_t *processor) {
     uint32_t _usr_id = processor->data.usr_id;
     uint32_t _upld_req_id = processor->data.upld_req_id;
-#define PATH_PATTERN "%s/%d/%08x/%s/%s/%s"
-    size_t filepath_sz = sizeof(PATH_PATTERN) + strlen(asa_src->storage->base_path) + USR_ID_STR_SIZE +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) +
-                         APP_TRANSCODED_VERSION_SIZE + sizeof(HLS_PLAYLIST_FILENAME);
+#define PATH_PATTERN "%d/%08x/%s/%s/%s"
+    size_t filepath_sz = sizeof(PATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) +
+                         sizeof(ATFP__COMMITTED_FOLDER_NAME) + APP_TRANSCODED_VERSION_SIZE +
+                         sizeof(HLS_PLAYLIST_FILENAME);
     char   filepath[filepath_sz];
     size_t nwrite = snprintf(
-        &filepath[0], filepath_sz, PATH_PATTERN, asa_src->storage->base_path, _usr_id, _upld_req_id,
-        ATFP__COMMITTED_FOLDER_NAME, processor->data.version, HLS_PLAYLIST_FILENAME
+        &filepath[0], filepath_sz, PATH_PATTERN, _usr_id, _upld_req_id, ATFP__COMMITTED_FOLDER_NAME,
+        processor->data.version, HLS_PLAYLIST_FILENAME
     );
 #undef PATH_PATTERN
     assert(filepath_sz >= nwrite);

@@ -1,0 +1,132 @@
+To compile and run the services/media code, follow these steps:
+
+
+Prerequisites
+
+Ensure you have the necessary development tools and libraries installed on your system. The apps.dockerfile provides a good reference for these:
+
+-   build-essential, make, cmake, pkg-config, git
+-   libmariadb-dev, librabbitmq-dev, libssl-dev, libjansson-dev, libbrotli-dev
+-   libuv1-dev, librhonabwy-dev, nettle-dev, libgnutls28-dev, libcurl4-openssl-dev
+-   yasm, libfdk-aac-dev, libx264-dev, libx265-dev, libcgreen1-dev
+-   libelf-dev, libmagic-dev, uuid-dev, libnghttp2-dev
+-   FFmpeg and H2O libraries, which often require specific build steps (as shown in apps.dockerfile). Make sure their pkgconfig files are discoverable.
+
+
+Compilation Steps
+
+1.  Navigate to the services/media directory:
+    
+        cd services/media
+    
+
+2.  Create a build directory and run cmake:
+    It is recommended to create a separate build directory. The apps.dockerfile uses specific CMAKE_BUILD_TYPE and DEBUG_RPC settings, and sets PKG_CONFIG_PATH to help cmake find libraries.
+
+    
+        mkdir -p build
+        cd build
+        
+        # Example PKG_CONFIG_PATH (adjust paths if H2O/FFmpeg are installed elsewhere)
+        # If H2O and FFmpeg are installed to custom paths, like /app/3pty/installed/h2o and /app/3pty/installed/ffmpeg,
+        # you might need to set PKG_CONFIG_PATH first:
+        # export PKG_CONFIG_PATH="/app/3pty/installed/ffmpeg/lib/pkgconfig:/app/3pty/installed/h2o/lib/pkgconfig:${PKG_CONFIG_PATH}"
+    
+        cmake -DCMAKE_BUILD_TYPE=Debug -DDEBUG_RPC=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ..
+    
+    *   -DCMAKE_BUILD_TYPE=Debug: Compiles with debugging symbols and no optimization (-O0). Use Release for optimized builds (-O2).
+    *   -DDEBUG_RPC=OFF: Disables RPC debug logging. Set to ON to enable.
+    *   -DCMAKE_EXPORT_COMPILE_COMMANDS=1: Generates compile_commands.json for tooling.
+    *   ..: Refers to the parent directory where CMakeLists.txt is located.
+
+3.  Build the targets using make:
+    After cmake completes successfully, you can use make to build the executables.
+
+    *   Main Application Server:
+        
+            make app_server.out
+        
+        This builds the primary HTTP server application.
+
+    *   RPC Consumer:
+        
+            make rpc_consumer.out
+        
+        This builds the RPC message consumer application.
+
+    *   Health Check Utility:
+        
+            make appserver_health_check.out
+        
+        This builds a utility for checking the application server's health.
+
+    *   Unit Tests:
+        
+            make unit_test.out
+        
+        This builds the executable for running unit tests.
+
+    *   Integration Tests (Start):
+        
+            make itest_start.out
+        
+        This builds the executable for starting integration tests.
+
+    *   Integration Tests (RPC Consumer):
+        
+            make itest_rpc_consumer.out
+        
+        This builds the RPC consumer executable specifically for integration tests.
+
+    *   Code Formatting (Clang-Format):
+        
+            make reformat
+        
+        This command runs clang-format on the source and header files to enforce coding style. This target is only available if SKIP_PKG_CHECK was set to ON during CMake configuration.
+
+
+Running the Executables
+
+Before running, ensure LD_LIBRARY_PATH is correctly set, especially if you installed H2O or FFmpeg to custom locations. For example:
+    
+    # Example LD_LIBRARY_PATH (adjust paths based on your installation)
+    # export LD_LIBRARY_PATH="/app/3pty/installed/ffmpeg/lib:/app/3pty/installed/h2o/lib:${LD_LIBRARY_PATH}"
+    
+
+To run a built executable, arguments are provided as seen in the Docker Compose files.
+The executables are typically run from the `build` directory.
+
+*   **Main Application Server (`app_server.out`)**: Requires its own path as the first argument, followed by the configuration file path.
+    Example (assuming `app_server.out` is in `media/build/` and config is `media/settings.json`):
+        
+            ./app_server.out media/build/app_server.out media/settings.json
+        
+
+*   **RPC Consumer (`rpc_consumer.out`)**: Similar to the app server, requires its own path as the first argument, followed by the configuration file path.
+    Example:
+        
+            ./rpc_consumer.out media/build/rpc_consumer.out media/settings.json
+        
+
+*   **Health Check Utility (`appserver_health_check.out`)**:
+    Example:
+        
+            ./appserver_health_check.out --timeout-secs 6 --port 8010 --host localhost --uri-path /file --cert-path /app/media/data/certs/ca.crt
+        
+
+To run tests:
+    
+*   **Unit Tests (`unit_test.out`)**:
+        
+            ./unit_test.out
+        
+
+*   **Integration Tests (Start) (`itest_start.out`)**: Requires the configuration file path.
+        
+            ./itest_start.out media/settings.json
+        
+
+*   **Integration Tests (RPC Consumer) (`itest_rpc_consumer.out`)**: Similar to the app server, requires its own path as the first argument, followed by the configuration file path.
+        
+            ./itest_rpc_consumer.out media/build/itest_rpc_consumer.out media/settings.json
+    

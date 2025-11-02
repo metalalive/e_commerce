@@ -1,13 +1,19 @@
+#include <string.h>
 #include <unistd.h>
 #include <uv.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
 
+#include "app_cfg.h"
+#include "utils.h"
 #include "storage/localfs.h"
 
 #define EXPECT_CB_ARGS_SZ 3
 #define EXPECT_FILE_PATH  "./tmp/utest_asa_localfs.txt"
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+
 static __attribute__((optimize("O0"))) void
 utest_1_asa_close_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
@@ -18,8 +24,9 @@ utest_1_asa_close_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
             assert_that(*actual_arg, is_equal_to(234));
         }
     }
+    const char *sys_basepath = cfg->storage->base_path;
+    PATH_CONCAT_THEN_RUN(sys_basepath, EXPECT_FILE_PATH, unlink);
     free(cfg);
-    unlink(EXPECT_FILE_PATH);
 } // end of utest_1_asa_close_cb
 
 static __attribute__((optimize("O0"))) void utest_1_asa_open_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
@@ -43,11 +50,17 @@ utest_4_asa_simple_callback(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
 }
 
 Ensure(storage_localfs_openfile_test) {
-    int                   expect_cb_args[EXPECT_CB_ARGS_SZ] = {123, 234, 345};
-    size_t                cfg_sz = sizeof(asa_op_localfs_cfg_t) + sizeof(void *) * EXPECT_CB_ARGS_SZ;
+    int    expect_cb_args[EXPECT_CB_ARGS_SZ] = {123, 234, 345};
+    size_t cfg_sz = sizeof(asa_op_localfs_cfg_t) + sizeof(void *) * EXPECT_CB_ARGS_SZ;
+
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    asa_cfg_t mock_asaobj = {.base_path = env.sys_base_path};
+
     asa_op_localfs_cfg_t *cfg = malloc(cfg_sz);
     cfg->file = (uv_fs_t){0};
     cfg->loop = uv_default_loop();
+    cfg->super.storage = &mock_asaobj;
     cfg->super.op.open.cb = utest_1_asa_open_cb;
     cfg->super.op.open.dst_path = EXPECT_FILE_PATH;
     cfg->super.op.open.mode = S_IRUSR | S_IWUSR;
@@ -73,11 +86,13 @@ Ensure(storage_localfs_openfile_test) {
 static __attribute__((optimize("O0"))) void
 utest_2_asa_rmdir_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
+    const char *sys_basepath = cfg->storage->base_path;
+    PATH_CONCAT_THEN_RUN(sys_basepath, "tmp/utest/media/async_storage", rmdir);
+    PATH_CONCAT_THEN_RUN(sys_basepath, "tmp/utest/media", rmdir);
+    // would fail if there's any file/ subfolder in it
+    PATH_CONCAT_THEN_RUN(sys_basepath, "tmp/utest", rmdir);
     cfg->op.rmdir.path = NULL;
     free(cfg);
-    rmdir("tmp/utest/media/async_storage");
-    rmdir("tmp/utest/media");
-    rmdir("tmp/utest"); // would fail if there's any file/ subfolder in it
 }
 
 static __attribute__((optimize("O0"))) void
@@ -91,10 +106,13 @@ utest_2_asa_mkdir_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
 }
 
 Ensure(storage_localfs_test__mkdir_simple) {
-    size_t                cfg_sz = sizeof(asa_op_localfs_cfg_t) + sizeof(EXPECT_MKDIR_PATH) * 2;
+    asa_cfg_t mock_storage_cfg = {.base_path = getenv("SYS_BASE_PATH")};
+    size_t    cfg_sz = sizeof(asa_op_localfs_cfg_t) + sizeof(EXPECT_MKDIR_PATH) * 2;
+
     asa_op_localfs_cfg_t *cfg = malloc(cfg_sz);
     memset(cfg, 0x0, cfg_sz);
     cfg->loop = uv_default_loop();
+    cfg->super.storage = &mock_storage_cfg;
     cfg->super.op.mkdir.cb = utest_2_asa_mkdir_cb;
     cfg->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
     {
@@ -150,8 +168,9 @@ static void utest_3_asa_read_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result, siz
 static __attribute__((optimize("O0"))) void
 utest_3_asa_close_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
+    const char *sys_basepath = cfg->storage->base_path;
+    PATH_CONCAT_THEN_RUN(sys_basepath, EXPECT_FILE_PATH, unlink);
     free(cfg);
-    unlink(EXPECT_FILE_PATH);
 } // end of utest_3_asa_close_cb
 
 static __attribute__((optimize("O0"))) void
@@ -201,19 +220,25 @@ static __attribute__((optimize("O0"))) void utest_3_asa_open_cb(asa_op_base_cfg_
 } // end of utest_3_asa_open_cb
 
 Ensure(storage_localfs_rwfile_test) {
-    char             file_content_readback[sizeof(EXPECT_FILE_CONTENT)] = {0};
+    char file_content_readback[sizeof(EXPECT_FILE_CONTENT)] = {0};
+
     utest3_usrdata_t usrdata = {
         .rd_back = &file_content_readback[0], .wr_ptr = 0, .rd_ptr = 0, .wr_end = 0, .rd_end = 0
     };
-    size_t                cb_args_sz = sizeof(void *) * EXPECT_CB_ARGS_SZ;
-    size_t                wr_buf_sz = sizeof(char) * WR_BUF_SZ;
-    size_t                rd_buf_sz = sizeof(char) * RD_BUF_SZ;
-    size_t                total_cfg_sz = sizeof(asa_op_localfs_cfg_t) + wr_buf_sz + rd_buf_sz + cb_args_sz;
+    size_t cb_args_sz = sizeof(void *) * EXPECT_CB_ARGS_SZ;
+    size_t wr_buf_sz = sizeof(char) * WR_BUF_SZ;
+    size_t rd_buf_sz = sizeof(char) * RD_BUF_SZ;
+    size_t total_cfg_sz = sizeof(asa_op_localfs_cfg_t) + wr_buf_sz + rd_buf_sz + cb_args_sz;
+
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    asa_cfg_t             mock_storage_cfg = {.base_path = env.sys_base_path};
     asa_op_localfs_cfg_t *cfg = malloc(total_cfg_sz);
     memset(cfg, 0x0, total_cfg_sz);
     cfg->file = (uv_fs_t){0};
     cfg->loop = uv_default_loop();
     {
+        cfg->super.storage = &mock_storage_cfg;
         cfg->super.op.close.cb = utest_3_asa_close_cb;
         cfg->super.op.open.cb = utest_3_asa_open_cb;
         cfg->super.op.open.dst_path = EXPECT_FILE_PATH;
@@ -256,8 +281,11 @@ Ensure(storage_localfs_rwfile_test) {
 #define EXPECT_MKDIR_PREFIX "tmp/utest/media"
 #define EXPECT_MKDIR_ORIGIN "beard/chang/tiger"
 Ensure(storage_localfs_test__mkdir_prefix) {
-    mkdir("tmp/utest", S_IRWXU);
-    mkdir(EXPECT_MKDIR_PREFIX, S_IRWXU);
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    asa_cfg_t mock_storage_cfg = {.base_path = env.sys_base_path};
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "tmp/utest", RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX, RUNNER_CREATE_FOLDER);
     char *path_ori = strdup(EXPECT_MKDIR_ORIGIN);
     char *path_pfx = strdup(EXPECT_MKDIR_PREFIX);
     char *path_cur_parent =
@@ -265,7 +293,8 @@ Ensure(storage_localfs_test__mkdir_prefix) {
     asa_op_localfs_cfg_t mock_asaobj = {
         .loop = uv_default_loop(),
         .super =
-            {.op =
+            {.storage = &mock_storage_cfg,
+             .op =
                  {.mkdir =
                       {.cb = utest_4_asa_simple_callback,
                        .mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR,
@@ -278,12 +307,15 @@ Ensure(storage_localfs_test__mkdir_prefix) {
     uv_run(mock_asaobj.loop, UV_RUN_ONCE);
     uv_run(mock_asaobj.loop, UV_RUN_ONCE);
     uv_run(mock_asaobj.loop, UV_RUN_ONCE);
-    assert_that(access(path_cur_parent, F_OK), is_equal_to(0));
-    rmdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN);
-    rmdir(EXPECT_MKDIR_PREFIX "/beard/chang");
-    rmdir(EXPECT_MKDIR_PREFIX "/beard");
-    rmdir(EXPECT_MKDIR_PREFIX);
-    rmdir("tmp/utest");
+#define RUNNER(fullpath) access(fullpath, F_OK)
+    int fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, path_cur_parent, RUNNER);
+#undef RUNNER
+    assert_that(fileexist, is_equal_to(0));
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN, rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX "/beard/chang", rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX "/beard", rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX, rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "tmp/utest", rmdir);
     free(path_ori);
     free(path_pfx);
     free(path_cur_parent);
@@ -294,9 +326,14 @@ Ensure(storage_localfs_test__mkdir_prefix) {
 #define EXPECT_MKDIR_PREFIX "tmp/utest/media"
 #define EXPECT_MKDIR_ORIGIN "duplicate"
 Ensure(storage_localfs_test__mkdir_dup_error) {
-    mkdir("tmp/utest", S_IRWXU);
-    mkdir(EXPECT_MKDIR_PREFIX, S_IRWXU);
-    mkdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN, S_IRWXU);
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    asa_cfg_t mock_storage_cfg = {.base_path = env.sys_base_path};
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "tmp/utest", RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX, RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN, RUNNER_CREATE_FOLDER
+    );
     char *path_ori = strdup(EXPECT_MKDIR_ORIGIN);
     char *path_pfx = strdup(EXPECT_MKDIR_PREFIX);
     char *path_cur_parent =
@@ -304,7 +341,8 @@ Ensure(storage_localfs_test__mkdir_dup_error) {
     asa_op_localfs_cfg_t mock_asaobj = {
         .loop = uv_default_loop(),
         .super =
-            {.op =
+            {.storage = &mock_storage_cfg,
+             .op =
                  {.mkdir =
                       {.cb = utest_4_asa_simple_callback,
                        .mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR,
@@ -315,9 +353,9 @@ Ensure(storage_localfs_test__mkdir_dup_error) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest_4_asa_simple_callback, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
     uv_run(mock_asaobj.loop, UV_RUN_ONCE);
-    rmdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN);
-    rmdir(EXPECT_MKDIR_PREFIX);
-    rmdir("tmp/utest");
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN, rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_MKDIR_PREFIX, rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "tmp/utest", rmdir);
     free(path_ori);
     free(path_pfx);
     free(path_cur_parent);
@@ -328,25 +366,33 @@ Ensure(storage_localfs_test__mkdir_dup_error) {
 #define EXPECT_FILE1_PATH "./tmp/utest/media/file123"
 #define EXPECT_FILE2_PATH "./tmp/utest/media/file456"
 Ensure(storage_localfs_unlink_test) {
+    ASA_RES_CODE  result;
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    asa_cfg_t mock_storage_cfg = {.base_path = env.sys_base_path};
     {
-        mkdir("./tmp/utest", S_IRWXU);
-        mkdir("./tmp/utest/media", S_IRWXU);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", RUNNER_CREATE_FOLDER);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest/media", RUNNER_CREATE_FOLDER);
         int fds[2] = {0};
-        fds[0] = open(EXPECT_FILE1_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-        fds[1] = open(EXPECT_FILE2_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+#define RUNNER(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+        fds[0] = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE1_PATH, RUNNER);
+        fds[1] = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE2_PATH, RUNNER);
         close(fds[0]);
         close(fds[1]);
-        assert_that(access(EXPECT_FILE1_PATH, F_OK), is_equal_to(0));
-        assert_that(access(EXPECT_FILE2_PATH, F_OK), is_equal_to(0));
+#define RUNNER(fullpath) access(fullpath, F_OK)
+        int fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE1_PATH, RUNNER);
+        assert_that(fileexist, is_equal_to(0));
+        fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE2_PATH, RUNNER);
+        assert_that(fileexist, is_equal_to(0));
     }
-    ASA_RES_CODE         result;
-    asa_op_localfs_cfg_t mock_asaobj = {.loop = uv_default_loop()};
+    asa_op_localfs_cfg_t mock_asaobj = {.loop = uv_default_loop(), .super = {.storage = &mock_storage_cfg}};
     { // subcase #1
         mock_asaobj.super.op.unlink.path = EXPECT_FILE1_PATH;
         result = app_storage_localfs_unlink(&mock_asaobj.super);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
-        assert_that(access(EXPECT_FILE1_PATH, F_OK), is_equal_to(-1));
+        int fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE1_PATH, RUNNER);
+        assert_that(fileexist, is_equal_to(-1));
     }
     { // subcase #2
         mock_asaobj.super.op.unlink.cb = utest_4_asa_simple_callback;
@@ -355,8 +401,10 @@ Ensure(storage_localfs_unlink_test) {
         result = app_storage_localfs_unlink(&mock_asaobj.super);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
-        assert_that(access(EXPECT_FILE2_PATH, F_OK), is_equal_to(-1));
+        int fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE2_PATH, RUNNER);
+        assert_that(fileexist, is_equal_to(-1));
     }
+#undef RUNNER
     { // subcase #3
         mock_asaobj.super.op.unlink.cb = utest_4_asa_simple_callback;
         mock_asaobj.super.op.unlink.path = "./tmp/utest/media/file_not_exist";
@@ -366,10 +414,10 @@ Ensure(storage_localfs_unlink_test) {
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
     }
     {
-        unlink(EXPECT_FILE1_PATH);
-        unlink(EXPECT_FILE2_PATH);
-        rmdir("./tmp/utest/media");
-        rmdir("./tmp/utest");
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE1_PATH, unlink);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_FILE2_PATH, unlink);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest/media", rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", rmdir);
     }
 } // end of storage_localfs_unlink_test
 #undef EXPECT_FILE1_PATH
@@ -379,40 +427,50 @@ static __attribute__((optimize("O0"))) void utest_5_asa_mock_cb(asa_op_base_cfg_
     mock(cfg, result);
 }
 
-static void
-_storage_localfs__rename_test(const char *old_path, const char *new_path, ASA_RES_CODE expect_result) {
-    ASA_RES_CODE         result;
+static void _storage_localfs__rename_test(
+    const char *sys_base_path, const char *old_path, const char *new_path, ASA_RES_CODE expect_result
+) {
+    asa_cfg_t mock_storage_cfg = {.base_path = sys_base_path};
+
     asa_op_localfs_cfg_t mock_asaobj =
         {.loop = uv_default_loop(),
          .super =
-             {.op =
+             {.storage = &mock_storage_cfg,
+              .op =
                   {.rename = {
                        .cb = utest_5_asa_mock_cb, .path = {._old = (char *)old_path, ._new = (char *)new_path}
                    }}}};
-    result = app_storage_localfs_rename(&mock_asaobj.super);
+    ASA_RES_CODE result = app_storage_localfs_rename(&mock_asaobj.super);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest_5_asa_mock_cb, when(result, is_equal_to(expect_result)));
     uv_run(mock_asaobj.loop, UV_RUN_ONCE);
-} // end of _storage_localfs__rename_test
+}
 
 #define EXPECT_PATH1    "./tmp/utest/media/origin_name"
 #define EXPECT_PATH2    "./tmp/utest/media/modified_name"
 #define INVALID_PATH3   "./tmp/utest/media/nonexist_name"
 #define EXPECT_FILENAME "dummyfile"
 Ensure(storage_localfs_rename_test) {
-    mkdir("./tmp/utest", S_IRWXU);
-    mkdir("./tmp/utest/media", S_IRWXU);
-    mkdir(EXPECT_PATH1, S_IRWXU);
-    int fd = open(EXPECT_PATH1 "/" EXPECT_FILENAME, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest/media", RUNNER_CREATE_FOLDER);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH1, RUNNER_CREATE_FOLDER);
+#define RUNNER(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+    int fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH1 "/" EXPECT_FILENAME, RUNNER);
     close(fd);
-    _storage_localfs__rename_test(EXPECT_PATH1, EXPECT_PATH2, ASTORAGE_RESULT_COMPLETE);
-    access(EXPECT_PATH2 "/" EXPECT_FILENAME, F_OK);
-    _storage_localfs__rename_test(INVALID_PATH3, EXPECT_PATH2, ASTORAGE_RESULT_OS_ERROR);
-    access(EXPECT_PATH2 "/" EXPECT_FILENAME, F_OK);
-    unlink(EXPECT_PATH2 "/" EXPECT_FILENAME);
-    rmdir(EXPECT_PATH2);
-    rmdir("./tmp/utest/media");
-    rmdir("./tmp/utest");
+    _storage_localfs__rename_test(env.sys_base_path, EXPECT_PATH1, EXPECT_PATH2, ASTORAGE_RESULT_COMPLETE);
+#define RUNNER(fullpath) access(fullpath, F_OK)
+    int fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH2 "/" EXPECT_FILENAME, RUNNER);
+    assert_that(fileexist, is_equal_to(0));
+    _storage_localfs__rename_test(env.sys_base_path, INVALID_PATH3, EXPECT_PATH2, ASTORAGE_RESULT_OS_ERROR);
+    fileexist = PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH2 "/" EXPECT_FILENAME, RUNNER);
+    assert_that(fileexist, is_equal_to(0));
+#undef RUNNER
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH2 "/" EXPECT_FILENAME, unlink);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_PATH2, rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest/media", rmdir);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", rmdir);
 } // end of storage_localfs_rename_test
 #undef EXPECT_FILENAME
 #undef INVALID_PATH3
@@ -431,25 +489,32 @@ Ensure(storage_localfs_rename_test) {
 #define EXPECT_NUM_DIRS  2
 #define EXPECT_NUM_FILES 3
 Ensure(storage_localfs_scandir_test) {
+    app_envvars_t env = {0};
+    app_load_envvars(&env);
     const char *expect_path_dirs[EXPECT_NUM_DIRS] = EXPECT_DIR_PATHS;
     const char *expect_path_files[EXPECT_NUM_FILES] = EXPECT_FILE_PATHS;
     const char *expect_name_dirs[EXPECT_NUM_DIRS] = EXPECT_DIR_NAMES;
     const char *expect_name_files[EXPECT_NUM_FILES] = EXPECT_FILE_NAMES;
     int         idx = 0;
     { // setup
-        mkdir("./tmp/utest", S_IRWXU);
-        mkdir(EXPECT_BASEPATH, S_IRWXU);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", RUNNER_CREATE_FOLDER);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_BASEPATH, RUNNER_CREATE_FOLDER);
         for (idx = 0; idx < EXPECT_NUM_DIRS; idx++)
-            mkdir(expect_path_dirs[idx], S_IRWXU);
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_path_dirs[idx], RUNNER_CREATE_FOLDER);
         for (idx = 0; idx < EXPECT_NUM_FILES; idx++) {
-            int fd = open(expect_path_files[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+#define RUNNER(fullpath) open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+            int fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_path_files[idx], RUNNER);
+#undef RUNNER
             close(fd);
         }
     }
+    asa_cfg_t            mock_storage_cfg = {.base_path = env.sys_base_path};
     asa_op_localfs_cfg_t mock_asaobj = {
         .loop = uv_default_loop(),
         .file = {.file = -1},
-        .super = {.op = {.scandir = {.cb = utest_5_asa_mock_cb, .path = EXPECT_BASEPATH}}}
+        .super =
+            {.op = {.scandir = {.cb = utest_5_asa_mock_cb, .path = EXPECT_BASEPATH}},
+             .storage = &mock_storage_cfg}
     };
     ASA_RES_CODE result = app_storage_localfs_scandir(&mock_asaobj.super);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
@@ -497,11 +562,11 @@ Ensure(storage_localfs_scandir_test) {
     } // end of loop
     { // tear down
         for (idx = 0; idx < EXPECT_NUM_DIRS; idx++)
-            rmdir(expect_path_dirs[idx]);
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_path_dirs[idx], rmdir);
         for (idx = 0; idx < EXPECT_NUM_FILES; idx++)
-            unlink(expect_path_files[idx]);
-        rmdir(EXPECT_BASEPATH);
-        rmdir("./tmp/utest");
+            PATH_CONCAT_THEN_RUN(env.sys_base_path, expect_path_files[idx], unlink);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, EXPECT_BASEPATH, rmdir);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, "./tmp/utest", rmdir);
     }
 } // end of storage_localfs_scandir_test
 #undef EXPECT_DIR_PATHS

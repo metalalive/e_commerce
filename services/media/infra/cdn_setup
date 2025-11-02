@@ -1,0 +1,21 @@
+
+# SET(DEV_CDN_CFG_PATH   ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-cdn.json)
+# IF(DEFINED NGINX_INSTALL_PATH)
+#     SET(NGINX_EXECUTABLE_PATH  ${NGINX_INSTALL_PATH}/sbin/nginx)
+#     SET(NGINX_CONFIG_BASEPATH  ${NGINX_INSTALL_PATH}/conf)
+#     IF(EXISTS ${NGINX_EXECUTABLE_PATH} AND EXISTS ${NGINX_CONFIG_BASEPATH}
+#             AND EXISTS ${NGINX_INSTALL_PATH}/logs)
+#         SET(NGINX_PATH_EXISTS  ON)
+#     ELSE()
+#         SET(NGINX_PATH_EXISTS  OFF)
+#     ENDIF()
+# ELSE()
+#     SET(NGINX_PATH_EXISTS  OFF)
+# ENDIF()
+
+python3 -m  media.task_loader DevAppCdnCertRenewal  ${DEV_CDN_CFG_PATH}
+
+python3 -m  media.task_loader NginxConfigGenerator  ${DEV_CDN_CFG_PATH}  ${CDN_USERNAME}  ${CDN_USERGRP}  2  ${DEV_APPCFG_PATH}  ${APP_REP1_CFG_PATH}
+
+sudo -u ${CDN_USERNAME} python3 -m  media.task_loader NginxPathSetup   ${DEV_CDN_CFG_PATH}  ${NGINX_INSTALL_PATH}
+

@@ -54,7 +54,6 @@ int main(int argc, char **argv) {
 
     TestSuite    *suite = create_named_test_suite("media_app_unit_test");
     TestReporter *reporter = create_text_reporter();
-    app_global_cfg_set_exepath("./media/build/unit_test.out");
     add_suite(suite, appserver_cfg_parser_tests());
     add_suite(suite, app_rpc_cfg_parser_tests());
     add_suite(suite, app_rpc_core_tests());

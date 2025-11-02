@@ -142,8 +142,7 @@ void atfp_storage__commit_new_version(atfp_t *processor) { // ensure discarding 
     assert(asa_dst->op.mkdir.path.prefix);
     assert(asa_dst->op.mkdir.path.origin);
     nwrite = sprintf(
-        asa_dst->op.mkdir.path.prefix, "%s/%d/%08x", asa_dst->storage->base_path, processor->data.usr_id,
-        processor->data.upld_req_id
+        asa_dst->op.mkdir.path.prefix, "%d/%08x", processor->data.usr_id, processor->data.upld_req_id
     );
     asa_dst->op.mkdir.path.prefix[nwrite++] = 0x0; // NULL-terminated
     nwrite = sprintf(asa_dst->op.mkdir.path.origin, "%s", ATFP__DISCARDING_FOLDER_NAME);
@@ -346,7 +345,6 @@ static void _atfp_remote_rmdir_g_rmdir_start(asa_op_base_cfg_t *asa_remote, json
     asa_remote->op.rmdir.path = asa_remote->op.scandir.path;
     asa_remote->op.rmdir.cb = _atfp_remote_rmdir_g_rmdir_done;
     ASA_RES_CODE result = asa_remote->storage->ops.fn_rmdir(asa_remote);
-    asa_remote->op.rmdir.path = NULL;
     if (result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "transcode", json_string("[storage] failed to issue rmdir operation"));
         fprintf(

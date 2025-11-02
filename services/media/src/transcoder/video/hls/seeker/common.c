@@ -67,7 +67,8 @@ void atfp_hls_stream_seeker__init_common(
         goto error;
     }
     void *loop = (void *)json_integer_value(json_object_get(spec, "loop"));
-    if (!strcmp(storage_alias, "localfs")) // TODO
+    // TODO, better approach to replace downcasting
+    if (!strcmp(storage_alias, "persist_usr_asset"))
         ((asa_op_localfs_cfg_t *)asa_src)->loop = loop;
     hlsproc->asa_local.loop = loop;
     asa_src->deinit = _atfp_hls__stream_seeker_asasrc_deinit;
@@ -133,15 +134,12 @@ ASA_RES_CODE atfp_hls_stream__load_crypto_key__async(atfp_hls_t *hlsproc, asa_cl
     uint32_t           _usr_id = processor->data.usr_id;
     uint32_t           _upld_req_id = processor->data.upld_req_id;
     asa_op_base_cfg_t *_asa_local = &hlsproc->asa_local.super;
-    app_cfg_t         *acfg = app_get_global_cfg();
-#define PATH_PATTERN "%s/%d/%08x/%s"
-    size_t filepath_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + USR_ID_STR_SIZE +
-                         UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(HLS_CRYPTO_KEY_FILENAME);
+#define PATH_PATTERN "%d/%08x/%s"
+    size_t filepath_sz = sizeof(PATH_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) +
+                         sizeof(HLS_CRYPTO_KEY_FILENAME);
     char   filepath[filepath_sz];
-    size_t nwrite = snprintf(
-        &filepath[0], filepath_sz, PATH_PATTERN, acfg->tmp_buf.path, _usr_id, _upld_req_id,
-        HLS_CRYPTO_KEY_FILENAME
-    );
+    size_t nwrite =
+        snprintf(&filepath[0], filepath_sz, PATH_PATTERN, _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME);
 #undef PATH_PATTERN
     assert(filepath_sz >= nwrite);
     _asa_local->op.close.cb = _cb;

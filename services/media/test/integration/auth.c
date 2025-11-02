@@ -109,14 +109,14 @@ int add_auth_token_to_http_header(
     return 0;
 } // end of add_auth_token_to_http_header
 
-void init_mock_auth_server(const char *tmpfile_path) {
+void init_mock_auth_jwks(const char *tmpfile_path) {
     json_error_t jerr = {0};
     json_t      *jsnobj = json_load_file(tmpfile_path, O_RDONLY, &jerr);
     assert(jsnobj);
     assert(r_jwks_init(&_mock_jwks.privkey) == RHN_OK);
     assert(r_jwks_import_from_json_t(_mock_jwks.privkey, jsnobj) == RHN_OK);
     json_decref(jsnobj);
-} // end of init_mock_auth_server
+}
 
 void deinit_mock_auth_server(void) { r_jwks_free(_mock_jwks.privkey); } // end of deinit_mock_auth_server
 

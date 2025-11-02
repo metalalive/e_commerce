@@ -45,10 +45,6 @@ static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
     }
     // TODO, deallocate space assigned to worker threads
     h2o_config_dispose(&app_cfg->server_glb_cfg);
-    if (app_cfg->tmp_buf.path) {
-        free(app_cfg->tmp_buf.path);
-        app_cfg->tmp_buf.path = NULL;
-    }
     if (app_cfg->jwks.handle != NULL) {
         r_jwks_free(app_cfg->jwks.handle);
         app_cfg->jwks.handle = NULL;

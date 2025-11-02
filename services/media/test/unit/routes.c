@@ -1,7 +1,9 @@
 #include <h2o.h>
 #include <h2o/serverutil.h>
 #include <cgreen/cgreen.h>
+#include <stdio.h>
 #include "datatypes.h"
+#include "utils.h"
 #include "routes.h"
 
 #define RESTAPI_ENDPOINT_HANDLER(func_name, http_method, hdlr_var, req_var) \
@@ -21,16 +23,22 @@ Ensure(setup_route_test) {
     h2o_globalconf_t glbl_cfg;
     h2o_iovec_t      host = {.base = "localhost", .len = 9};
     uint16_t         port = 8010;
-    const char      *exe_path = "./media/build/unit_test.out";
-    int              result = 0;
     h2o_config_init(&glbl_cfg);
     h2o_hostconf_t *hostcfg = h2o_config_register_host(&glbl_cfg, host, port);
-    json_t         *urls_cfg = json_array();
+    const char     *basepath = getenv("SYS_BASE_PATH");
+#define EXE_REL_PATH "./media/build/unit_test.out"
+    size_t exe_fullpath_sz = strlen(basepath) + sizeof(EXE_REL_PATH) + 2;
+    char   exe_fullpath[exe_fullpath_sz];
+#define RUNNER(src) strcpy(exe_fullpath, src)
+    PATH_CONCAT_THEN_RUN(basepath, EXE_REL_PATH, RUNNER);
+#undef RUNNER
+#undef EXE_REL_PATH
+    json_t *urls_cfg = json_array();
     // sub case #1, wrong handler function name
     json_array_append_new(urls_cfg, json_object());
     json_object_set_new(json_array_get(urls_cfg, 0), "path", json_string("/v3/service_XYZ/func123"));
     json_object_set_new(json_array_get(urls_cfg, 0), "entry_fn", json_string("service_xyz_action_one"));
-    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
+    int result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_fullpath);
     assert_that(result, is_equal_to(0));
     assert_that(hostcfg->paths.size, is_equal_to(0));
     // sub case #2, multiple handler functions pointing to one API endpoint (different HTTP methods)
@@ -41,7 +49,7 @@ Ensure(setup_route_test) {
     json_object_set_new(
         json_array_get(urls_cfg, 1), "entry_fn", json_string("_test_service_xyz_action_discard")
     );
-    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_fullpath);
     assert_that(hostcfg->paths.size, is_equal_to(1));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));
     assert_that(
@@ -60,7 +68,7 @@ Ensure(setup_route_test) {
     json_object_set_new(
         json_array_get(urls_cfg, 0), "entry_fn", json_string("_test_service_antutu_action_edit")
     );
-    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_fullpath);
     assert_that(hostcfg->paths.size, is_equal_to(2));
     assert_that(hostcfg->paths.entries[1]->path.base, is_equal_to_string("/v3/service_An22/bch"));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));
@@ -77,7 +85,7 @@ Ensure(setup_route_test) {
     json_object_set_new(
         json_array_get(urls_cfg, 0), "entry_fn", json_string("_test_service_n22_melon_action_add")
     );
-    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_fullpath);
     assert_that(hostcfg->paths.size, is_equal_to(3));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_An22/bch/melon"));
     assert_that(hostcfg->paths.entries[1]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));

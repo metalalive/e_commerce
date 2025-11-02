@@ -1,0 +1,106 @@
+services:
+  mariadb-media:
+    image: mariadb-ext:11-noble
+    container_name: media-generic-mariadb
+    pull_policy: never
+    restart: no
+    environment:
+      - DB_NAME=ecommerce_media
+    ports:
+      # Maps port 3312 on the host to port 3313 in the container
+      - "3312:3313"
+    volumes:
+      - ./mariadb-cfg/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh:ro
+      # use environment variable interpolation for database storage files
+      # Mounts the host directory for persistent data storage.
+      # This is a bind mount to a specific path on your host machine.
+      - ${MARIADB_DATA_VOL}:/var/lib/mysql
+      # mount log / error files for troubleshooting
+      - ${MARIADB_LOG_VOL}:/var/log/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping --host=localhost --port=3313 --user=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --silent || exit 1"]
+      interval: 18s
+      timeout: 7s
+      retries: 3
+      start_period: 65s
+
+  db-schema-migration-up-media:
+    container_name: media-unknown-db-schema-upgrade
+    image: liquibase:4.33-alpine
+    restart: no
+    volumes:
+      - ../migration:/liquibase/changelog:ro
+      - ../liquibase.properties:/liquibase/liquibase.properties:ro
+    # environment variable expansion is part of shell-specific features, here
+    # it is required to explicitly specify which shell to run the command.
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3313/ecommerce_media --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info update"]
+    depends_on:
+      mariadb-media:
+        condition: service_healthy
+
+  db-schema-migration-down-media:
+    container_name: media-unknown-db-schema-downgrade
+    image: liquibase:4.33-alpine
+    profiles:
+      - cleandbschema
+    restart: no
+    volumes:
+      - ../migration:/liquibase/changelog:ro
+      - ../liquibase.properties:/liquibase/liquibase.properties:ro
+    command: ["/bin/sh", "-c", "liquibase --defaults-file=/liquibase/liquibase.properties --url=jdbc:mariadb://$${DB_HOST}:3313/ecommerce_media --username=$${SITEDBA_UNAME} --password=$${SITEDBA_PASSWORD} --search-path=/liquibase/changelog --log-level=info  rollback  $${MIGRATE_VERSION_TAG}"]
+
+  renew-cert-media:
+    container_name: media-unknown-cert-renew
+    image: media-helper-tool:latest
+    pull_policy: never
+    restart: no
+    environment:
+      - SYS_BASE_PATH=/app
+    volumes:
+      - ./task_loader.py:/app/media/infra/task_loader.py:ro
+      - ./renew_certs.py:/app/media/infra/renew_certs.py:ro
+      - ./render_template.py:/app/media/infra/render_template.py:ro
+    working_dir: /app/media
+    command: ["/bin/sh", "-c", "python -m infra.task_loader AppSrvCertRenewal $${CONFIG_FILE_PATH}"]
+
+  api-server-media:
+    container_name: media-unknown-apisrv
+    image: media-backend-base:latest
+    pull_policy: never
+    ports:
+      - "8010:8010"
+    environment:
+      - DB_PORT=3313
+      - SYS_BASE_PATH=/app
+      - HEALTH_CHECK_CERT_PATH=/app/media/data/certs/ca.crt
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    # gdb -args # for debugging
+    # valgrind --leak-check=full # for extra memory check
+    command: ["/bin/sh", "-c", "./app_server.out media/build/app_server.out $${CONFIG_FILE_PATH}"]
+    healthcheck:
+      test: ["CMD-SHELL", "./appserver_health_check.out --timeout-secs 6 --port 8010 --host $${API_HOST} --uri-path /file  --cert-path $${HEALTH_CHECK_CERT_PATH} "]
+      interval: 98s
+      timeout: 10s
+      retries: 2
+      start_period: 25s
+    depends_on:
+      db-schema-migration-up-media:
+        condition: service_completed_successfully
+      renew-cert-media:
+        condition: service_completed_successfully
+
+  rpc-consumer-media:
+    container_name: media-unknown-rpcconsumer
+    image: media-backend-base:latest
+    pull_policy: never
+    environment:
+      - DB_PORT=3313
+      - SYS_BASE_PATH=/app
+    stop_signal: SIGTERM
+    working_dir: /app/media/build
+    command: ["/bin/sh", "-c", "./rpc_consumer.out media/build/rpc_consumer.out $${CONFIG_FILE_PATH}"]
+    depends_on:
+      db-schema-migration-up-media:
+        condition: service_completed_successfully
+

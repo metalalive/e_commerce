@@ -5,6 +5,8 @@
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
 #include <uv.h>
+#include "app_cfg.h"
+#include "utils.h"
 
 #include "transcoder/file_processor.h"
 #define UTEST_STRINGIFY(x) #x
@@ -12,6 +14,10 @@
 #define LOCAL_TMPBUF_BASEPATH          "tmp/utest"
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
+
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define RUNNER_OPEN_CREATE(fullpath)   open(fullpath, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR)
+#define RUNNER_ACCESS_F_OK(fullpath)   access(fullpath, F_OK)
 
 #define UTEST_USER_ID            438
 #define UTEST_UPLOAD_REQ_ID      0xe138d1a6
@@ -56,53 +62,66 @@ _atfp_utest__commit_version__construct_path(char *out, size_t o_sz, const char *
 
 static void
 _atfp_utest__commit_version__files_setup(const char *status, const char **fnames, size_t fname_sz) {
-    int idx = 0, fd = -1;
+    int           idx = 0, fd = -1;
+    app_envvars_t env = {0}; // Declared here to make env.sys_base_path accessible within the macro
+    app_load_envvars(&env);  // Populate env.sys_base_path
     for (idx = 0; idx < fname_sz; idx++) {
-        size_t fullpath_sz = strlen(UTEST_FILEREQ_PATH "/") + strlen(status) + strlen("/") +
-                             strlen(UTEST_VERSION "/") + strlen(fnames[idx]) + 1;
-        char fullpath[fullpath_sz];
-        _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
-        fd = open(&fullpath[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        size_t localpath_sz = strlen(UTEST_FILEREQ_PATH "/") + strlen(status) + strlen("/") +
+                              strlen(UTEST_VERSION "/") + strlen(fnames[idx]) + 1;
+        char localpath[localpath_sz];
+        _atfp_utest__commit_version__construct_path(&localpath[0], localpath_sz, status, fnames[idx]);
+        fd = PATH_CONCAT_THEN_RUN(env.sys_base_path, localpath, RUNNER_OPEN_CREATE);
         close(fd);
     } // end of loop
 } // end of _atfp_utest__commit_version__files_setup
 
 static void
 _atfp_utest__commit_version__files_teardown(const char *status, const char **fnames, size_t fname_sz) {
-    int idx = 0;
+    int           idx = 0;
+    app_envvars_t env = {0}; // Declared here to make env.sys_base_path accessible within the macro
+    app_load_envvars(&env);  // Populate env.sys_base_path
     for (idx = 0; idx < fname_sz; idx++) {
         size_t fullpath_sz = strlen(UTEST_FILEREQ_PATH "/") + strlen(status) + strlen("/") +
                              strlen(UTEST_VERSION "/") + strlen(fnames[idx]) + 1;
         char fullpath[fullpath_sz];
         _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
-        unlink(&fullpath[0]);
+        PATH_CONCAT_THEN_RUN(env.sys_base_path, fullpath, unlink);
     } // end of loop
 } // end of _atfp_utest__commit_version__files_teardown
 
 static void _atfp_utest__commit_version__verify_existence(
     const char *status, const char **fnames, size_t fname_sz, int expect_ret
 ) {
-    int idx = 0, ret = 0;
+    int           idx = 0, ret = 0;
+    app_envvars_t env = {0}; // Declared here to make env.sys_base_path accessible within the macro
+    app_load_envvars(&env);  // Populate env.sys_base_path
     for (idx = 0; idx < fname_sz; idx++) {
         size_t fullpath_sz = strlen(UTEST_FILEREQ_PATH "/") + strlen(status) + strlen("/") +
                              strlen(UTEST_VERSION "/") + strlen(fnames[idx]) + 1;
         char fullpath[fullpath_sz];
         _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
-        ret = access(&fullpath[0], F_OK);
+        ret = PATH_CONCAT_THEN_RUN(env.sys_base_path, fullpath, RUNNER_ACCESS_F_OK);
         assert_that(ret, is_equal_to(expect_ret));
     } // end of loop
 } // end of  _atfp_utest__commit_version__verify_existence
 
 #define UTEST__COMMIT_VERSION_SETUP \
-    char       mkdir_path_prefix[UTEST_FILEREQ_PATH_SZ] = {0}; \
-    char       mkdir_path_origin[UTEST_STATUS_PATH_SZ] = {0}; \
-    char       mkdir_path_currparent[UTEST_VER_FULLPATH_SZ] = {0}; \
-    uint8_t    done_flag = 0; \
-    uv_loop_t *loop = uv_default_loop(); \
-    void      *asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    asa_cfg_t  mock_storage_cfg = { \
-         .base_path = LOCAL_TMPBUF_BASEPATH, \
-         .ops = {.fn_mkdir = app_storage_localfs_mkdir, .fn_rename = app_storage_localfs_rename} \
+    app_envvars_t env = {0}; \
+    char          mkdir_path_prefix[UTEST_FILEREQ_PATH_SZ] = {0}; \
+    char          mkdir_path_origin[UTEST_STATUS_PATH_SZ] = {0}; \
+    char          mkdir_path_currparent[UTEST_VER_FULLPATH_SZ] = {0}; \
+    uint8_t       done_flag = 0; \
+    uv_loop_t    *loop = uv_default_loop(); \
+    void         *asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    app_load_envvars(&env); \
+    size_t full_tmpbuf_basepath_sz = strlen(env.sys_base_path) + strlen(LOCAL_TMPBUF_BASEPATH) + 2; \
+    char  *full_tmpbuf_basepath = (char *)malloc(full_tmpbuf_basepath_sz); \
+    snprintf( \
+        full_tmpbuf_basepath, full_tmpbuf_basepath_sz, "%s/%s", env.sys_base_path, LOCAL_TMPBUF_BASEPATH \
+    ); \
+    asa_cfg_t mock_storage_cfg = { \
+        .base_path = full_tmpbuf_basepath, \
+        .ops = {.fn_mkdir = app_storage_localfs_mkdir, .fn_rename = app_storage_localfs_rename} \
     }; \
     asa_op_localfs_cfg_t mock_asa_dst = \
         {.loop = loop, \
@@ -130,29 +149,51 @@ static void _atfp_utest__commit_version__verify_existence(
     }; \
     asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
     asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    mkdir(LOCAL_TMPBUF_BASEPATH, S_IRWXU); \
-    mkdir(LOCAL_TMPBUF_BASEPATH "/" UTEST_USER_ID__STR, S_IRWXU); \
-    mkdir(UTEST_FILEREQ_PATH, S_IRWXU); \
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME, S_IRWXU); \
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, LOCAL_TMPBUF_BASEPATH "/" UTEST_USER_ID__STR, RUNNER_CREATE_FOLDER \
+    ); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILEREQ_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME, RUNNER_CREATE_FOLDER \
+    ); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION, \
+        RUNNER_CREATE_FOLDER \
+    );
 
 #define UTEST__COMMIT_VERSION_TEARDOWN \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION); \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME); \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION); \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME); \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME "/" UTEST_VERSION); \
-    rmdir(UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME); \
-    rmdir(UTEST_FILEREQ_PATH); \
-    rmdir(LOCAL_TMPBUF_BASEPATH "/" UTEST_USER_ID__STR); \
-    rmdir(LOCAL_TMPBUF_BASEPATH); \
-    json_decref(mock_errinfo);
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION, \
+        rmdir \
+    ); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME, rmdir \
+    ); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION, rmdir \
+    ); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME, rmdir); \
+    PATH_CONCAT_THEN_RUN( \
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME "/" UTEST_VERSION, rmdir \
+    ); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, UTEST_FILEREQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_BASEPATH "/" UTEST_USER_ID__STR, rmdir); \
+    PATH_CONCAT_THEN_RUN(env.sys_base_path, LOCAL_TMPBUF_BASEPATH, rmdir); \
+    json_decref(mock_errinfo); \
+    free(mock_storage_cfg.base_path);
 
 #define EXPECT_VERSION_EXIST_FLAG 1
 Ensure(atfp_test__commit_version__discard_old) {
     UTEST__COMMIT_VERSION_SETUP;
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME, S_IRWXU);
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME, RUNNER_CREATE_FOLDER
+    );
+    PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION,
+        RUNNER_CREATE_FOLDER
+    );
     const char *committing_fnames[EXPECT_COMMITTING_NFILES] = EXPECT_COMMITTING_FILENAMES;
     const char *discarding_fnames[EXPECT_DISCARDING_NFILES] = EXPECT_DISCARDING_FILENAMES;
     _atfp_utest__commit_version__files_setup(
@@ -175,7 +216,10 @@ Ensure(atfp_test__commit_version__discard_old) {
         _atfp_utest__commit_version__verify_existence(
             ATFP__DISCARDING_FOLDER_NAME, (const char **)discarding_fnames, EXPECT_DISCARDING_NFILES, 0
         );
-        int ret = access(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION, F_OK);
+        int ret = PATH_CONCAT_THEN_RUN(
+            env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION,
+            RUNNER_ACCESS_F_OK
+        );
         assert_that(ret, is_equal_to(-1));
     }
     _atfp_utest__commit_version__files_teardown(
@@ -206,9 +250,15 @@ Ensure(atfp_test__commit_new_version) {
         _atfp_utest__commit_version__verify_existence(
             ATFP__COMMITTED_FOLDER_NAME, (const char **)committing_fnames, EXPECT_COMMITTING_NFILES, 0
         );
-        int ret = access(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION, F_OK);
+        int ret = PATH_CONCAT_THEN_RUN(
+            env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION,
+            RUNNER_ACCESS_F_OK
+        );
         assert_that(ret, is_equal_to(-1));
-        ret = access(UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME "/" UTEST_VERSION, F_OK);
+        ret = PATH_CONCAT_THEN_RUN(
+            env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__DISCARDING_FOLDER_NAME "/" UTEST_VERSION,
+            RUNNER_ACCESS_F_OK
+        );
         assert_that(ret, is_equal_to(-1));
     }
     _atfp_utest__commit_version__files_teardown(
@@ -221,8 +271,13 @@ Ensure(atfp_test__commit_new_version) {
 #define EXPECT_VERSION_EXIST_FLAG 0
 Ensure(atfp_test__commit_version__dup_error) {
     UTEST__COMMIT_VERSION_SETUP;
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME, S_IRWXU);
-    mkdir(UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION, S_IRWXU);
+    PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME, RUNNER_CREATE_FOLDER
+    );
+    PATH_CONCAT_THEN_RUN(
+        env.sys_base_path, UTEST_FILEREQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME "/" UTEST_VERSION,
+        RUNNER_CREATE_FOLDER
+    );
     const char *committing_fnames[EXPECT_COMMITTING_NFILES] = EXPECT_COMMITTING_FILENAMES;
     const char *discarding_fnames[EXPECT_DISCARDING_NFILES] = EXPECT_DISCARDING_FILENAMES;
     _atfp_utest__commit_version__files_setup(

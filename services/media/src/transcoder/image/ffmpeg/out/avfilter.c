@@ -1,11 +1,13 @@
+#include <libgen.h>
 #include "app_cfg.h"
 #include "transcoder/image/ffmpeg.h"
 #include "transcoder/common/ffmpeg.h"
+#include "utils.h"
 
 #define AVFILTER_INPUT_PAD_LABEL  "nodestart"
 #define AVFILTER_OUTPUT_PAD_LABEL "nodesink"
 
-#define FILT_SPEC_MASK  "movie=%s/%s"
+#define FILT_SPEC_MASK  "movie=%s/%s/%s"
 #define FILT_SPEC_SCALE "scale=%u:%u"
 #define FILT_SPEC_CROP  "crop=%u:%u:%d:%d"
 
@@ -19,26 +21,37 @@
         "[" AVFILTER_INPUT_PAD_LABEL "]" FILT_SPEC_CROP "," FILT_SPEC_SCALE "[" AVFILTER_OUTPUT_PAD_LABEL "]"
 #endif
 static int _atfp_img__gen_filter_spec(json_t *filt_spec, char *out, size_t out_sz) {
-    int            err = 0;
-    json_t        *_msk_item = json_object_get(filt_spec, "mask");
-    json_t        *_crop_item = json_object_get(filt_spec, "crop");
-    json_t        *_scale_item = json_object_get(filt_spec, "scale");
-    uint32_t       scale_h = json_integer_value(json_object_get(_scale_item, "height"));
-    uint32_t       scale_w = json_integer_value(json_object_get(_scale_item, "width"));
-    uint32_t       crop_h = json_integer_value(json_object_get(_crop_item, "height"));
-    uint32_t       crop_w = json_integer_value(json_object_get(_crop_item, "width"));
-    int            crop_pos_x = json_integer_value(json_object_get(_crop_item, "x"));
-    int            crop_pos_y = json_integer_value(json_object_get(_crop_item, "y"));
-    const char    *_msk_patt_label = json_string_value(json_object_get(_msk_item, "pattern"));
+    int         err = 0;
+    json_t     *_msk_item = json_object_get(filt_spec, "mask");
+    json_t     *_crop_item = json_object_get(filt_spec, "crop");
+    json_t     *_scale_item = json_object_get(filt_spec, "scale");
+    uint32_t    scale_h = json_integer_value(json_object_get(_scale_item, "height"));
+    uint32_t    scale_w = json_integer_value(json_object_get(_scale_item, "width"));
+    uint32_t    crop_h = json_integer_value(json_object_get(_crop_item, "height"));
+    uint32_t    crop_w = json_integer_value(json_object_get(_crop_item, "width"));
+    int         crop_pos_x = json_integer_value(json_object_get(_crop_item, "x"));
+    int         crop_pos_y = json_integer_value(json_object_get(_crop_item, "y"));
+    const char *_msk_patt_label = json_string_value(json_object_get(_msk_item, "pattern"));
+    // TODO, save path to mask file in filter spec, instead of calling global
+    // config object and retrieving the field.
     app_cfg_t     *acfg = app_get_global_cfg();
     aav_cfg_img_t *_imgcfg = &acfg->transcoder.output.image;
-    json_t        *msk_fmap = atfp_image_mask_pattern_index(_imgcfg->mask.basepath);
+    const char    *sys_basepath = acfg->env_vars.sys_base_path;
+    const char    *msk_idxpath = _imgcfg->mask.indexpath;
+#define RUNNER(fullpath) atfp_image_mask_pattern_index(fullpath)
+    json_t *msk_fmap = PATH_CONCAT_THEN_RUN(sys_basepath, msk_idxpath, RUNNER);
+#undef RUNNER
     if (msk_fmap) { // avfilter_graph_parse_ptr() will examine existence of the mask pattern file
 #if 1
+        size_t buf_sz = strlen(msk_idxpath);
+        char   buf[buf_sz];
+        strcpy(buf, msk_idxpath);
+        char *msk_basepath = dirname(buf);
+        assert(msk_basepath);
         const char *patt_filename = json_string_value(json_object_get(msk_fmap, _msk_patt_label));
         size_t      nwrite = snprintf(
-            out, out_sz, FILT_SPEC_PATTERN, _imgcfg->mask.basepath, patt_filename, scale_w, scale_h, crop_w,
-            crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h
+            out, out_sz, FILT_SPEC_PATTERN, sys_basepath, msk_basepath, patt_filename, scale_w, scale_h,
+            crop_w, crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h
         );
 #else
         size_t nwrite = snprintf(
@@ -204,14 +217,17 @@ void atfp__image_dst__avfilt_init(
         }
         filt_out->name = av_strdup(AVFILTER_INPUT_PAD_LABEL);
         filt_in->name = av_strdup(AVFILTER_OUTPUT_PAD_LABEL);
-        err = avfilter_graph_parse_ptr(
-            _img_enc_ctx->filter_graph, &filter_spec_raw[0], &filt_in, &filt_out, NULL
-        );
+        err =
+            avfilter_graph_parse_ptr(_img_enc_ctx->filter_graph, filter_spec_raw, &filt_in, &filt_out, NULL);
         if (err < 0) {
             json_object_set_new(
                 err_info, "transcoder",
                 json_string("[img][ff_out][filter]"
                             " failed to build filter graph")
+            );
+            av_log(
+                NULL, AV_LOG_ERROR, "[atfp][img][ff_out][filter] line:%d, error:%d, raw-spec: %s \n",
+                __LINE__, err, filter_spec_raw
             );
             goto done;
         } // TODO, valgrind will crash if the function returns with error, figure out why

@@ -4,10 +4,11 @@
 
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
+#include "utils.h"
 
 extern const atfp_ops_entry_t atfp_ops_image_ffmpg_out;
 
-#define UTEST_SRC_FILE_LOCALBUF_PATH "/path/to/src/buff"
+#define UTEST_SRC_FILE_LOCALBUF_PATH "continue/toward/buff"
 #define UTEST_REMOTE_FILE_PATH       "/path/to/remote"
 #define UTEST_FP_VERSION             "GY"
 #define UTEST_SPEC_TOPLVL_SERIAL     "{\"outputs\":{\"" UTEST_FP_VERSION "\":{}}}"
@@ -61,9 +62,8 @@ static void utest_atfp_img_ffo__usr_cb(atfp_t *processor) { mock(processor); }
     json_t *mock_spec = json_loadb(UTEST_SPEC_TOPLVL_SERIAL, sizeof(UTEST_SPEC_TOPLVL_SERIAL) - 1, 0, NULL); \
     atfp_av_ctx_t mock_avctx_src = {0}; \
     atfp_img_t    mock_fp_src = { \
-           .super = {.backend_id = ATFP_BACKEND_LIB__UNKNOWN}, \
            .av = &mock_avctx_src, \
-           .super = {.data = {.storage = {.handle = &mock_asa_src}}} \
+           .super = {.backend_id = ATFP_BACKEND_LIB__UNKNOWN, .data = {.storage = {.handle = &mock_asa_src}}} \
     }; \
     asasrc_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp_src; \
     asasrc_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map;
@@ -80,6 +80,7 @@ static void utest_atfp_img_ffo__usr_cb(atfp_t *processor) { mock(processor); }
 #define UTEST_FFM_INIT_SETUP \
     UTEST_FFM_COMMON_SETUP \
     asa_cfg_t mock_storage_cfg = { \
+        .base_path = "/path/to/local/dst", \
         .ops = \
             {.fn_unlink = utest_img_ffo__asalocal_fn_unlink, .fn_close = utest_img_ffo__asalocal_fn_close} \
     }; \
@@ -99,9 +100,14 @@ static void utest_atfp_img_ffo__usr_cb(atfp_t *processor) { mock(processor); }
     mock_fp_dst->ops.dst.avctx_deinit = utest_img_ffo__avctx_deinit; \
     mock_fp_dst->ops.dst.avfilter_init = utest_img_ffo__avfilt_init; \
     asadst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = mock_fp_dst; \
-    asadst_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map;
+    asadst_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
+    char *expect_fullpath_read = PATH_CONCAT_THEN_RUN( \
+        mock_storage_cfg.base_path, UTEST_SRC_FILE_LOCALBUF_PATH "." UTEST_FP_VERSION, strdup \
+    );
 
-#define UTEST_FFM_INIT_TEARDOWN UTEST_FFM_COMMON_TEARDOWN
+#define UTEST_FFM_INIT_TEARDOWN \
+    free(expect_fullpath_read); \
+    UTEST_FFM_COMMON_TEARDOWN
 
 Ensure(atfp_img_ffo_test__init_ok) {
     UTEST_FFM_INIT_SETUP
@@ -110,8 +116,8 @@ Ensure(atfp_img_ffo_test__init_ok) {
     {
         expect(
             utest_img_ffo__avctx_init, will_return(0), when(src, is_equal_to(&mock_avctx_src)),
-            when(filepath, is_equal_to_string(UTEST_SRC_FILE_LOCALBUF_PATH "." UTEST_FP_VERSION)),
-            when(dst, is_not_null), when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
+            when(filepath, is_equal_to_string(expect_fullpath_read)), when(dst, is_not_null),
+            when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
         );
         expect(
             utest_img_ffo__avfilt_init, will_return(0), when(src, is_equal_to(&mock_avctx_src)),
@@ -140,8 +146,8 @@ Ensure(atfp_img_ffo_test__avctx_error) {
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__FFMPEG;
     expect(
         utest_img_ffo__avctx_init, will_return(expect_err), when(src, is_equal_to(&mock_avctx_src)),
-        when(filepath, is_equal_to_string(UTEST_SRC_FILE_LOCALBUF_PATH "." UTEST_FP_VERSION)),
-        when(dst, is_not_null), when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
+        when(filepath, is_equal_to_string(expect_fullpath_read)), when(dst, is_not_null),
+        when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
     );
     expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
     atfp__image_ffm_out__init_transcode(&mock_fp_dst->super);
@@ -162,8 +168,8 @@ Ensure(atfp_img_ffo_test__avfilt_error) {
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__FFMPEG;
     expect(
         utest_img_ffo__avctx_init, will_return(0), when(src, is_equal_to(&mock_avctx_src)),
-        when(filepath, is_equal_to_string(UTEST_SRC_FILE_LOCALBUF_PATH "." UTEST_FP_VERSION)),
-        when(dst, is_not_null), when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
+        when(filepath, is_equal_to_string(expect_fullpath_read)), when(dst, is_not_null),
+        when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
     );
     expect(
         utest_img_ffo__avfilt_init, will_return(expect_err), when(src, is_equal_to(&mock_avctx_src)),

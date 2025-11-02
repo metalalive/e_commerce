@@ -1,24 +1,35 @@
+#include <sysexits.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
+#include <uchar.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 
 Ensure(appcfg_parse_errlog_path_test) {
-#define ERR_LOG_FILEPATH "./tmp/log/utest_app_err.log"
+#define ERR_LOG_FILEPATH "./log/media-utest-app-err.log"
     int       saved_stdout_fd = dup(1);
     app_cfg_t acfg = {0};
-    json_t   *obj = json_string(ERR_LOG_FILEPATH);
-    int       err = appcfg_parse_errlog_path(obj, &acfg);
-    assert_that(err, is_equal_to(0));
+    app_load_envvars(&acfg.env_vars);
+    json_t *obj = json_string(ERR_LOG_FILEPATH);
+    int     err = appcfg_parse_errlog_path(obj, &acfg);
+    assert_that(err, is_equal_to(EX_OK));
     assert_that(acfg.error_log_fd, is_greater_than(2));
-    assert_that(access(ERR_LOG_FILEPATH, F_OK), is_equal_to(0));
+    const char *basepath = acfg.env_vars.sys_base_path;
+#define UT_ACCESS(fullpath) access(fullpath, F_OK)
+    int exist_chk = PATH_CONCAT_THEN_RUN(basepath, ERR_LOG_FILEPATH, UT_ACCESS);
+    assert_that(exist_chk, is_equal_to(0));
     dup2(saved_stdout_fd, 1);
     deinit_app_cfg(&acfg);
     assert_that(acfg.error_log_fd, is_equal_to(-1));
-    unlink(ERR_LOG_FILEPATH);
-    assert_that(access(ERR_LOG_FILEPATH, F_OK), is_equal_to(-1));
+#define UT_UNLINK(fullpath) unlink(fullpath)
+    PATH_CONCAT_THEN_RUN(basepath, ERR_LOG_FILEPATH, UT_UNLINK);
+    exist_chk = PATH_CONCAT_THEN_RUN(basepath, ERR_LOG_FILEPATH, UT_ACCESS);
+    assert_that(exist_chk, is_equal_to(-1));
     json_decref(obj);
-    sleep(1); // TODO, wait until messages are redirected to stdout
+    sleep(2); // TODO, wait until messages are redirected to stdout
+#undef UT_UNLINK
+#undef UT_ACCESS
 #undef ERR_LOG_FILEPATH
 } // end of appcfg_parse_errlog_path_test
 

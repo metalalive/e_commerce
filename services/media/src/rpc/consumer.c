@@ -1,8 +1,10 @@
 #include <assert.h>
+#include <sysexits.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "timer_poll.h"
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
@@ -41,8 +43,9 @@ static int _appworker_start_timerpoll(app_ctx_msgq_t *mq);
 static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg) {
     int          err = 0;
     json_error_t jerror;
-    json_t      *root = NULL;
-    root = json_load_file(cfg_file_path, (size_t)0, &jerror);
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, &jerror);
+    json_t *root = PATH_CONCAT_THEN_RUN(app_cfg->env_vars.sys_base_path, cfg_file_path, RUNNER);
+#undef RUNNER
     if (!json_is_object(root)) {
         h2o_error_printf(
             "[parsing] decode error on JSON file %s at line %d, column %d\n", &jerror.source[0], jerror.line,
@@ -92,12 +95,12 @@ static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg) {
         goto error;
     }
     json_decref(root);
-    return 0;
+    return EX_OK;
 error:
     if (!root) {
         json_decref(root);
     }
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_params
 
 static void on_sigterm(int sig_num) {
@@ -323,7 +326,7 @@ done:
     return err;
 } // end of appworker_waiting_messages
 
-static void run_app_worker(void *data) {
+void run_app_worker(void *data) {
     struct worker_init_data_t *init_data = (struct worker_init_data_t *)data;
     app_ctx_worker_t           ctx_worker = {0};
     int                        err = appworker_init_context(&ctx_worker, init_data);
@@ -331,7 +334,7 @@ static void run_app_worker(void *data) {
         err = appworker_waiting_messages(&ctx_worker, init_data->app_cfg, init_data->loop);
     }
     appworker_deinit_context(&ctx_worker, init_data->loop);
-} // end of run_app_worker
+}
 
 static int start_workers(app_cfg_t *app_cfg) {
     size_t                    num_threads = app_cfg->workers.size + 1; // plus main thread
@@ -339,7 +342,7 @@ static int start_workers(app_cfg_t *app_cfg) {
     int                       err = appcfg_start_workers(app_cfg, &worker_data[0], run_app_worker);
     appcfg_terminate_workers(app_cfg, &worker_data[0]);
     return err;
-} // end of start_workers
+}
 
 int start_application(const char *cfg_file_path, const char *exe_path) {
     int err = 0;

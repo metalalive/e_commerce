@@ -6,7 +6,7 @@
         "payment" : "http://localhost:8015",
         "store"   : "http://localhost:8011",
         "order"   : "http://localhost:8012",
-        "media"   : "http://localhost:8010"
+        "media"   : "http://media-test-apisrv:8010"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
     "ALLOWED_HEADERS": ["authorization","content-type", "x-anti-csrf-tok", "accept"],

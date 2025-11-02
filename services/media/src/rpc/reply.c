@@ -51,12 +51,20 @@ static void _apprpc_replyq_identify_corr_id(arpc_cfg_t *cfg, arpc_exe_arg_t *arg
         const char      *q_name_patt = bind_cfg->reply.queue.name_pattern;
         const char      *corr_id_patt = bind_cfg->reply.correlation_id.name_pattern;
         FILTER_CODE(arg->routing_key, q_name_patt)
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][rpc_reply] line:%d, corr_id match attempt: received='%.*s', pattern='%s'\n",
+            __LINE__, (int)arg->job_id.len, arg->job_id.bytes, corr_id_patt
+        );
         FILTER_CODE(arg->job_id.bytes, corr_id_patt)
         json_t *reply_msgs = json_object_get(collected, corr_id_patt);
         if (!reply_msgs) {
             reply_msgs = json_array();
             json_object_set_new(collected, corr_id_patt, reply_msgs);
         }
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][rpc_reply] line:%d, corr_id MATCHED, added to pattern key:'%s', msg_sz:%ld\n",
+            __LINE__, corr_id_patt, arg->msg_body.len
+        );
         json_t *_packed = json_object(), *corr_id_item = json_object(), *msg_item = json_object();
         json_object_set_new(corr_id_item, "size", json_integer(arg->job_id.len));
         json_object_set_new(corr_id_item, "data", json_stringn(arg->job_id.bytes, arg->job_id.len));
@@ -69,9 +77,9 @@ static void _apprpc_replyq_identify_corr_id(arpc_cfg_t *cfg, arpc_exe_arg_t *arg
         break;
     } // end of loop
     if (idx == cfg->bindings.size) {
-        fprintf(
-            stderr, "[rpc][reply] line:%d, discard reply message, queue:%s, corr_id:%s \r\n", __LINE__,
-            arg->routing_key, arg->job_id.bytes
+        RPC_DEBUG_FPRINTF(
+            stderr, "[DEBUG][rpc_reply] line:%d, corr_id MISMATCH, discarding - queue:%s, corr_id:%.*s \r\n",
+            __LINE__, arg->routing_key, (int)arg->job_id.len, arg->job_id.bytes
         );
     }
 #undef FILTER_CODE
@@ -92,6 +100,10 @@ static void _apprpc_reply_update_timeout_cb(uv_timer_t *handle) {
     };
     ARPC_STATUS_CODE arpc_res =
         cfg->get_reply_fn(&arg, cfg->max_num_msgs_fetched, _apprpc_replyq_identify_corr_id);
+    RPC_DEBUG_FPRINTF(
+        stderr, "[DEBUG][rpc_reply] line:%d, fetching replies, usr_id:%u, max_msgs:%u, status:%d\n", __LINE__,
+        cfg->usr_id, cfg->max_num_msgs_fetched, arpc_res
+    );
     if (arpc_res == APPRPC_RESP_OK) {
         _continue = cfg->on_update(cfg, info, arpc_res);
     } else {

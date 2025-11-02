@@ -1,0 +1,76 @@
+{
+    "error_log": {"rpc_consumer":"log/media_rpc_consumer_mock_usrmgt.err"},
+    "rpc":[
+        {
+            "alias": "app_mqbroker_1",
+            "bindings": [
+                {
+                    "queue": "rpc_usermgt_get_profile",
+                    "exchange": "rpc-default-allapps",
+                    "routing_key": "rpc.user_management.get_profile",
+                    "durable": true,
+                    "reply": {
+                        "queue": {
+                            "pattern":"rpc.reply.media.prof_id.%u",
+                            "render_fn":"api__render_rpc_reply_qname"
+                        },
+                        "correlation_id": {
+                            "pattern":"rpc.media.get_usr_profile.corr_id.%s",
+                            "render_fn":"api__default__render_rpc_corr_id"
+                        },
+                        "task_handler": "itest_rpc_handler__verify_usr_ids",
+                        "durable": true,
+                        "ttl_sec": 180
+                    }
+                }
+            ],
+            "attributes": {
+                "vhost":"/integration_test",
+                "max_channels": 128,
+                "timeout_secs": 19,
+                "max_kb_per_frame": 35
+            },
+            "credential": {
+                "hierarchy": ["amqp_broker", 1],
+                "filepath":"common/data/secrets.json"
+            }
+        }
+    ],
+    "file_chunk": {
+        "base_folder": "tmp/test_file_chunks",
+        "files": [
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video1/file{0}", "src":"media/test/integration/examples/video1.mp4",
+                "broken":false, "num_chunks":4 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video2/file{0}", "src":"media/test/integration/examples/video2.mp4",
+                "broken":false, "num_chunks":9 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video3/file{0}", "src":"media/test/integration/examples/video3.mp4",
+                "broken":false, "num_chunks":8 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video4/file{0}", "src":"media/test/integration/examples/video4.mp4",
+                "broken":false, "num_chunks":5 },
+            {"type":"video", "subtype":"avi", "dst_pattern":"video5/file{0}", "src":"media/test/integration/examples/video5.avi",
+                "broken":false, "num_chunks":5 },
+            {"type":"image", "subtype":"jpg", "dst_pattern":"img1/file{0}", "src":"media/test/integration/examples/image1.jpg",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"jpg", "dst_pattern":"img2/file{0}", "src":"media/test/integration/examples/image2.jpg",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"png", "dst_pattern":"img3/file{0}", "src":"media/test/integration/examples/image3.png",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"png", "dst_pattern":"img4/file{0}", "src":"media/test/integration/examples/image4.png",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"gif", "dst_pattern":"img5/file{0}", "src":"media/test/integration/examples/image5.gif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"gif", "dst_pattern":"img6/file{0}", "src":"media/test/integration/examples/image6.gif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"tiff", "dst_pattern":"img7/file{0}", "src":"media/test/integration/examples/image7.tif",
+                "broken":false, "num_chunks":1 },
+            {"type":"image", "subtype":"tiff", "dst_pattern":"img8/file{0}", "src":"media/test/integration/examples/image8.tif",
+                "broken":false, "num_chunks":1 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video6/file{0}", "src":"media/test/integration/examples/incomplete.mp4",
+                "broken":true, "num_chunks":4 },
+            {"type":"video", "subtype":"mp4", "dst_pattern":"video7/file{0}", "src":"media/test/integration/examples/corrupted.mp4",
+                "broken":true, "num_chunks":3 }
+        ],
+        "output_metadata": "filechunk_metadata.json"
+    },
+    "tmp_buf": {"path": "tmp/buffer"}
+}

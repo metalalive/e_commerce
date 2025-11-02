@@ -94,7 +94,7 @@ void atfp__image_dst__avctx_init(
 ) {
     int ret = 0;
     if (dst->fmt_ctx && src->fmt_ctx && src->fmt_ctx->iformat) {
-        json_object_set_new(err_info, "transcoder", json_string("[image][ff-out] missing format context"));
+        json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] missing format context"));
         ret = AVERROR(EINVAL);
         goto done;
     }
@@ -107,7 +107,7 @@ void atfp__image_dst__avctx_init(
     if (!oformat) {
         oformat = av_guess_format("image2", NULL, NULL);
         if (!oformat) {
-            json_object_set_new(err_info, "transcoder", json_string("[image][ff-out] missing output format"));
+            json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] missing output format"));
             json_object_set_new(err_info, "ofmt_label", json_string(o_fmt_label));
             ret = AVERROR(EINVAL);
             goto done;
@@ -115,7 +115,7 @@ void atfp__image_dst__avctx_init(
     }
     ret = avformat_alloc_output_context2(&dst->fmt_ctx, oformat, NULL, filepath);
     if (ret < 0) {
-        json_object_set_new(err_info, "transcoder", json_string("[image][ff-out] failed to init failure"));
+        json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] failed to init failure"));
         goto done;
     }
     ret = _atfp_img_ff_out__av_encoder_init(dst, src, filt_spec, err_info);
@@ -124,7 +124,7 @@ void atfp__image_dst__avctx_init(
     if ((oformat->flags & AVFMT_NOFILE) == 0) {
         ret = avio_open(&dst->fmt_ctx->pb, filepath, AVIO_FLAG_WRITE);
         if (ret < 0) {
-            json_object_set_new(err_info, "transcoder", json_string("[image][ff-out] failed to open file"));
+            json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] failed to open file"));
             goto done;
         }
     }

@@ -3,6 +3,8 @@
 #include <libavcodec/avcodec.h>
 
 #include "app_cfg.h"
+#include "datatypes.h"
+#include "utils.h"
 #include "transcoder/file_processor.h"
 
 void atfp_validate_req_dup_version(const char *resource_type, json_t *spec, db_query_row_info_t *existing) {
@@ -379,7 +381,8 @@ static int _validate_image_req__scaling(
 #undef RUN_CODE
 } // end of  _validate_image_req__scaling
 
-static int _validate_image_req__mask(json_t *item, json_t *err_info, aav_cfg_img_t *img_cfg) {
+static int
+_validate_image_req__mask(json_t *item, json_t *err_info, app_envvars_t *env, aav_cfg_img_t *img_cfg) {
     int         err = 0, idx = 0;
     json_t     *err_detail = json_object();
     const char *_patt_label = json_string_value(json_object_get(item, "pattern"));
@@ -392,7 +395,9 @@ static int _validate_image_req__mask(json_t *item, json_t *err_info, aav_cfg_img
             }
         } // end of loop
         if (json_object_size(err_detail) == 0) {
-            json_t *msk_fmap = atfp_image_mask_pattern_index(img_cfg->mask.basepath);
+#define RUNNER(fullpath) atfp_image_mask_pattern_index(fullpath)
+            json_t *msk_fmap = PATH_CONCAT_THEN_RUN(env->sys_base_path, img_cfg->mask.indexpath, RUNNER);
+#undef RUNNER
             if (msk_fmap) {
                 json_t *filename_item = json_object_getn(msk_fmap, _patt_label, patt_label_sz);
                 if (filename_item && json_is_string(filename_item)) {
@@ -444,7 +449,7 @@ static void _atfp_validate_image_request(json_t *spec, json_t *err_info) {
                     goto iter_end;
             }
             if (scale_item && json_is_object(scale_item)) {
-                int err = _validate_image_req__mask(mask_item, err_info, _imgcfg);
+                int err = _validate_image_req__mask(mask_item, err_info, &acfg->env_vars, _imgcfg);
                 if (err)
                     goto iter_end;
             }

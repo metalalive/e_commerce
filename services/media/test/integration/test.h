@@ -18,7 +18,8 @@ typedef struct {
 #define ITEST_UPLD_REQ__SAME_USER__IDX_2 (ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + 2)
 
 typedef struct {
-    const char *url;
+    // relative reference of a whole URL, without domain host and port present
+    const char *url_rel_ref;
     const char *method;
     struct {
         const char *serial_txt;
@@ -45,7 +46,7 @@ typedef struct {
 typedef void (*test_verify_cb_t)(CURL *, test_setup_priv_t *, void *cb_arg);
 
 // declare & implementation in test/integration/auth.c
-void init_mock_auth_server(const char *tmpfile_path);
+void init_mock_auth_jwks(const char *tmpfile_path);
 void deinit_mock_auth_server(void);
 int  gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quota, char **out);
 int  add_auth_token_to_http_header(
@@ -67,12 +68,12 @@ TestSuite *api_start_transcoding_file_v2_tests(void);
 TestSuite *api_monitor_job_progress_tests(void);
 TestSuite *api_file_nonstream_init_tests(void);
 TestSuite *api_file_streaming_init_tests(void);
-TestSuite *api_file_stream_seek_elm_tests(void);
+TestSuite *api_file_stream_seek_elm_tests(json_t *root_cfg);
 TestSuite *api_discard_committed_file_tests(void);
 void       api_deinitiate_multipart_upload_tests(void);
 
-// declare & implementation in test/integration/rpc_consumer.c
-void itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp);
+// shared file across access-control test cases
+#define ITEST_USERMGT_MOCK_DATABASE "log/media_rpc_usermgt_mock_db.json"
 
 #ifdef __cplusplus
 } // end of extern C clause

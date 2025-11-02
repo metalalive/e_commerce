@@ -8,6 +8,21 @@ extern "C" {
 #include <search.h>
 #include <jansson.h>
 
+#define PATH_CONCAT_THEN_RUN(path1, path2, runner) \
+    ({ \
+        const char *__s1 = (path1); \
+        const char *__s2 = (path2); \
+        if (__s1 == NULL) \
+            __s1 = "."; \
+        if (__s2 == NULL) \
+            __s2 = "."; \
+        size_t m_sz = strlen(__s1) + strlen(__s2) + 2; \
+        char   merged[m_sz]; \
+        size_t wr_sz = snprintf(merged, m_sz, "%s/%s", __s1, __s2); \
+        assert(wr_sz == (m_sz - 1)); \
+        runner(merged); \
+    })
+
 typedef struct app_llnode_s {
     char                 dummy;
     struct app_llnode_s *next;

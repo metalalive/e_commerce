@@ -366,7 +366,7 @@ Ensure(atfp_test__validate_video_req__err_output_map_elm_st) {
     json_t        *mock_err_info = json_object(); \
     app_cfg_t     *acfg = app_get_global_cfg(); \
     aav_cfg_img_t *mock_imgcfg = &acfg->transcoder.output.image; \
-    mock_imgcfg->mask.basepath = msk_patt_basepath; \
+    mock_imgcfg->mask.indexpath = msk_patt_basepath; \
     mock_imgcfg->limit = (aav_cfg_resolution_pix_t){.width = _limit_width, .height = _limit_height};
 
 #define UTEST_VALIDATE_IMG_REQ__TEARDOWN \
@@ -379,7 +379,7 @@ Ensure(atfp_test__validate_video_req__err_output_map_elm_st) {
 #define OUT_ITEM3     IMG_OUTPUT_ITEM_GEN("Dh", 250, 202, 320, 240, 123, 5, "custom191")
 #define UTEST_REQBODY IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1 "," OUT_ITEM2 "," OUT_ITEM3)
 Ensure(atfp_test__validate_image_req__ok) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask/index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_equal_to(0));
@@ -387,7 +387,7 @@ Ensure(atfp_test__validate_image_req__ok) {
 } // end of atfp_test__validate_image_req__ok
 
 Ensure(atfp_test__validate_image_req__ok_spare) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask", UTEST_REQBODY) {
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask/index.json", UTEST_REQBODY) {
         json_t *outputs_item = json_object_get(mock_spec, "outputs");
         json_t *output_item = json_object_get(outputs_item, "Gx");
         json_object_del(output_item, "scale");
@@ -408,7 +408,7 @@ Ensure(atfp_test__validate_image_req__ok_spare) {
 
 #define UTEST_REQBODY IMAGE_REQ_BODY_GEN("myResID", "")
 Ensure(atfp_test__validate_image_req__empty) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask/index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_not_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_greater_than(0));
@@ -422,7 +422,7 @@ Ensure(atfp_test__validate_image_req__empty) {
 #define INVALID_OUTITEM "\"" EXPECT_VERSION "\":{\"junk\":true, \"rate\":9.040029}"
 #define UTEST_REQBODY   IMAGE_REQ_BODY_GEN("myResID", INVALID_OUTITEM)
 Ensure(atfp_test__validate_image_req__invalid_attri_version) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask/index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_not_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_greater_than(0));
@@ -441,7 +441,7 @@ Ensure(atfp_test__validate_image_req__invalid_attri_version) {
 #define OUT_ITEM2      IMG_OUTPUT_ITEM_GEN(EXPECT_VERSION, 240, 180, -1, 250, 9007, 64, "custom190")
 #define UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1 "," OUT_ITEM2)
 Ensure(atfp_test__validate_image_req__invalid_crop) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask.index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_not_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_greater_than(0));
@@ -468,7 +468,7 @@ Ensure(atfp_test__validate_image_req__invalid_crop) {
 #define OUT_ITEM1      IMG_OUTPUT_ITEM_GEN(EXPECT_VERSION, 240, 180, 230, 170, 100, 32, "custom190")
 #define UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1)
 Ensure(atfp_test__validate_image_req__invalid_scale) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask/index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_not_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_greater_than(0));
@@ -489,7 +489,7 @@ Ensure(atfp_test__validate_image_req__invalid_scale) {
 #define OUT_ITEM1     IMG_OUTPUT_ITEM_GEN("jk", 240, 180, 250, 188, 100, 32, "nonexistMask")
 #define UTEST_REQBODY IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1)
 Ensure(atfp_test__validate_image_req__mask_nonexist_pattern) {
-    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask/index.json", UTEST_REQBODY)
     int err = atfp_validate_transcode_request(APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
     assert_that(err, is_not_equal_to(0));
     assert_that(json_object_size(mock_err_info), is_greater_than(0));

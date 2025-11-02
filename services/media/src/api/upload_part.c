@@ -360,9 +360,9 @@ static void upload_part__ensure_dst_folder(
     int part = (int)app_fetch_from_hashmap(node->data, "part");
 #pragma GCC diagnostic pop
     // application can select which storage configuration to use
-    asa_cfg_t *storage = app_storage_cfg_lookup("localfs");
-    size_t dirpath_sz = strlen(storage->base_path) + 1 + USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(req_seq) +
-                        1; // assume NULL-terminated string
+    asa_cfg_t *storage = app_storage_cfg_lookup("persist_usr_asset");
+    // assume NULL-terminated string
+    size_t dirpath_sz = USR_ID_STR_SIZE + 1 + UPLOAD_INT2HEX_SIZE(req_seq) + 1;
     size_t filepath_sz = (dirpath_sz - 1) + 1 + UPLOAD_INT2HEX_SIZE(part) + 1;
     size_t cb_args_tot_sz = sizeof(void *) * 3; // for self, req, node
     size_t wr_src_buf_sz = APP_FILECHUNK_WR_BUF_SZ + 4 + mp_boundary_len;
@@ -388,7 +388,7 @@ static void upload_part__ensure_dst_folder(
         ptr += dirpath_sz;
         {
             char dirpath[dirpath_sz];
-            snprintf(&dirpath[0], dirpath_sz, "%s/%d/%08x", storage->base_path, usr_id, req_seq);
+            snprintf(&dirpath[0], dirpath_sz, "%d/%08x", usr_id, req_seq);
             dirpath[dirpath_sz - 1] = 0x0; // NULL-terminated
             memcpy(asa_cfg->super.op.mkdir.path.origin, dirpath, dirpath_sz);
         }
@@ -396,7 +396,7 @@ static void upload_part__ensure_dst_folder(
         ptr += filepath_sz;
         {
             char filepath[filepath_sz];
-            snprintf(&filepath[0], filepath_sz, "%s/%d/%08x/%d", storage->base_path, usr_id, req_seq, part);
+            snprintf(&filepath[0], filepath_sz, "%d/%08x/%d", usr_id, req_seq, part);
             filepath[filepath_sz - 1] = 0x0;
             memcpy(asa_cfg->super.op.open.dst_path, filepath, filepath_sz);
         }

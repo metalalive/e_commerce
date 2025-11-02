@@ -1,5 +1,7 @@
+#include <sysexits.h>
+#include "datatypes.h"
+#include "utils.h"
 #include "routes.h"
-#include "rpc/core.h"
 #include "rpc/cfg_parser.h"
 
 #define RPC_QUEUE_MIN_NUM_MSGS 300
@@ -62,18 +64,18 @@ int app_rpc_cfg_deinit(arpc_cfg_t *cfg) {
     return 0;
 } // end of app_rpc_cfg_deinit
 
-static int parse_cfg_rpc__broker_credential(json_t *in, arpc_cfg_t *out) {
+static int parse_cfg_rpc__broker_credential(json_t *in, arpc_cfg_t *out, app_envvars_t *env_vars) {
     const char *filepath = json_string_value(json_object_get(in, "filepath"));
     json_t     *hierarchy = json_object_get(in, "hierarchy");
-    json_t     *root = NULL;
-    json_t     *dst = NULL;
-    json_t     *hier_tag = NULL;
+    json_t     *root = NULL, *dst = NULL, *hier_tag = NULL;
     size_t      idx = 0;
     if (!filepath || !hierarchy || !json_is_array(hierarchy)) {
         h2o_error_printf("[parsing] missing filepath parameters in message broker credential\n");
         goto error;
     }
-    root = json_load_file(filepath, (size_t)0, NULL);
+#define RUNNER(fullpath) json_load_file(fullpath, (size_t)0, NULL)
+    root = PATH_CONCAT_THEN_RUN(env_vars->sys_base_path, filepath, RUNNER);
+#undef RUNNER
     if (!root) {
         h2o_error_printf("[parsing] failed to load message broker credential from file %s \n", filepath);
         goto error;
@@ -171,7 +173,9 @@ static uint8_t _app_elf_gather_rpc_handler_fn_cb(char *fn_name, void *entry_poin
     return immediate_stop;
 } // end of _app_elf_gather_rpc_handler_fn_cb
 
-static int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cfg) {
+static int parse_cfg_rpc__reply_producer(
+    json_t *obj, arpc_cfg_bind_reply_t *cfg, const char *basepath, const char *exe_rel_path
+) {
     json_t *qname_obj = json_object_get(obj, "queue");
     json_t *corr_id_obj = json_object_get(obj, "correlation_id");
     if (!qname_obj || !corr_id_obj) {
@@ -193,9 +197,9 @@ static int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cfg
             .queue_fn_name = json_string_value(json_object_get(qname_obj, "render_fn")),
             .corr_id_fn_name = json_string_value(json_object_get(corr_id_obj, "render_fn")),
         };
-        int err = app_elf_traverse_functions(
-            app_get_global_cfg()->exe_path, _app_elf_gather_rpc_reply_fns, (void *)&cb_args
-        );
+#define RUNNER(fullpath) app_elf_traverse_functions(fullpath, _app_elf_gather_rpc_reply_fns, (void *)&cb_args)
+        int err = PATH_CONCAT_THEN_RUN(basepath, exe_rel_path, RUNNER);
+#undef RUNNER
         if (!cb_args.all_fns_found) {
             h2o_error_printf("[parsing] missing rendering function for RPC reply \n");
             goto error;
@@ -211,12 +215,14 @@ static int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cfg
       .exclusive = 0,
       .auto_delete = 0,
       .durable = (uint8_t)json_boolean_value(json_object_get(obj, "durable"))};
-    return 0;
+    return EX_OK;
 error:
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_rpc__reply_producer
 
-static int parse_cfg_rpc__reply_consumer(json_t *obj, arpc_cfg_bind_reply_t *cfg) {
+static int parse_cfg_rpc__reply_consumer(
+    json_t *obj, arpc_cfg_bind_reply_t *cfg, const char *basepath, const char *exe_rel_path
+) {
     json_t     *tsk_hdlr_item = json_object_get(obj, "task_handler");
     const char *tsk_hdlr_fn_name = json_string_value(tsk_hdlr_item);
     cfg->task_handler = NULL;
@@ -230,16 +236,17 @@ static int parse_cfg_rpc__reply_consumer(json_t *obj, arpc_cfg_bind_reply_t *cfg
     rpc_reply_cfg_internal_t cb_args = {
         .cfg = cfg, .all_fns_found = 0, .tsk_handler_fn_name = tsk_hdlr_fn_name
     };
-    app_elf_traverse_functions(
-        app_get_global_cfg()->exe_path, _app_elf_gather_rpc_handler_fn_cb, (void *)&cb_args
-    );
+#define RUNNER(fullpath) \
+    app_elf_traverse_functions(fullpath, _app_elf_gather_rpc_handler_fn_cb, (void *)&cb_args)
+    PATH_CONCAT_THEN_RUN(basepath, exe_rel_path, RUNNER);
+#undef RUNNER
     if (!cb_args.all_fns_found || !cfg->task_handler) {
         h2o_error_printf("[parsing] missing task-handling function %s for RPC reply \n", tsk_hdlr_fn_name);
         goto error;
     }
-    return 0;
+    return EX_OK;
 error:
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_rpc__reply_consumer
 
 static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg) {
@@ -292,9 +299,9 @@ static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg) {
         //   the given name on initialization if the queue does not exist.
         bcfg->flags = (arpc_qcfg_flg_t){.durable = durable, .passive = 0, .exclusive = 0, .auto_delete = 0};
     } // end of binding iteration
-    return 0;
+    return EX_OK;
 error:
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_rpc__broker_bindings
 
 static int parse_cfg_rpc_common(json_t *objs, app_cfg_t *app_cfg) {
@@ -333,7 +340,7 @@ static int parse_cfg_rpc_common(json_t *objs, app_cfg_t *app_cfg) {
         }
         arpc_cfg_t *cfg = &app_cfg->rpc.entries[app_cfg->rpc.size++];
         app_rpc_cfg_deinit(cfg);
-        err = parse_cfg_rpc__broker_credential(credential, cfg);
+        err = parse_cfg_rpc__broker_credential(credential, cfg, &app_cfg->env_vars);
         if (err) {
             goto error;
         }
@@ -343,9 +350,9 @@ static int parse_cfg_rpc_common(json_t *objs, app_cfg_t *app_cfg) {
         }
         cfg->alias = strdup(alias);
     } // end of host-config iteration
-    return 0;
+    return EX_OK;
 error:
-    return -1;
+    return EX_CONFIG;
 } // end of parse_cfg_rpc_common
 
 #define PARSE_CFG_RPC__COMMON_SANITY(objs, app_cfg) \
@@ -377,14 +384,16 @@ error:
         size_t  idx = 0, jdx = 0; \
         json_t *obj = NULL, *bind_obj = NULL; \
         PARSE_CFG_RPC__COMMON_SANITY(objs, app_cfg); \
-        if (parse_cfg_rpc_common(objs, app_cfg) != 0) { \
+        if (parse_cfg_rpc_common(objs, app_cfg) != EX_OK) { \
             goto error; \
         } \
+        const char *basepath = app_cfg->env_vars.sys_base_path; \
+        const char *exepath = app_cfg->exe_path; \
         json_array_foreach(objs, idx, obj) { \
             arpc_cfg_t *cfg = &app_cfg->rpc.entries[idx]; \
             json_t     *bindings = json_object_get(obj, "bindings"); \
-            int         err = parse_cfg_rpc__broker_bindings(bindings, cfg); \
-            if (err) { \
+            int         result = parse_cfg_rpc__broker_bindings(bindings, cfg); \
+            if (result != EX_OK) { \
                 goto error; \
             } \
             json_array_foreach(bindings, jdx, bind_obj) { \
@@ -394,8 +403,8 @@ error:
                     goto error; \
                 } \
                 arpc_cfg_bind_t *bcfg = &cfg->bindings.entries[jdx]; \
-                err = parse_cfg_rpc__reply_##which_side(reply, &bcfg->reply); \
-                if (err) { \
+                result = parse_cfg_rpc__reply_##which_side(reply, &bcfg->reply, basepath, exepath); \
+                if (result != EX_OK) { \
                     goto error; \
                 } \
             } \
@@ -416,16 +425,16 @@ error:
 
 int parse_cfg_rpc_caller(json_t *objs, app_cfg_t *app_cfg) {
     PARSE_CFG_RPC__BINDING_COMMON(objs, app_cfg, producer);
-    return 0;
+    return EX_OK;
 error:
     PARSE_CFG_RPC__COMMON_ERROR_DENINT(app_cfg);
-    return -1;
-} // end of parse_cfg_rpc_caller
+    return EX_CONFIG;
+}
 
 int parse_cfg_rpc_callee(json_t *objs, app_cfg_t *app_cfg) {
     PARSE_CFG_RPC__BINDING_COMMON(objs, app_cfg, consumer);
-    return 0;
+    return EX_OK;
 error:
     PARSE_CFG_RPC__COMMON_ERROR_DENINT(app_cfg);
-    return -1;
-} // end of parse_cfg_rpc_callee
+    return EX_CONFIG;
+}

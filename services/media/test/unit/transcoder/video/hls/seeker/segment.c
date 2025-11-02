@@ -7,17 +7,19 @@
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "utils.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 #include "../test/unit/transcoder/test.h"
 
-#define UTEST_FILE_BASEPATH     "tmp/utest"
-#define UTEST_ASASRC_BASEPATH   UTEST_FILE_BASEPATH "/asasrc"
-#define UTEST_ASALOCAL_BASEPATH UTEST_FILE_BASEPATH "/asalocal"
+#define UTEST_FILE_BASEPATH            "tmp/utest"
+#define UTEST_ASASRC_BASEPATH          UTEST_FILE_BASEPATH "/asasrc"
+#define RUNNER_CREATE_FOLDER(fullpath) mkdir(fullpath, S_IRWXU)
+#define UTEST_ASALOCAL_BASEPATH        UTEST_FILE_BASEPATH "/asalocal"
 
 #define DONE_FLAG_INDEX__IN_ASA_USRARG (ATFP_INDEX__IN_ASA_USRARG + 1)
 #define NUM_CB_ARGS_ASAOBJ             (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
-#define MOCK_STORAGE_ALIAS             "localfs"
+#define MOCK_STORAGE_ALIAS             "persist_usr_asset"
 
 #define MOCK_USER_ID          104
 #define MOCK_UPLD_REQ_1_ID    0xdee5d1d0
@@ -25,6 +27,13 @@
 #define MOCK_ENCRYPTED_DOC_ID "0YL2y+asirW7tG="
 #define UTEST_SEG_NUM         "0012"
 #define UTEST_QPARAM__DETAIL  MOCK_VERSION_STR "/" HLS_SEGMENT_FILENAME_PREFIX UTEST_SEG_NUM
+
+#define MOCK_STORAGE_SRC_USRBUF_PATH      UTEST_ASASRC_BASEPATH "/104"
+#define MOCK_STORAGE_SRC_UPLD_REQ_PATH    MOCK_STORAGE_SRC_USRBUF_PATH "/dee5d1d0"
+#define MOCK_STORAGE_SRC_UPLD_COMMIT_PATH MOCK_STORAGE_SRC_UPLD_REQ_PATH "/" ATFP__COMMITTED_FOLDER_NAME
+
+#define MOCK_STORAGE_LOCAL_USRBUF_PATH   UTEST_ASALOCAL_BASEPATH "/104"
+#define MOCK_STORAGE_LOCAL_UPLD_REQ_PATH MOCK_STORAGE_LOCAL_USRBUF_PATH "/dee5d1d0"
 
 static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
@@ -44,26 +53,35 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
 } // end of _utest_hls_enc_segm__common_done_cb
 
 #define HLS__ENCRYPT_SEGMENT_START__SETUP \
-    uint8_t    mock_done_flag = 0; \
-    void      *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
-    int        mock_cipher_ctx = 0, mock_cipher_aes = 0; \
-    uv_loop_t *loop = uv_default_loop(); \
-    json_t    *mock_spec = json_object(), *mock_err_info = json_object(); \
-    json_t    *mock_doc_metadata = json_object(); \
-    asa_cfg_t  mock_storage_cfg = { \
-         .alias = MOCK_STORAGE_ALIAS, \
-         .base_path = UTEST_ASASRC_BASEPATH, \
-         .ops = \
+    uint8_t     mock_done_flag = 0; \
+    void       *mock_asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {NULL, &mock_done_flag}; \
+    int         mock_cipher_ctx = 0, mock_cipher_aes = 0; \
+    uv_loop_t  *loop = uv_default_loop(); \
+    json_t     *mock_spec = json_object(), *mock_err_info = json_object(); \
+    json_t     *mock_doc_metadata = json_object(); \
+    app_cfg_t  *mock_appcfg = app_get_global_cfg(); \
+    const char *sys_basepath = mock_appcfg->env_vars.sys_base_path; \
+    asa_cfg_t   mock_storage_src_cfg = { \
+          .alias = MOCK_STORAGE_ALIAS, \
+          .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, strdup), \
+          .ops = \
             {.fn_read = app_storage_localfs_read, \
-              .fn_open = app_storage_localfs_open, \
-              .fn_close = app_storage_localfs_close, \
-              .fn_typesize = app_storage_localfs_typesize} \
+               .fn_open = app_storage_localfs_open, \
+               .fn_close = app_storage_localfs_close, \
+               .fn_typesize = app_storage_localfs_typesize} \
     }; \
-    app_cfg_t *mock_appcfg = app_get_global_cfg(); \
+    asa_cfg_t mock_storage_local_cfg = { \
+        .alias = "local_tmpbuf", \
+        .base_path = PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, strdup), \
+        .ops = \
+            {.fn_read = app_storage_localfs_read, \
+             .fn_open = app_storage_localfs_open, \
+             .fn_close = app_storage_localfs_close, \
+             .fn_typesize = app_storage_localfs_typesize} \
+    }; \
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
-    mock_appcfg->storages.entries = &mock_storage_cfg; \
-    mock_appcfg->tmp_buf.path = UTEST_ASALOCAL_BASEPATH; \
+    mock_appcfg->storages.entries = &mock_storage_src_cfg; \
     atfp_hls_t mock_fp = { \
         .super = \
             {.data = \
@@ -76,7 +94,7 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
                   .storage = {.handle = NULL}}}, \
         .asa_local = \
             {.super = \
-                 {.storage = &mock_storage_cfg, \
+                 {.storage = &mock_storage_local_cfg, \
                   .cb_args = {.entries = mock_asalocal_cb_args, .size = NUM_CB_ARGS_ASAOBJ}}}, \
         .internal = \
             {.op = \
@@ -88,24 +106,16 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
     json_object_set_new(mock_spec, "buf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
     json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
     json_object_set_new(mock_spec, "metadata", mock_doc_metadata); \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASASRC_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_MKDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, ATFP__COMMITTED_FOLDER_NAME, \
-        UTEST_OPS_MKDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR, UTEST_OPS_MKDIR \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_USRBUF_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_REQ_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH, RUNNER_CREATE_FOLDER); \
+    PATH_CONCAT_THEN_RUN( \
+        sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR, RUNNER_CREATE_FOLDER \
     ); \
     { \
         const char *_wr_buf = UTEST__SEGM_ORIGIN_CONTENT; \
@@ -123,33 +133,21 @@ static void _utest_hls_enc_segm__common_done_cb(atfp_t *processor) {
             asa_src->deinit(asa_src); \
         uv_run(loop, UV_RUN_ONCE); \
     }; \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-        ATFP__COMMITTED_FOLDER_NAME "/" UTEST_QPARAM__DETAIL, UTEST_OPS_UNLINK \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-        ATFP__COMMITTED_FOLDER_NAME "/" MOCK_VERSION_STR, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, ATFP__COMMITTED_FOLDER_NAME, \
-        UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH( \
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, NULL, UTEST_OPS_RMDIR \
-    ); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, 0, NULL, UTEST_OPS_RMDIR); \
-    rmdir(UTEST_ASASRC_BASEPATH); \
-    rmdir(UTEST_ASALOCAL_BASEPATH); \
-    rmdir(UTEST_FILE_BASEPATH); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" UTEST_QPARAM__DETAIL, unlink); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH "/" MOCK_VERSION_STR, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_COMMIT_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_UPLD_REQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_SRC_USRBUF_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_USRBUF_PATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASASRC_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_ASALOCAL_BASEPATH, rmdir); \
+    PATH_CONCAT_THEN_RUN(sys_basepath, UTEST_FILE_BASEPATH, rmdir); \
     mock_appcfg->storages.size = 0; \
     mock_appcfg->storages.capacity = 0; \
     mock_appcfg->storages.entries = NULL; \
-    mock_appcfg->tmp_buf.path = NULL; \
+    free(mock_storage_local_cfg.base_path); \
+    free(mock_storage_src_cfg.base_path); \
     json_decref(mock_spec); \
     json_decref(mock_err_info);
 
@@ -222,9 +220,7 @@ Ensure(atfp_hls_test__enc_seg__start_ok) {
         );
     }
     expect(EVP_CIPHER_CTX_free, when(ctx, is_equal_to(&mock_cipher_ctx)));
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__ENCRYPT_SEGMENT_START__TEARDOWN
 #undef RD_BUF_MAX_SZ
 #undef UTEST__CRYPTOKEY_MIN_CONTENT
@@ -295,9 +291,7 @@ Ensure(atfp_hls_test__enc_seg__start_key_error) {
         assert_that(asa_src->cb_args.entries, is_not_null);
         assert_that(asa_src->cb_args.entries[1], is_equal_to(NULL));
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__ENCRYPT_SEGMENT_START__TEARDOWN
 #undef RD_BUF_MAX_SZ
 #undef UTEST__CRYPTOKEY_MIN_CONTENT
@@ -352,9 +346,7 @@ Ensure(atfp_hls_test__enc_seg__start_crypto_error) {
         assert_that(asa_src->cb_args.entries, is_not_null);
         assert_that(asa_src->cb_args.entries[1], is_equal_to(NULL));
     }
-    UTEST_RUN_OPERATION_WITH_PATH(
-        UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, HLS_CRYPTO_KEY_FILENAME, UTEST_OPS_UNLINK
-    );
+    PATH_CONCAT_THEN_RUN(sys_basepath, MOCK_STORAGE_LOCAL_UPLD_REQ_PATH "/" HLS_CRYPTO_KEY_FILENAME, unlink);
     HLS__ENCRYPT_SEGMENT_START__TEARDOWN
 #undef RD_BUF_MAX_SZ
 #undef UTEST__CRYPTOKEY_MIN_CONTENT

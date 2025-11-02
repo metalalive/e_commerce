@@ -115,8 +115,8 @@ static __attribute__((optimize("O0"))) void _api_start_transcode__send_async_job
     json_t *upld_req_item = json_object_get(_req_body, "last_upld_req");
     json_object_set(_res_body, "resource_id", res_id_item);
     // determine source and destination storage for RPC consumers, TODO, scalability
-    asa_cfg_t *src_storage = app_storage_cfg_lookup("localfs");
-    asa_cfg_t *dst_storage = app_storage_cfg_lookup("localfs");
+    asa_cfg_t *src_storage = app_storage_cfg_lookup("persist_usr_asset");
+    asa_cfg_t *dst_storage = app_storage_cfg_lookup("persist_usr_asset");
     // TODO, improve transcoding function by following design straategies:
     // (1) reduce the redundant decode stages in RPC consumers. For the same source
     //     file transcoding to different variants, all decoders in the RPC consumers

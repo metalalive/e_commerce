@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include "utils.h"
 #include "transcoder/video/hls.h"
 
 // NOTE: unlinking local file has to be done before closing file in destination storage.
@@ -206,12 +207,18 @@ static void atfp_hls__scan_local_tmpbuf_cb(uv_fs_t *req) {
 // The function below scans the folder of local temp buffer to list all existing
 // segment files (they are either processed or being processing), try to determine
 // which segment(s) can be transferring and which are not ready yet....
-ASA_RES_CODE atfp_hls__try_flush_to_storage(atfp_hls_t *hlsproc
-) { // TODO, reduce number of flushing operations
+ASA_RES_CODE atfp_hls__try_flush_to_storage(atfp_hls_t *hlsproc) {
+    // TODO, reduce number of flushing operations
     asa_op_localfs_cfg_t *asa_local_dst = &hlsproc->asa_local;
-    const char           *basepath = asa_local_dst->super.op.mkdir.path.origin;
+    if (!asa_local_dst->super.storage) {
+        return ASTORAGE_RESULT_ARG_ERROR;
+    }
+    const char *sys_basepath = asa_local_dst->super.storage->base_path;
+    const char *path2create = asa_local_dst->super.op.mkdir.path.origin;
     asa_local_dst->file.data = hlsproc;
-    int err =
-        uv_fs_scandir(asa_local_dst->loop, &asa_local_dst->file, basepath, 0, atfp_hls__scan_local_tmpbuf_cb);
+#define RUNNER(fullpath) \
+    uv_fs_scandir(asa_local_dst->loop, &asa_local_dst->file, fullpath, 0, atfp_hls__scan_local_tmpbuf_cb)
+    int err = PATH_CONCAT_THEN_RUN(sys_basepath, path2create, RUNNER);
+#undef RUNNER
     return err ? ASTORAGE_RESULT_OS_ERROR : ASTORAGE_RESULT_ACCEPT;
-} // end of atfp_hls__try_flush_to_storage
+}

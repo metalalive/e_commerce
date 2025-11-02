@@ -1,23 +1,23 @@
 {
     "pid_file" : {
-        "app_server"  :"tmp/proc/media_itest_app_server.pid",
-        "rpc_consumer":"tmp/proc/media_itest_rpc_consumer.pid"
+        "app_server"  :"proc/media_itest_app_server.pid",
+        "rpc_consumer":"proc/media_itest_rpc_consumer.pid"
     },
     "error_log": {
-        "app_server"  :"tmp/log/test/media_app_server.err",
-        "rpc_consumer":"tmp/log/test/media_rpc_consumer.err"
+        "app_server"  :"log/media_app_server.err",
+        "rpc_consumer":"log/media_rpc_consumer.err"
     },
     "access_log": {
-        "path":"tmp/log/test/media_app_server.access.log",
+        "path":"log/media_app_server.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
         {
             "port": 8010,
-            "host":"localhost",
+            "host":"media-test-apisrv",
             "ssl":{
-                "cert_file"   : "media/data/certs/test/localhost_8010.crt",
-                "privkey_file": "media/data/certs/test/localhost_8010.private.key",
+                "cert_file"   : "media/data/certs/media-test-apisrv_8010.crt",
+                "privkey_file": "media/data/certs/media-test-apisrv_8010.private.key",
                 "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
                 "min_version": 772
             },
@@ -41,22 +41,22 @@
         }
     ],
     "ca":{
-        "cert_file"   : "media/data/certs/test/ca.crt",
-        "privkey_file": "media/data/certs/test/ca.private.key"
+        "cert_file"   : "media/data/certs/ca.crt",
+        "privkey_file": "media/data/certs/ca.private.key"
     },
     "max_connections": 64,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "tcp_fastopen_queue_size": 104,
     "auth_keystore": {
-        "url":"https://localhost:8008/jwks",
-        "ca_path": "media/data/certs/test/ca.crt",
+        "url":"https://media-test-authkey-mockserver:8008/jwks",
+        "ca_path": "media/data/certs/ca.crt",
         "ca_form": "PEM"
     },
     "databases": [
         {
             "alias": "db_server_1",
-            "db_name": "test_ecommerce_media",
+            "db_name": "ecommerce_media",
             "max_connections": 3,
             "idle_timeout": 14,
             "skip_tls": true,
@@ -69,7 +69,7 @@
         },
         {
             "alias": "app_db_migration",
-            "db_name": "test_ecommerce_media",
+            "db_name": "ecommerce_media",
             "max_connections": 1,
             "idle_timeout": 21,
             "skip_tls": true,
@@ -83,8 +83,26 @@
     ],
     "storages": [
         {
-            "alias":"localfs",
+            "alias":"persist_usr_asset",
             "base_path": "filespace/test",
+            "ops": {
+                "mkdir" : "app_storage_localfs_mkdir",
+                "rmdir" : "app_storage_localfs_rmdir",
+                "scandir": "app_storage_localfs_scandir",
+                "scandir_next": "app_storage_localfs_scandir_next",
+                "rename": "app_storage_localfs_rename",
+                "unlink": "app_storage_localfs_unlink",
+                "open" : "app_storage_localfs_open",
+                "close": "app_storage_localfs_close",
+                "read" : "app_storage_localfs_read",
+                "write": "app_storage_localfs_write",
+                "typesize": "app_storage_localfs_typesize",
+                "seek" : "app_storage_localfs_seek"
+            }
+        },
+        {
+            "alias":"local_tmpbuf",
+            "base_path": "tmp/buffer",
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
@@ -110,6 +128,7 @@
                     "queue": "rpc_usermgt_get_profile",
                     "exchange": "rpc-default-allapps",
                     "routing_key": "rpc.user_management.get_profile",
+                    "skip_declare": true,
                     "durable": true,
                     "reply": {
                         "queue": {
@@ -120,7 +139,6 @@
                             "pattern":"rpc.media.get_usr_profile.corr_id.%s",
                             "render_fn":"api__default__render_rpc_corr_id"
                         },
-                        "task_handler": "itest_rpc_handler__verify_usr_ids",
                         "durable": true,
                         "ttl_sec": 180
                     }
@@ -172,7 +190,7 @@
             },
             "image": {
                 "pixel_limit":{"width":2400, "height":1960},
-                "mask":{"basepath":"media/data/test/image/mask"}
+                "mask":{"basepath":"media/data/test/image/mask/index.json"}
             },
             "video": {
                 "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [237, 140], [200, 150], [190,136], [170,128], [160, 120], [156, 90], [150, 102]],
@@ -184,45 +202,6 @@
         }
     },
     "tmp_buf": {
-        "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400
-    },
-    "test": {
-        "file_chunk": {
-            "base_folder": "tmp/log/test/media",
-            "files": [
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video1/file{0}", "src":"media/test/integration/examples/video1.mp4",
-                    "broken":false, "num_chunks":4 },
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video2/file{0}", "src":"media/test/integration/examples/video2.mp4",
-                    "broken":false, "num_chunks":9 },
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video3/file{0}", "src":"media/test/integration/examples/video3.mp4",
-                    "broken":false, "num_chunks":8 },
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video4/file{0}", "src":"media/test/integration/examples/video4.mp4",
-                    "broken":false, "num_chunks":5 },
-                {"type":"video", "subtype":"avi", "dst_pattern":"video5/file{0}", "src":"media/test/integration/examples/video5.avi",
-                    "broken":false, "num_chunks":5 },
-                {"type":"image", "subtype":"jpg", "dst_pattern":"img1/file{0}", "src":"media/test/integration/examples/image1.jpg",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"jpg", "dst_pattern":"img2/file{0}", "src":"media/test/integration/examples/image2.jpg",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"png", "dst_pattern":"img3/file{0}", "src":"media/test/integration/examples/image3.png",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"png", "dst_pattern":"img4/file{0}", "src":"media/test/integration/examples/image4.png",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"gif", "dst_pattern":"img5/file{0}", "src":"media/test/integration/examples/image5.gif",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"gif", "dst_pattern":"img6/file{0}", "src":"media/test/integration/examples/image6.gif",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"tiff", "dst_pattern":"img7/file{0}", "src":"media/test/integration/examples/image7.tif",
-                    "broken":false, "num_chunks":1 },
-                {"type":"image", "subtype":"tiff", "dst_pattern":"img8/file{0}", "src":"media/test/integration/examples/image8.tif",
-                    "broken":false, "num_chunks":1 },
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video6/file{0}", "src":"media/test/integration/examples/incomplete.mp4",
-                    "broken":true, "num_chunks":4 },
-                {"type":"video", "subtype":"mp4", "dst_pattern":"video7/file{0}", "src":"media/test/integration/examples/corrupted.mp4",
-                    "broken":true, "num_chunks":3 }
-            ],
-            "output_metadata": "filechunk_metadata.json"
-        }
     }
 }

@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include <amqp_tcp_socket.h>
+#include <rabbitmq-c/tcp_socket.h>
 #include <jansson.h>
 #include "rpc/datatypes.h"
 

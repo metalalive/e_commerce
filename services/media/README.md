@@ -65,111 +65,71 @@ flowchart LR
 ```
 
 ## Prerequisite 
-| type | name | version required |
-|------|------|------------------|
-| Database | MariaDB | `11.2.3` |
-| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.21.0` |
-| | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
-| Dependency | [H2O](https://github.com/h2o/h2o) | after 2024 Dec |
-| | [OpenSSL](https://github.com/openssl/openssl) | `>= 3.1.4` |
-| | [brotli](https://github.com/google/brotli) | `>= 1.0.2` |
-| | [jansson](https://github.com/akheron/jansson) | `>= 2.14` |
-| | [libuuid](https://github.com/util-linux/util-linux/tree/master/libuuid) | `>= 2.20.0` |
-| | [rhonabwy](https://github.com/babelouest/rhonabwy) | `>= 1.1.2` |
-| | [gnutls](https://github.com/gnutls/gnutls) | `>= 3.7.2` |
-| | [nettle](https://github.com/gnutls/nettle) | `>= 3.7.2` |
-| | [p11-kit](https://github.com/p11-glue/p11-kit) | `>= 0.24.0` |
-| | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.4.1` |
-| | [Rabbitmq/C](https://github.com/alanxz/rabbitmq-c) | `>= 0.11.0` |
-| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.8` |
-| | [libcurl](https://github.com/curl/curl) | `>= 7.69.1` |
-| Test | [nghttp2](https://github.com/nghttp2/nghttp2) | `>= 1.46.0` |
-| | [cgreen](https://github.com/cgreen-devs/cgreen) | `>= 2.14` |
-| Automation | python interpreter | `>= 3.9.6` |
-| | python packages | [detail](./py_venv_requirement.txt) |
-| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
-| | | |
-| | | |
+| name | version required |
+|------|------------------|
+| Docker | `28.0.4` |
+| [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.28.3` |
+| [gcc](https://gcc.gnu.org/onlinedocs/) | `>= 14.2.0` |
+| Python | `>= 3.13.7` |
+| RabbitMQ (Docker) | `>= 3.13` |
 
 Note: 
-* `Nettle` is automatically built when building `gnutls` 
-* `nghttp2` enables http/2 protocol in `libcurl` for testing
+* other infrastructures (e.g. database), tools, and 3rd-party dependency libraries are automatically built and installed in during docker image build. 
 
 ## Build
-For full build / test instructions please refer to [this github action workflow script](../../.github/workflows/media-ci.yaml)
+The build process include required 3rd-party library installation and executable image compile for development server and test server.
 
-### Database setup
-#### Grant access to Database
-- Currently this application works only with MariaDB.
-- Grant admin roles full access to the database
-  - for `site_dba` role (in `common/data/secrets.json`), it is the database `ecommerce_media`
-  - for `test_site_dba` role, it is the database `test_ecommerce_media`
-  - see [`init_db.sql`](./migration/init_db.sql) for detail
-
-#### Database Schema Migration
-This application requires mariaDB database in the development or testing server, ensure to synchronize schema migration
-```shell
-> cd /PATH/TO/PROJECT_HOME/services/media
-> /PATH/TO/liquibase --defaults-file=./liquibase.properties \
---changeLogFile=./migration/changelog_media.xml \
-      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME \
-      --username=$USER  --password=$PASSWORD \
-      --log-level=info   update
-
-> /PATH/TO/liquibase --defaults-file=./liquibase.properties \
-      --changeLogFile=./migration/changelog_media.xml  \
-      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME  \
-      --username=$USER  --password=$PASSWORD \
-      --log-level=info   rollback  $VERSION_TAG
+```bash
+docker build --file ./media/infra/apps.dockerfile --tag media-backend-base:latest .
+docker build --file ./media/infra/helpertool.dockerfile --tag media-helper-tool:latest .
 ```
-Note : 
-- the parameters above `$HOST`, `$PORT`, `$USER`, `$PASSWORD` should be consistent with database credential set in `${SYS_BASE_PATH}/common/data/secrets.json` , see the structure in [`common/data/secrets_template.json`](../common/data/secrets_template.json)
-- the parameter `$DB_NAME` can be either `ecommerce_media` for development server, or  `test_ecommerce_media` for testing server, see [reference](./migration/init_db.sql)
-- the subcommand `update` upgrades the schema to latest version
-- the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_media.xml`
-
 
 ### Configuration
+This command should be running during docker build, since all 3rd-party libraries are installed inside docker image
 ```bash
 cd /PATH/TO/PROJECT_HOME/services/media
 mkdir -p build
 cd build
 
-CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
-    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DPYVENV_PATH="/PATH/TO/python/venv" \
-    -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
-    -DCDN_USERNAME=<OS_USER_NAME>   -DCDN_USERGRP=<OS_USER_GROUP>   ..
+CC=$(which gcc)  PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
+    cmake  -DCMAKE_BUILD_TYPE=Release  -DCMAKE_EXPORT_COMPILE_COMMANDS=1  ..
 ```
-Note
-- `<YOUR_PATH_TO_PKG_CFG>` should include:
-  - `/PATH/TO/brotli/pkgconfig`
-  - `/PATH/TO/libuv/pkgconfig`
-  - `/PATH/TO/h2o/pkgconfig`
-  - `/PATH/TO/jansson/pkgconfig`
-  - `/PATH/TO/rhonabwy/pkgconfig`
-  - `/PATH/TO/gnutls/pkgconfig`
-  - `/PATH/TO/nettle/pkgconfig`
-  - `/PATH/TO/p11-kit/pkgconfig`
-  - `/PATH/TO/mariadb/pkgconfig`
-  - `/PATH/TO/rabbitmq-c/pkgconfig`
-  - `/PATH/TO/ffmpeg/pkgconfig`
-  - `/PATH/TO/libuuid/pkgconfig`
-  - `/PATH/TO/libcurl/pkgconfig`
-  - `/PATH/TO/nghttp2/pkgconfig`
-  - `/PATH/TO/openssl/pkgconfig`
-- omit parameters `NGINX_INSTALL_PATH`, `CDN_USERNAME`, `CDN_USERGRP` if you don't need reverse proxy
+Note `<YOUR_PATH_TO_PKG_CFG>` should include paths of required 3rd-party libraries :
+- `/PATH/TO/brotli/pkgconfig`
+- `/PATH/TO/libuv/pkgconfig`
+- `/PATH/TO/h2o/pkgconfig`
+- `/PATH/TO/jansson/pkgconfig`
+- `/PATH/TO/rhonabwy/pkgconfig`
+- `/PATH/TO/gnutls/pkgconfig`
+- `/PATH/TO/nettle/pkgconfig`
+- `/PATH/TO/p11-kit/pkgconfig`
+- `/PATH/TO/mariadb/pkgconfig`
+- `/PATH/TO/rabbitmq-c/pkgconfig`
+- `/PATH/TO/ffmpeg/pkgconfig`
+- `/PATH/TO/libuuid/pkgconfig`
+- `/PATH/TO/libcurl/pkgconfig`
+- `/PATH/TO/nghttp2/pkgconfig`
+- `/PATH/TO/openssl/pkgconfig`
 
+To run other tools e.g. code formatter in your local machine for development purpose, use the cmake setup below that skips 3rd-party library check
+```bash
+cmake  -DCMAKE_BUILD_TYPE=Debug  -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DSKIP_PKG_CHECK=ON ..
+```
 
-### Compile and Run
-| env | target | command |
-|-----|--------|---------|
-| development | app server (primary) | `make  dev_app_server` |
-| development | app server (secondary) | `make  app_server_replica_1` |
-| | generate nginx config file, for reverse proxy | `make  dev_cdn_setup` |
-| development | RPC consumer  | `make  dev_rpc_worker` |
-| unit test |  | `make  unit_test` |
-| integration test | app server | `make  itest_app_server` |
-| integration test | RPC consumer | `make  itest_rpc_worker` |
+### Run Development Server
+the command below includes database schema migration, certificate renewal, API server and RPC consumer start.
+```bash
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-dev.yml \
+    --env-file ./infra/interpolation-dev.env up --detach
+```
 
+### Test
+```bash
+docker compose --file ./infra/docker-compose-utest.yml up --detach
+
+docker compose --file ./infra/docker-compose-generic.yml --file ./infra/docker-compose-itest.yml \
+    --env-file ./infra/interpolation-test.env up --detach
+```
 ### Reference
-- [API documentation (OpenAPI v3.0 specification)](./apidoc.yaml)
+- run `make -C ./build build-help` for build helper doc after `cmake` command above completes successfully.
+- [API documentation (OpenAPI v3.0 specification)](./doc/apidoc.yaml)

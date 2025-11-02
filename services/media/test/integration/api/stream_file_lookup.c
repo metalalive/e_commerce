@@ -19,12 +19,10 @@
             MAX(ITEST_DETAIL_SZ__HLS_L2_PLIST, ITEST_DETAIL_SZ__HLS_INIT_MAP)), \
         ITEST_DETAIL_SZ__HLS_DATA_SEG)
 
-#define ITEST_STREAM_HOST     "localhost:8010"
 #define ITEST_STREAM_SEEK_URI "/file/stream/seek"
 
 #define ITEST_URL_PATTERN \
-    "https://" ITEST_STREAM_HOST ITEST_STREAM_SEEK_URI "?" API_QPARAM_LABEL__STREAM_DOC_ID \
-    "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
+    ITEST_STREAM_SEEK_URI "?" API_QPARAM_LABEL__STREAM_DOC_ID "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
 
 typedef void (*client_req_cb_t)(CURL *, test_setup_priv_t *, void *usr_arg);
 
@@ -39,13 +37,126 @@ extern json_t *_app_itest_active_upload_requests;
 
 static json_t *_app_itest_started_streams[MAX_NUM_STARTED_STREAMS] = {0};
 
+static char itest_tmpbuf_path[64] = {0};
+
+typedef struct {
+    char        protocol[8]; // "http" or "https"
+    char        host[256];   // domain or IP
+    char        port[8];     // port number
+    const char *path;        // pointer to path portion (including query params)
+} url_components_t;
+
+/**
+ * Parses a full URL and extracts its components
+ * Expected format: protocol://host:port/path?query
+ * Returns 0 on success, -1 on failure
+ */
+static int _api_test__parse_url(const char *full_url, url_components_t *components) {
+    if (!full_url || !components)
+        return -1;
+
+    memset(components, 0, sizeof(url_components_t));
+
+    // Extract protocol
+    const char *proto_end = strstr(full_url, "://");
+    if (!proto_end) {
+        // No protocol found, assume it's already a relative path
+        components->path = full_url;
+        return 0;
+    }
+
+    size_t proto_len = proto_end - full_url;
+    if (proto_len >= sizeof(components->protocol))
+        return -1;
+    strncpy(components->protocol, full_url, proto_len);
+    components->protocol[proto_len] = '\0';
+
+    // Move past "://"
+    const char *host_start = proto_end + 3;
+
+    // Find the end of host:port (look for '/')
+    const char *path_start = strchr(host_start, '/');
+    if (!path_start) {
+        // No path found
+        return -1;
+    }
+    components->path = path_start;
+
+    // Extract host and port
+    const char *port_delim = strchr(host_start, ':');
+    if (port_delim && port_delim < path_start) {
+        // Port is present
+        size_t host_len = port_delim - host_start;
+        if (host_len >= sizeof(components->host))
+            return -1;
+        strncpy(components->host, host_start, host_len);
+        components->host[host_len] = '\0';
+
+        size_t port_len = path_start - (port_delim + 1);
+        if (port_len >= sizeof(components->port))
+            return -1;
+        strncpy(components->port, port_delim + 1, port_len);
+        components->port[port_len] = '\0';
+    } else {
+        // No port, just host
+        size_t host_len = path_start - host_start;
+        if (host_len >= sizeof(components->host))
+            return -1;
+        strncpy(components->host, host_start, host_len);
+        components->host[host_len] = '\0';
+
+        // Set default port based on protocol
+        strcpy(components->port, strcmp(components->protocol, "https") == 0 ? "443" : "80");
+    }
+
+    return 0;
+}
+
+/**
+ * Validates that the URL's host and port match expected values from environment
+ * Returns 0 if valid, -1 otherwise
+ */
+static int _api_test__validate_url_host_port(const url_components_t *components) {
+    const char *expected_host = getenv("API_HOST");
+    const char *expected_port = getenv("API_PORT");
+
+    if (!expected_host || !expected_port)
+        return -1; // Environment variables not set
+
+    // If no host/port in URL (relative path), consider it valid
+    if (components->host[0] == '\0')
+        return 0;
+
+    // Compare host (case-insensitive)
+    if (strcasecmp(components->host, expected_host) != 0) {
+        fprintf(
+            stderr, "[itest][url_validation] Host mismatch: expected '%s', got '%s'\n", expected_host,
+            components->host
+        );
+        return -1;
+    }
+
+    // Compare port
+    if (strcmp(components->port, expected_port) != 0) {
+        fprintf(
+            stderr, "[itest][url_validation] Port mismatch: expected '%s', got '%s'\n", expected_port,
+            components->port
+        );
+        return -1;
+    }
+
+    // Optionally validate protocol (should be https for production)
+    if (strcmp(components->protocol, "https") != 0 && strcmp(components->protocol, "http") != 0) {
+        fprintf(stderr, "[itest][url_validation] Invalid protocol: '%s'\n", components->protocol);
+        return -1;
+    }
+
+    return 0;
+}
+
 static int _api_test__validate_url(char *in) {
     char *ptr = NULL;
-    ptr = strstr(in, ITEST_STREAM_HOST);
-    assert_that(ptr, is_not_null);
-    if (!ptr)
-        return -1;
-    ptr = strstr(ptr, ITEST_STREAM_SEEK_URI);
+    ptr = strstr(in, ITEST_STREAM_SEEK_URI);
     assert_that(ptr, is_not_null);
     if (!ptr)
         return -1;
@@ -54,7 +165,7 @@ static int _api_test__validate_url(char *in) {
     if (!ptr)
         return -1;
     return 0;
-} // end of  _api_test__validate_url
+}
 
 static void _api_test_filestream_seek_elm__send_request(itest_usrarg_t *usr_arg) {
     json_t *header_kv_serials = json_array();
@@ -67,7 +178,7 @@ static void _api_test_filestream_seek_elm__send_request(itest_usrarg_t *usr_arg)
     test_setup_pub_t setup_data = {
         .method = "GET",
         .verbose = 0,
-        .url = usr_arg->url,
+        .url_rel_ref = usr_arg->url,
         .req_body = {.serial_txt = NULL, .src_filepath = NULL},
         .upload_filepaths = {.size = 0, .capacity = 0, .entries = NULL},
         .headers = header_kv_serials
@@ -153,25 +264,21 @@ Ensure(api_test__filestream_seek__hls_mst_plist_ok) {
 
 static void test_verify_stream__hls_lvl2_plist(CURL *handle, test_setup_priv_t *privdata, void *_usr_arg) {
 #define RD_BUF_SZ sizeof(ITEST_URL_PATTERN) + ITEST_MAX_SZ_DOC_ID + ITEST_MAX_SZ_DETAIL__HLS
-    CURLcode        res;
     long            actual_resp_code = 0;
-    int             ret = 0;
     itest_usrarg_t *usr_arg = _usr_arg;
-    res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
+    CURLcode        res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(actual_resp_code, is_equal_to(usr_arg->_expect_resp_code));
     if (actual_resp_code <= 0 || actual_resp_code >= 400)
         return;
-    json_t *stream_item = json_object_get(usr_arg->_upld_req, "streaming");
-    json_t *stream_privdata = json_object_get(stream_item, "_priv_data");
-    json_t *l2_pl_item = json_object_get(stream_privdata, usr_arg->url);
+    json_t *l2_pl_item = usr_arg->_upld_req;
     assert_that(l2_pl_item, is_not_null);
     if (!l2_pl_item)
         return;
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     FILE *_resp_file = fdopen(privdata->fds.resp_body, "r");
     char  buf[RD_BUF_SZ] = {0};
-    ret = fscanf(_resp_file, "#EXT%s", &buf[0]); // M3U
+    int   ret = fscanf(_resp_file, "#EXT%s", &buf[0]); // M3U
     assert_that(ret, is_equal_to(1));
     ret = fscanf(_resp_file, "\n#EXT-X-VERSION:%s", &buf[0]);
     assert_that(ret, is_equal_to(1));
@@ -235,10 +342,29 @@ Ensure(api_test__filestream_seek__hls_lvl2_plist_ok) {
         const char *url = NULL;
         json_t     *item = NULL;
         json_object_foreach(stream_privdata, url, item) {
+            // Parse the URL and extract components
+            url_components_t url_parts;
+            int              parse_result = _api_test__parse_url(url, &url_parts);
+            assert_that(parse_result, is_equal_to(0));
+            if (parse_result != 0)
+                continue;
+
+            // Validate host and port against environment variables
+            int validation_result = _api_test__validate_url_host_port(&url_parts);
+            assert_that(validation_result, is_equal_to(0));
+            if (validation_result != 0)
+                continue;
+
+            // Verify path contains expected URI pattern
+            const char *path_start = strstr(url_parts.path, ITEST_STREAM_SEEK_URI);
+            assert_that(path_start, is_not_null);
+            if (!path_start)
+                continue;
+
             itest_usrarg_t usr_arg = {
-                ._upld_req = upld_req,
+                ._upld_req = item,
                 ._expect_resp_code = 200,
-                .url = url,
+                .url = path_start, // Use only the path portion
                 .verify_cb = test_verify_stream__hls_lvl2_plist
             };
             _api_test_filestream_seek_elm__send_request(&usr_arg);
@@ -261,15 +387,14 @@ static void test_verify_stream__hls_key_req(CURL *handle, test_setup_priv_t *pri
     size_t nread = read(privdata->fds.resp_body, &buf[0], RD_BUF_SZ);
     assert_that(nread, is_equal_to(HLS__NBYTES_KEY));
     // verify received key octet
-    app_cfg_t *acfg = app_get_global_cfg();
-    uint32_t   _usr_id = json_integer_value(json_object_get(usr_arg->_upld_req, "usr_id"));
-    uint32_t   _upld_req_id = json_integer_value(json_object_get(usr_arg->_upld_req, "req_seq"));
+    uint32_t _usr_id = json_integer_value(json_object_get(usr_arg->_upld_req, "usr_id"));
+    uint32_t _upld_req_id = json_integer_value(json_object_get(usr_arg->_upld_req, "req_seq"));
 #define PATH_PATTERN "%s/%d/%08x/%s"
-    size_t path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + USR_ID_STR_SIZE +
+    size_t path_sz = sizeof(PATH_PATTERN) + strlen(itest_tmpbuf_path) + USR_ID_STR_SIZE +
                      UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(HLS_CRYPTO_KEY_FILENAME);
     char   path[path_sz];
     size_t nwrite = snprintf(
-        &path[0], path_sz, PATH_PATTERN, acfg->tmp_buf.path, _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME
+        &path[0], path_sz, PATH_PATTERN, itest_tmpbuf_path, _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME
     );
     assert(path_sz > nwrite);
     json_t     *keyinfo = json_load_file(&path[0], 0, NULL), *item = NULL, *keyitem = NULL;
@@ -311,10 +436,28 @@ Ensure(api_test__filestream_seek__hls_key_req_ok
             const char *url_keyreq = json_string_value(json_object_get(l2_pl_item, "key"));
             if (!url_keyreq)
                 continue;
+
+            // Parse and validate the key request URL
+            url_components_t url_parts;
+            int              parse_result = _api_test__parse_url(url_keyreq, &url_parts);
+            assert_that(parse_result, is_equal_to(0));
+            if (parse_result != 0)
+                continue;
+
+            int validation_result = _api_test__validate_url_host_port(&url_parts);
+            assert_that(validation_result, is_equal_to(0));
+            if (validation_result != 0)
+                continue;
+
+            const char *path_start = strstr(url_parts.path, ITEST_STREAM_SEEK_URI);
+            assert_that(path_start, is_not_null);
+            if (!path_start)
+                continue;
+
             itest_usrarg_t usr_arg = {
                 ._upld_req = upld_req,
                 ._expect_resp_code = 200,
-                .url = url_keyreq,
+                .url = path_start,
                 .verify_cb = test_verify_stream__hls_key_req
             };
             _api_test_filestream_seek_elm__send_request(&usr_arg);
@@ -355,13 +498,12 @@ static void test_verify_stream__hls_segment(CURL *handle, test_setup_priv_t *pri
     }
     json_t     *stream_item = json_object_get(usr_arg->_upld_req, "streaming");
     const char *doc_id = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__STREAM_DOC_ID));
-    app_cfg_t  *acfg = app_get_global_cfg();
 #define PATH_PATTERN "%s/%s/%s/%s"
-    size_t path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + strlen(doc_id) +
+    size_t path_sz = sizeof(PATH_PATTERN) + strlen(itest_tmpbuf_path) + strlen(doc_id) +
                      sizeof(ATFP_CACHED_FILE_FOLDERNAME) + detail_sz;
     char   path[path_sz];
     size_t nwrite = snprintf(
-        &path[0], path_sz, PATH_PATTERN, acfg->tmp_buf.path, ATFP_CACHED_FILE_FOLDERNAME, doc_id, detail
+        &path[0], path_sz, PATH_PATTERN, itest_tmpbuf_path, ATFP_CACHED_FILE_FOLDERNAME, doc_id, detail
     );
     assert(path_sz > nwrite);
 #undef PATH_PATTERN
@@ -403,17 +545,54 @@ Ensure(api_test__filestream_seek__hls_segment_ok) {
             const char *url_initmap = json_string_value(json_object_get(l2_pl_item, "init_map"));
             if (!url_initmap)
                 continue;
+
+            // Parse and validate the init map URL
+            url_components_t url_parts_initmap;
+            int              parse_result = _api_test__parse_url(url_initmap, &url_parts_initmap);
+            assert_that(parse_result, is_equal_to(0));
+            if (parse_result != 0)
+                continue;
+
+            int validation_result = _api_test__validate_url_host_port(&url_parts_initmap);
+            assert_that(validation_result, is_equal_to(0));
+            if (validation_result != 0)
+                continue;
+
+            const char *path_start = strstr(url_parts_initmap.path, ITEST_STREAM_SEEK_URI);
+            assert_that(path_start, is_not_null);
+            if (!path_start)
+                continue;
+
             itest_usrarg_t usr_arg = {
                 ._upld_req = upld_req,
                 ._expect_resp_code = 200,
-                .url = url_initmap,
+                .url = path_start,
                 .verify_cb = test_verify_stream__hls_segment
             };
             _api_test_filestream_seek_elm__send_request(&usr_arg);
             req_sent = 1;
+
+            // Also validate the first data segment URL
             json_t     *_segments = json_object_get(l2_pl_item, "segments");
             const char *url_dataseg0 = json_string_value(json_array_get(_segments, 0));
-            usr_arg.url = url_dataseg0;
+
+            url_components_t url_parts_seg;
+            parse_result = _api_test__parse_url(url_dataseg0, &url_parts_seg);
+            assert_that(parse_result, is_equal_to(0));
+            if (parse_result != 0)
+                break;
+
+            validation_result = _api_test__validate_url_host_port(&url_parts_seg);
+            assert_that(validation_result, is_equal_to(0));
+            if (validation_result != 0)
+                break;
+
+            path_start = strstr(url_parts_seg.path, ITEST_STREAM_SEEK_URI);
+            assert_that(path_start, is_not_null);
+            if (!path_start)
+                break;
+
+            usr_arg.url = path_start;
             _api_test_filestream_seek_elm__send_request(&usr_arg);
             break; // currently all versions of a HLS video request the same key
         } // end of loop
@@ -450,7 +629,13 @@ Ensure(api_test__filestream_seek__hls_nonexist_detail) {
     } // end of loop
 } // end of  api_test__filestream_seek__hls_nonexist_detail
 
-TestSuite *api_file_stream_seek_elm_tests(void) {
+TestSuite *api_file_stream_seek_elm_tests(json_t *root_cfg) {
+    json_t     *tmpbuf_cfg = json_object_get(root_cfg, "tmp_buf");
+    const char *tmpbuf_path = json_string_value(json_object_get(tmpbuf_cfg, "path"));
+    const char *sys_basepath = getenv("SYS_BASE_PATH");
+#define RUNNER(fullpath) strcpy(itest_tmpbuf_path, fullpath)
+    PATH_CONCAT_THEN_RUN(sys_basepath, tmpbuf_path, RUNNER);
+#undef RUNNER
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test__filestream_seek__hls_mst_plist_ok);
     add_test(suite, api_test__filestream_seek__hls_lvl2_plist_ok);

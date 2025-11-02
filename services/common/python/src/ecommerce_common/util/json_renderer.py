@@ -26,8 +26,27 @@ def render_json_template(input_template_path, output_file_path, parameters):
 
     def set_nested_value(data, keys, value):
         for key in keys[:-1]:
-            data = data.setdefault(key, {})
-        data[keys[-1]] = value
+            # Check if the key is a numeric index (for array access)
+            if isinstance(data, list):
+                try:
+                    idx = int(key)
+                    data = data[idx]
+                except (ValueError, IndexError) as e:
+                    raise KeyError(f"Invalid array index: {key}")
+            else:
+                # For dictionaries, create the key if it doesn't exist
+                data = data.setdefault(key, {})
+
+        # Handle the last key
+        final_key = keys[-1]
+        if isinstance(data, list):
+            try:
+                idx = int(final_key)
+                data[idx] = value
+            except (ValueError, IndexError) as e:
+                raise KeyError(f"Invalid array index: {final_key}")
+        else:
+            data[final_key] = value
 
     for json_path, value in parameters.items():
         keys = json_path.split("/")

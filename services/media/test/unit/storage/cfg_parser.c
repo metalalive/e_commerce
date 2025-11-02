@@ -1,3 +1,4 @@
+#include <sysexits.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
 #include <cgreen/cgreen.h>
@@ -51,13 +52,10 @@ static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_read_fn(asa_op
 static __attribute__((optimize("O0"))) size_t utest_storage_typesize_fn(void) { return 123; }
 
 Ensure(storage_cfg_incomplete_setting_tests) {
-    json_t   *objs = json_array();
-    json_t   *obj0 = json_object();
-    json_t   *ops = json_object();
+    json_t   *objs = json_array(), *obj0 = json_object(), *ops = json_object();
     app_cfg_t app_cfg = {0};
-    int       err = 0;
-    err = parse_cfg_storages(objs, &app_cfg);
-    assert_that(err, is_equal_to(-1));
+    int       err = parse_cfg_storages(objs, &app_cfg);
+    assert_that(err, is_equal_to(EX_CONFIG));
     assert_that(app_cfg.storages.entries, is_null);
     {
         app_cfg.exe_path = "/path/to/unknown/image";
@@ -71,7 +69,7 @@ Ensure(storage_cfg_incomplete_setting_tests) {
         json_object_set_new(obj0, "ops", ops);
     }
     err = parse_cfg_storages(objs, &app_cfg);
-    assert_that(err, is_equal_to(-1));
+    assert_that(err, is_equal_to(EX_CONFIG));
     assert_that(app_cfg.storages.entries, is_null);
     { // incorrect image path, failed to parse functions from image
         json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
@@ -81,17 +79,15 @@ Ensure(storage_cfg_incomplete_setting_tests) {
         json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
-    assert_that(err, is_equal_to(-1));
+    assert_that(err, is_equal_to(EX_CONFIG));
     assert_that(app_cfg.storages.entries, is_null);
     json_decref(objs);
 } // end of storage_cfg_incomplete_setting_tests
 
 Ensure(storage_cfg_missing_operation_fn_tests) {
-    json_t   *objs = json_array();
-    json_t   *obj0 = json_object();
-    json_t   *ops = json_object();
+    json_t   *objs = json_array(), *obj0 = json_object(), *ops = json_object();
     app_cfg_t app_cfg = {.exe_path = "media/build/unit_test.out"};
-    int       err = 0;
+    app_load_envvars(&app_cfg.env_vars);
     {
         json_array_append_new(objs, obj0);
         json_object_set_new(obj0, "alias", json_string("storage_dst_1"));
@@ -105,8 +101,8 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
         json_object_set_new(obj0, "ops", ops);
     }
-    err = parse_cfg_storages(objs, &app_cfg);
-    assert_that(err, is_equal_to(-1));
+    int err = parse_cfg_storages(objs, &app_cfg);
+    assert_that(err, is_equal_to(EX_CONFIG));
     assert_that(app_cfg.storages.entries, is_null);
     {
         json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
@@ -117,7 +113,7 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         json_object_set_new(ops, "typesize", json_string("utest_storage_typesize_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
-    assert_that(err, is_equal_to(0));
+    assert_that(err, is_equal_to(EX_OK));
     assert_that(app_cfg.storages.entries, is_not_null);
     assert_that(app_cfg.storages.size, is_equal_to(1));
     if (app_cfg.storages.entries && app_cfg.storages.size == 1) {
