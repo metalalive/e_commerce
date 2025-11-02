@@ -216,11 +216,12 @@ jobs:
               -v ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro \
               -v ./rabbit-defs.json:/app/rabbit-defs.json:ro \
               -v ./rabbitmq-custom-init.sh:/init.sh:ro \
-              --network ec-intersrvs-dev-net --publish 5672:5672 --detach \
+              --publish 5672:5672  --publish 15672:15672 \
+              --network ec-intersrvs-dev-net --detach \
               rabbitmq-custom-init:3.13-management
-          sleep 30
+          sleep 60
           echo "--------------------------------"
-          docker logs inter-apps-msgq-dev --tail 40
+          docker logs inter-apps-msgq-dev
 
       - name: Set up database persistence path
         working-directory: ${{ github.workspace }}
