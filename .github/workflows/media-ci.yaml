@@ -18,12 +18,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      
       - name: Cache media backend base image tarball
         id: cache-media-backend-base
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/media-backend-build0.tar
           key: ${{ runner.os }}-media-backend-base-${{ hashFiles('services/media/infra/apps.dockerfile') }}
+      
       - name: Build media backend base image
         if: steps.cache-media-backend-base.outputs.cache-hit != 'true'
         uses: docker/build-push-action@v5
@@ -36,16 +38,19 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      
       - name: Load media-backend-base image from cache
         if: steps.cache-media-backend-base.outputs.cache-hit == 'true'
         run: |
           docker load --input ${{ runner.temp }}/media-backend-build0.tar
+      
       - name: Save media backend base image tarball to cache
         if: steps.cache-media-backend-base.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/media-backend-build0.tar
           key: ${{ runner.os }}-media-backend-base-${{ hashFiles('services/media/infra/apps.dockerfile') }}
+      
       - name: Upload media-backend-base image artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,14 +58,13 @@ jobs:
           path: ${{ runner.temp }}/media-backend-build0.tar
           retention-days: 1
 
-      - name: Build media helper tool image
-        uses: docker/build-push-action@v5
       - name: Cache media helper tool image tarball
         id: cache-media-helper-tool
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/media-helper-tool-build0.tar
           key: ${{ runner.os }}-media-helper-tool-${{ hashFiles('services/media/infra/helpertool.dockerfile') }}
+      
       - name: Build media helper tool image
         if: steps.cache-media-helper-tool.outputs.cache-hit != 'true'
         uses: docker/build-push-action@v5
@@ -72,16 +76,19 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      
       - name: Load media-helper-tool image from cache
         if: steps.cache-media-helper-tool.outputs.cache-hit == 'true'
         run: |
           docker load --input ${{ runner.temp }}/media-helper-tool-build0.tar
+      
       - name: Save media helper tool image tarball to cache
         if: steps.cache-media-helper-tool.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/media-helper-tool-build0.tar
           key: ${{ runner.os }}-media-helper-tool-${{ hashFiles('services/media/infra/helpertool.dockerfile') }}
+      
       - name: Upload media-helper-tool image artifact
         uses: actions/upload-artifact@v4
         with:
