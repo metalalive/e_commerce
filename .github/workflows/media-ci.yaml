@@ -216,9 +216,10 @@ jobs:
               -v ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro \
               -v ./rabbit-defs.json:/app/rabbit-defs.json:ro \
               -v ./rabbitmq-custom-init.sh:/init.sh:ro \
-              --network ec-intersrvs-dev-net --detach \
+              --network ec-intersrvs-dev-net --publish 5672:5672 --detach \
               rabbitmq-custom-init:3.13-management
           sleep 30
+          echo "--------------------------------"
           docker logs inter-apps-msgq-dev --tail 40
 
       - name: Set up database persistence path
@@ -244,10 +245,13 @@ jobs:
           echo "MARIADB_DATA_VOL=${{ github.workspace }}/installed/mariadb/data" > ./interpolation-test.env
           echo "MARIADB_LOG_VOL=${{ github.workspace }}/installed/mariadb/log" >> ./interpolation-test.env
 
-      - name: Set up mock credentials for test
-        working-directory: services/common/data
+      - name: set up credentials for test
+        working-directory: services/common
         run: |
-            ln -s ./secrets_template.json  ./secrets.json
+            python3 ./python/src/ecommerce_common/util/json_renderer.py \
+                --template=./data/secrets_template.json   --output=./data/secrets.json \
+                --parameters="amqp_broker/0/host=inter-apps-msgq-dev amqp_broker/1/host=inter-apps-msgq-dev"
+            ls -lt ./data
 
       - uses: actions/setup-python@v6
         with:
