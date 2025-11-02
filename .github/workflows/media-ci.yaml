@@ -18,7 +18,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Cache media backend base image tarball
+        id: cache-media-backend-base
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/media-backend-build0.tar
+          key: ${{ runner.os }}-media-backend-base-${{ hashFiles('services/media/infra/apps.dockerfile') }}
       - name: Build media backend base image
+        if: steps.cache-media-backend-base.outputs.cache-hit != 'true'
         uses: docker/build-push-action@v5
         with:
           context: services # Context is 'services' as Dockerfile is in services/media/infra
@@ -29,6 +36,16 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Load media-backend-base image from cache
+        if: steps.cache-media-backend-base.outputs.cache-hit == 'true'
+        run: |
+          docker load --input ${{ runner.temp }}/media-backend-build0.tar
+      - name: Save media backend base image tarball to cache
+        if: steps.cache-media-backend-base.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/media-backend-build0.tar
+          key: ${{ runner.os }}-media-backend-base-${{ hashFiles('services/media/infra/apps.dockerfile') }}
       - name: Upload media-backend-base image artifact
         uses: actions/upload-artifact@v4
         with:
@@ -38,6 +55,15 @@ jobs:
 
       - name: Build media helper tool image
         uses: docker/build-push-action@v5
+      - name: Cache media helper tool image tarball
+        id: cache-media-helper-tool
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/media-helper-tool-build0.tar
+          key: ${{ runner.os }}-media-helper-tool-${{ hashFiles('services/media/infra/helpertool.dockerfile') }}
+      - name: Build media helper tool image
+        if: steps.cache-media-helper-tool.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@v5
         with:
           context: services # Context is 'services' as Dockerfile is in services/media/infra
           file: services/media/infra/helpertool.dockerfile
@@ -46,6 +72,16 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Load media-helper-tool image from cache
+        if: steps.cache-media-helper-tool.outputs.cache-hit == 'true'
+        run: |
+          docker load --input ${{ runner.temp }}/media-helper-tool-build0.tar
+      - name: Save media helper tool image tarball to cache
+        if: steps.cache-media-helper-tool.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/media-helper-tool-build0.tar
+          key: ${{ runner.os }}-media-helper-tool-${{ hashFiles('services/media/infra/helpertool.dockerfile') }}
       - name: Upload media-helper-tool image artifact
         uses: actions/upload-artifact@v4
         with:
@@ -159,6 +195,11 @@ jobs:
           echo "RABBIT_TEST_PASS=AMQP_ANOTHER_PASSWORD" >> ./dev.env
           echo "RABBITMQ_PID_FILE=/var/lib/rabbitmq/mnesia/ec-mq-server.pid" >> ./dev.env
 
+      - name: Create inter-service docker network
+        run: |
+          docker network create  --driver bridge \
+            --subnet 172.19.253.0/24  --ip-range 172.19.253.0/28 \
+            --gateway 172.19.253.254  ec-intersrvs-dev-net
       - name: start RabbitMQ container for test
         working-directory: infra
         run: |
