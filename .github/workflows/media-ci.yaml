@@ -201,6 +201,7 @@ jobs:
           echo "RABBIT_TEST_USER=AMQP_ANOTHER_USERNAME" >> ./dev.env
           echo "RABBIT_TEST_PASS=AMQP_ANOTHER_PASSWORD" >> ./dev.env
           echo "RABBITMQ_PID_FILE=/var/lib/rabbitmq/mnesia/ec-mq-server.pid" >> ./dev.env
+          echo "NUM_SECS_WAIT4READY=16" >> ./dev.env
 
       - name: Create inter-service docker network
         run: |
