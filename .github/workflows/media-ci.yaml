@@ -274,12 +274,28 @@ jobs:
                            up --detach
             # Wait for the integration test runner container to exit
             python3 ${{ github.workspace }}/.github/docker_wait.py  --container-name media-itest-0  --target-status exited --timeout-secs 600
+            echo "--------------------------------"
             docker ps --all --filter name=media-*
+            echo "--------------------------------"
             docker logs media-test-mariadb --tail 40
             docker logs media-test-db-schema-upgrade --tail 50
+            echo "--------------------------------"
             docker logs media-test-cert-renew
+            echo "--------------------------------"
             docker logs media-itest-0
-            docker logs media-test-apisrv
+
+      - name: inspect detail log after test
+        if: always()
+        working-directory: services/tmp/log/test
+        run: |
+          echo "--------------------------------"
+          cat ./media_app_server.access.log
+          echo "--------------------------------"
+          cat ./media_app_server.err
+          echo "--------------------------------"
+          cat ./media_rpc_consumer.err
+          echo "--------------------------------"
+          cat ./media_rpc_consumer_mock_usrmgt.err
 
       - name: Clean up containers after integration tests
         if: always() # Ensures cleanup runs even if tests fail
