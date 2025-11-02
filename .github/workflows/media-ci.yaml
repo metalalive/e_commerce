@@ -249,6 +249,20 @@ jobs:
         run: |
             ln -s ./secrets_template.json  ./secrets.json
 
+      - name: download mock user asset for integration test
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+        working-directory: services/media/test/integration/examples
+        run: |
+          pip install gdown
+          gdown "${{ secrets.mediaMockUserAssetUrl }}" -O ./mock-usr-asset.tar
+          tar xvf ./mock-usr-asset.tar
+          mv ./mock-usr-media-asset/*  ./
+          rmdir ./mock-usr-media-asset
+          rm ./mock-usr-asset.tar
+          ls -lt
+
       - name: Run integration tests with Docker Compose
         working-directory: services/media
         run: |
